@@ -92,19 +92,40 @@
       corpo = `${msg}<form id="auth" class="auth-f" novalidate>${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campo('Senha', '<input name="senha" type="password" required autocomplete="current-password">')}${mostrar}${erro}<button class="btn bloco" type="submit">Entrar</button></form>
         <p class="mut">${link('auth-esqueci', 'Esqueci minha senha')}</p><p class="mut">Ainda não tem conta? ${link('auth-cadastro', 'Criar conta grátis')}</p>`;
     }
-    return `<section class="auth"><div class="card auth-c"><h1>${titulo}</h1>${modo === 'entrar' ? '<p class="mut">Suas contas, cartões e boletos em um só lugar, para pessoa física e empresa.</p>' : ''}${corpo}</div>
-      <p class="mut auth-seg">🔒 Seus dados financeiros ficam cifrados no servidor e só você acessa. <a href="privacidade.html" target="_blank" rel="noopener">Como protegemos seus dados</a></p></section>`;
+    const ic = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+    const selos = [
+      [ic('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'), 'Dados cifrados', 'Seus lançamentos ficam ilegíveis para qualquer outra pessoa.'],
+      [ic('<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>'), 'Em conformidade com a LGPD', 'Você baixa ou apaga tudo quando quiser.'],
+      [ic('<path d="M3 21h18M5 21V10m14 11V10M9 21v-7m6 7v-7M3 10l9-6 9 6"/><path d="M4 4l16 16" stroke-width="2.2"/>'), 'Sem acesso ao seu banco', 'Nunca pedimos senha de banco nem movimentamos dinheiro.'],
+    ];
+    return `<section class="entrada">
+      <aside class="vitrine">
+        <span class="vit-luz l1" aria-hidden="true"></span><span class="vit-luz l2" aria-hidden="true"></span>
+        <h2>Suas finanças,<br><em>sem susto.</em></h2>
+        <p class="vit-p">Contas, cartões e boletos de você e da sua empresa em um só lugar, com aviso por e-mail antes de cada vencimento.</p>
+        <ul class="vit-lista"><li><i aria-hidden="true">✓</i>Fatura de cada cartão, mês a mês</li><li><i aria-hidden="true">✓</i>Aviso antes, no dia e depois de vencer</li><li><i aria-hidden="true">✓</i>Orçamento por categoria e objetivos</li></ul>
+        <div class="vit-cards" aria-hidden="true">
+          <div class="mini c1"><small>Saldo geral</small><b>R$ 12.572,00</b><div class="mini-barra"><i></i></div></div>
+          <div class="mini c2"><span class="ponto"></span><span class="mini-t"><b>Fatura Nubank</b><small>vence em 3 dias</small></span><b>R$ 1.250,00</b></div>
+          <div class="mini c3"><span class="mini-rosca"></span><span class="mini-t"><small>Gastos do mês</small><b>Mercado 32%</b></span></div>
+        </div>
+      </aside>
+      <div class="auth">
+        <div class="card auth-c"><h1>${titulo}</h1>${modo === 'entrar' ? '<p class="mut">Que bom ter você aqui. Entre para ver suas contas.</p>' : ''}${corpo}</div>
+        <ul class="selos">${selos.map(([i, t, d]) => `<li>${i}<span><b>${t}</b><small>${d}</small></span></li>`).join('')}</ul>
+        <p class="mut auth-seg"><a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> · <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a></p>
+      </div></section>`;
   }
   async function enviarAuth(f) {
     const btn = f.querySelector('button[type=submit]'); const er = $('#auth-erro'); er.hidden = true;
     if (!f.checkValidity()) { er.textContent = 'Preencha todos os campos corretamente' + (f.aceite && !f.aceite.checked ? ' e aceite a Política de Privacidade e os Termos.' : '.'); er.hidden = false; er.focus(); return; }
-    const v = Object.fromEntries(new FormData(f)); btn.disabled = true;
+    const v = Object.fromEntries(new FormData(f)); const rotulo = btn.textContent; btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = V.auth === 'entrar' ? 'Entrando…' : 'Enviando…';
     try {
       if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha }); USER.logado = true; USER.info = r.usuario; await carregarDados(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
       else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: !!v.aceite }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'redefinir') { await api('redefinir', { token: V.token, senha: v.senha }); V.auth = 'entrar'; V.token = ''; V.msg = 'Senha alterada. Entre com a nova senha.'; render(); }
-    } catch (e) { er.textContent = e.message; er.hidden = false; er.focus(); btn.disabled = false; }
+    } catch (e) { er.textContent = e.message; er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; }
   }
   document.addEventListener('submit', (ev) => { if (ev.target.id === 'auth') { ev.preventDefault(); enviarAuth(ev.target); } });
   async function iniciar() {

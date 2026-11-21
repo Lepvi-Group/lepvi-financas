@@ -299,3 +299,69 @@ html[data-contraste="alto"] .erro, html[data-contraste="alto"] .ok-msg { backgro
 body.doc { padding-bottom: 24px; padding-left: 0; }
 body.doc .topo { margin-left: 0; padding-left: 20px; justify-content: space-between; }
 body.doc .topo .marca { position: static; }
+
+/* tela de entrada: apresentação + confiança */
+body.deslogado main { max-width: 1120px; padding-top: 12px; }
+.entrada { display: grid; gap: 22px; align-items: start; }
+.vitrine { position: relative; overflow: hidden; border-radius: 28px; padding: 28px 24px 24px; color: #fff; background: #0D0D0F; isolation: isolate; animation: entra .7s cubic-bezier(0.23, 1, 0.32, 1) both; }
+.vit-luz { position: absolute; z-index: -1; border-radius: 50%; filter: blur(50px); opacity: .75; }
+.vit-luz.l1 { width: 320px; height: 320px; right: -90px; top: -90px; background: #8A3DFF; animation: flutua 14s ease-in-out infinite alternate; }
+.vit-luz.l2 { width: 300px; height: 300px; left: -100px; bottom: -110px; background: #2D4BFF; animation: flutua 17s ease-in-out infinite alternate-reverse; }
+.vitrine h2 { font-size: 34px; line-height: 1.08; font-weight: 600; letter-spacing: -.02em; }
+.vitrine h2 em { font-style: normal; background: linear-gradient(90deg, #7FA6FF, #C890FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.vit-p { color: #E4E3DF; font-size: 17px; margin-top: 12px; max-width: 460px; }
+.vit-lista { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 10px; font-size: 16px; }
+.vit-lista li { display: flex; gap: 10px; align-items: center; animation: entra .6s cubic-bezier(0.23, 1, 0.32, 1) both; }
+.vit-lista li:nth-child(1) { animation-delay: .15s; } .vit-lista li:nth-child(2) { animation-delay: .25s; } .vit-lista li:nth-child(3) { animation-delay: .35s; }
+.vit-lista i { flex: none; width: 24px; height: 24px; border-radius: 50%; background: rgba(127, 245, 205, .18); color: #7FF5CD; display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: 14px; }
+.vit-cards { display: grid; gap: 12px; margin-top: 26px; }
+.mini { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); backdrop-filter: blur(10px); border-radius: 18px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; animation: entra .7s cubic-bezier(0.23, 1, 0.32, 1) both, flutuaV 7s ease-in-out infinite; }
+.mini.c1 { flex-direction: column; align-items: flex-start; gap: 4px; animation-delay: .3s, 1s; }
+.mini.c2 { justify-content: space-between; animation-delay: .45s, 2s; margin-left: 24px; }
+.mini.c3 { animation-delay: .6s, 3s; margin-right: 24px; }
+.mini small { color: #D5D4CE; font-size: 14px; display: block; }
+.mini b { font-weight: 600; font-size: 17px; display: block; }
+.mini.c1 b { font-size: 24px; }
+.mini-t { flex: 1; }
+.mini-barra { width: 100%; height: 8px; border-radius: 999px; background: rgba(255,255,255,.2); overflow: hidden; margin-top: 6px; }
+.mini-barra i { display: block; height: 100%; width: 72%; border-radius: 999px; background: linear-gradient(90deg, #3A7BFF, #C04DFF); transform-origin: left; animation: enche 1.4s .8s cubic-bezier(0.23, 1, 0.32, 1) both; }
+.ponto { flex: none; width: 12px; height: 12px; border-radius: 50%; background: #FFB454; box-shadow: 0 0 0 0 rgba(255,180,84,.6); animation: pulsa 2s infinite; }
+.mini-rosca { flex: none; width: 44px; height: 44px; border-radius: 50%; background: conic-gradient(#5B6CFF 0 32%, #F59E0B 0 55%, #10B981 0 75%, #C04DFF 0 100%); -webkit-mask: radial-gradient(circle 11px, transparent 98%, #000 100%); mask: radial-gradient(circle 11px, transparent 98%, #000 100%); animation: gira 1.2s .9s cubic-bezier(0.23, 1, 0.32, 1) both; }
+.auth { margin: 0; max-width: none; align-content: start; }
+.auth-c { animation: entra .7s .1s cubic-bezier(0.23, 1, 0.32, 1) both; }
+.auth-c h1 { font-size: 30px; }
+.auth-f .btn[disabled] { opacity: .7; cursor: progress; }
+.selos { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.selos li { display: flex; gap: 14px; align-items: flex-start; background: #fff; border-radius: 16px; padding: 14px 16px; box-shadow: var(--sombra); animation: entra .6s cubic-bezier(0.23, 1, 0.32, 1) both; }
+.selos li:nth-child(1) { animation-delay: .3s; } .selos li:nth-child(2) { animation-delay: .4s; } .selos li:nth-child(3) { animation-delay: .5s; }
+.selos svg { flex: none; color: var(--azul); margin-top: 2px; }
+.selos b { display: block; font-weight: 600; }
+.selos small { color: var(--suave); font-size: 14px; display: block; line-height: 1.35; }
+input, select, textarea { transition: box-shadow 160ms ease-out; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--azul), 0 0 0 4px rgba(45,75,255,.25); }
+@keyframes entra { from { opacity: 0; transform: translateY(14px); } }
+@keyframes flutua { to { transform: translate(40px, 30px) scale(1.15); } }
+@keyframes flutuaV { 50% { transform: translateY(-6px); } }
+@keyframes enche { from { transform: scaleX(0); } }
+@keyframes gira { from { transform: rotate(-120deg); opacity: 0; } }
+@keyframes pulsa { 70% { box-shadow: 0 0 0 10px rgba(255,180,84,0); } 100% { box-shadow: 0 0 0 0 rgba(255,180,84,0); } }
+@media (min-width: 900px) {
+  .entrada { grid-template-columns: 1.1fr .9fr; gap: 32px; align-items: stretch; }
+  .vitrine { padding: 44px 40px; display: flex; flex-direction: column; justify-content: center; min-height: 620px; }
+  .vitrine h2 { font-size: 46px; }
+  .auth { align-self: center; }
+}
+@media (max-width: 640px) { .vit-cards .c3 { display: none; } .vitrine h2 { font-size: 30px; } .vit-lista li:nth-child(3) { display: none; } }
+@media (prefers-reduced-motion: reduce) { .vitrine, .vit-luz, .mini, .vit-lista li, .auth-c, .selos li, .mini-barra i, .ponto, .mini-rosca { animation: none !important; } }
+html[data-contraste="alto"] .vitrine { background: #000; }
+html[data-contraste="alto"] .vit-luz { display: none; }
+html[data-contraste="alto"] .mini, html[data-contraste="alto"] .selos li { border: 2px solid #000; background: #fff; color: #000; }
+html[data-contraste="alto"] .mini { background: #000; color: #fff; border-color: #fff; }
+/* celular: apresentação enxuta para o formulário aparecer sem rolar */
+@media (max-width: 640px) {
+  .vit-cards, .vit-lista { display: none; }
+  .vitrine { padding: 22px 20px; border-radius: 22px; }
+  .vitrine h2 { font-size: 28px; }
+  .vit-p { font-size: 16px; margin-top: 8px; }
+  .entrada { gap: 16px; }
+}
