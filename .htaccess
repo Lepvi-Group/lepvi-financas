@@ -1,0 +1,10 @@
+# Sempre conferir se há versão nova (o app muda com frequência e o padrão do servidor guardava por 7 dias)
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|js|css|json|svg)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+    Header unset Expires
+  </FilesMatch>
+</IfModule>
+<IfModule mod_expires.c>
+  ExpiresActive Off
+</IfModule>
