@@ -87,6 +87,23 @@ test('evolução devolve os últimos meses em ordem', () => {
   const e = F.evolucao([], '2026-02', 3);
   assert.deepStrictEqual(e.map((x) => x.mes), ['2025-12', '2026-01', '2026-02']);
 });
+test('fluxo de caixa: saldo previsto dia a dia, fatura no vencimento e aviso de saldo negativo', () => {
+  const contas = [{ id: 'a', nome: 'Banco', saldoInicial: 1000 }];
+  const cartoes = [{ id: 'n', nome: 'Nubank', limite: 5000, fechamento: 25, vencimento: 5 }];
+  const l = [
+    { id: '1', tipo: 'receita', valor: 500, data: '2026-12-02', conta: 'a', pago: false, categoria: 'Vendas', desc: 'Venda' },
+    { id: '2', tipo: 'despesa', valor: 1200, data: '2026-12-03', conta: 'a', pago: false, categoria: 'Moradia', desc: 'Aluguel' },
+    { id: '3', tipo: 'despesa', valor: 700, data: '2026-11-20', conta: 'c:n', pago: false, categoria: 'Mercado', desc: 'Compra' },
+    { id: '4', tipo: 'despesa', valor: 100, data: '2026-11-10', conta: 'a', pago: true, categoria: 'Lazer', desc: 'Cinema' },
+  ];
+  const f = F.fluxoMes(l, contas, cartoes, '2026-12');
+  assert.strictEqual(f.saldoInicial, 900, 'saldo no começo do mês considera o que já foi pago');
+  assert.strictEqual(f.dias[1].saldo, 1400);
+  assert.strictEqual(f.dias[2].saldo, 200);
+  assert.strictEqual(f.dias[4].saldo, -500, 'fatura entra no dia do vencimento (05/12)');
+  assert.strictEqual(f.primeiroNegativo.dia, 5);
+  assert.strictEqual(f.saldoFinal, -500);
+});
 test('lê CSV com data brasileira e valor com vírgula', () => {
   const r = F.lerCSV('data;descricao;valor\n05/11/2026;Mercado;-1.234,56\n06/11/2026;Venda;300,00');
   assert.strictEqual(r.length, 2);

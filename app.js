@@ -72,13 +72,16 @@
   function telaAuth() {
     const modo = V.auth; const msg = V.msg ? `<p class="ok-msg" role="status">${esc(V.msg)}</p>` : '';
     const erro = '<p class="erro" role="alert" id="auth-erro" tabindex="-1" hidden></p>';
-    const mostrar = '<label class="troca"><span>Mostrar a senha</span><input type="checkbox" role="switch" data-mostrar></label>';
+    const mostrar = '';
     const link = (a, t) => `<button class="link" type="button" data-acao="${a}">${t}</button>`;
+    const gIc = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#4285F4" d="M22.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.9a5 5 0 0 1-2.2 3.3v2.7h3.5c2.1-1.9 3.4-4.7 3.4-7.9z"/><path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.6l-3.5-2.7c-1 .6-2.2 1-3.7 1-2.8 0-5.2-1.9-6-4.5H2.4v2.8A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M6 14.2a6.6 6.6 0 0 1 0-4.4V7H2.4a11 11 0 0 0 0 10z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1A11 11 0 0 0 2.4 7L6 9.8c.8-2.6 3.2-4.4 6-4.4z"/></svg>';
+    const mIc = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#F25022" d="M2 2h9.5v9.5H2z"/><path fill="#7FBA00" d="M12.5 2H22v9.5h-9.5z"/><path fill="#00A4EF" d="M2 12.5h9.5V22H2z"/><path fill="#FFB900" d="M12.5 12.5H22V22h-9.5z"/></svg>';
+    const social = (rotulo) => `<div class="sociais"><button class="btn-social" type="button" data-acao="oauth" data-p="google">${gIc}<span>${rotulo} com Google</span></button><button class="btn-social" type="button" data-acao="oauth" data-p="microsoft">${mIc}<span>${rotulo} com Microsoft</span></button></div><p class="ou"><span>ou use seu e-mail</span></p>`;
     let titulo; let corpo;
     if (modo === 'enviado') { titulo = 'Confira seu e-mail'; corpo = `${msg}<button class="btn" type="button" data-acao="auth-entrar">Voltar para entrar</button>`; }
     else if (modo === 'cadastro') {
       titulo = 'Criar sua conta';
-      corpo = `<form id="auth" class="auth-f" novalidate>${campo('Seu nome', '<input name="nome" required maxlength="120" autocomplete="name">')}${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campo('Senha (mínimo 10 caracteres)', '<input name="senha" type="password" required minlength="10" autocomplete="new-password">')}${mostrar}
+      corpo = `${social('Cadastrar')}<form id="auth" class="auth-f" novalidate>${campo('Seu nome', '<input name="nome" required maxlength="120" autocomplete="name">')}${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campoSenha('Senha (mínimo 10 caracteres)', 'name="senha" type="password" required minlength="10" autocomplete="new-password"')}${mostrar}
         <label class="troca"><span>Li e aceito a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> e os <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a></span><input type="checkbox" role="switch" name="aceite" required></label>${erro}
         <button class="btn bloco" type="submit">Criar conta</button></form><p class="mut">Já tem conta? ${link('auth-entrar', 'Entrar')}</p>`;
     } else if (modo === 'esqueci') {
@@ -86,10 +89,10 @@
       corpo = `<form id="auth" class="auth-f" novalidate><p class="mut">Informe o e-mail da sua conta. Se ele existir, enviamos um link para criar uma nova senha.</p>${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${erro}<button class="btn bloco" type="submit">Enviar link</button></form><p class="mut">${link('auth-entrar', 'Voltar para entrar')}</p>`;
     } else if (modo === 'redefinir') {
       titulo = 'Criar nova senha';
-      corpo = `<form id="auth" class="auth-f" novalidate>${campo('Nova senha (mínimo 10 caracteres)', '<input name="senha" type="password" required minlength="10" autocomplete="new-password">')}${mostrar}${erro}<button class="btn bloco" type="submit">Salvar nova senha</button></form>`;
+      corpo = `<form id="auth" class="auth-f" novalidate>${campoSenha('Nova senha (mínimo 10 caracteres)', 'name="senha" type="password" required minlength="10" autocomplete="new-password"')}${mostrar}${erro}<button class="btn bloco" type="submit">Salvar nova senha</button></form>`;
     } else {
       titulo = 'Entrar';
-      corpo = `${msg}<form id="auth" class="auth-f" novalidate>${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campo('Senha', '<input name="senha" type="password" required autocomplete="current-password">')}${mostrar}${erro}<button class="btn bloco" type="submit">Entrar</button></form>
+      corpo = `${msg}${social('Entrar')}<form id="auth" class="auth-f" novalidate>${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campoSenha('Senha', 'name="senha" type="password" required autocomplete="current-password"')}${mostrar}${erro}<button class="btn bloco" type="submit">Entrar</button></form>
         <p class="mut">${link('auth-esqueci', 'Esqueci minha senha')}</p><p class="mut">Ainda não tem conta? ${link('auth-cadastro', 'Criar conta grátis')}</p>`;
     }
     const ic = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -101,6 +104,7 @@
     return `<section class="entrada">
       <aside class="vitrine">
         <span class="vit-luz l1" aria-hidden="true"></span><span class="vit-luz l2" aria-hidden="true"></span>
+        <div class="vit-marca" role="img" aria-label="Lepvi Finanças"><svg viewBox="0 0 100 100" aria-hidden="true" fill="currentColor"><path d="M10 24L34 0V64L46 76H90L66 100H10Z"/><path d="M60 26H84V50H60Z"/></svg><span>lepvi <b>finanças</b></span></div>
         <h2>Suas finanças,<br><em>sem susto.</em></h2>
         <p class="vit-p">Contas, cartões e boletos de você e da sua empresa em um só lugar, com aviso por e-mail antes de cada vencimento.</p>
         <ul class="vit-lista"><li><i aria-hidden="true">✓</i>Fatura de cada cartão, mês a mês</li><li><i aria-hidden="true">✓</i>Aviso antes, no dia e depois de vencer</li><li><i aria-hidden="true">✓</i>Orçamento por categoria e objetivos</li></ul>
@@ -150,6 +154,8 @@
   const DATA_CURTA = (iso) => iso.slice(8, 10) + '/' + iso.slice(5, 7);
   const ontem = () => { const x = new Date(); x.setDate(x.getDate() - 1); return F.hojeISO(x); };
   const fundo = (cor) => `background:linear-gradient(135deg,${cor},#0D0D0F 150%)`;
+  const EYE = '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>';
+  const EYE_OFF = '<path d="M9.9 4.2A10.6 10.6 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-3.2 4.3M6.6 6.6A17 17 0 0 0 2 12s3.5 8 10 8a10.4 10.4 0 0 0 5.4-1.5"/><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2"/><path d="M2 2l20 20"/>';
   const ICONES = {
     inicio: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
     lancs: '<path d="M4 6h16M4 12h16M4 18h10"/>',
@@ -183,7 +189,7 @@
     const transf = l.tipo === 'transf';
     const info = transf ? { icone: '🔁', cor: '#2D4BFF' } : F.catInfo(l.categoria, l.tipo);
     const cartao = F.ehCartao(l);
-    const sub = transf ? `${esc(nomeConta(l.conta))} → ${esc(nomeConta(l.destino))}` : `${esc(l.categoria)} · ${cartao ? '💳 ' : ''}${esc(nomeConta(l.conta))}`;
+    const sub = transf ? `${esc(nomeConta(l.conta))} → ${esc(nomeConta(l.destino))}` : `${esc(l.categoria)} · ${cartao ? '💳 ' : ''}${esc(nomeConta(l.conta))}${(l.tags || []).map((t) => ` <span class="tag">#${esc(t)}</span>`).join('')}`;
     const sinal = l.tipo === 'receita' ? '+ ' : transf ? '' : '− ';
     const cor = l.tipo === 'receita' ? 'pos' : transf ? '' : 'neg';
     const visto = cartao ? '' : `<button class="visto ${l.pago ? 'on' : ''}" type="button" data-acao="alternar" data-id="${l.id}" aria-label="Pago ou recebido: ${esc(l.desc || l.categoria)}" aria-pressed="${!!l.pago}">${l.pago ? '✓' : ''}</button>`;
@@ -197,7 +203,8 @@
   /* ---------- telas ---------- */
   function telaInicio() {
     const d = D();
-    const saldo = F.arred(d.contas.filter((c) => !c.fora).reduce((s, c) => s + F.saldoConta(d.lancs, c), 0));
+    const somaContas = (f) => F.arred(d.contas.filter((c) => !c.fora && f(c)).reduce((t, c) => t + F.saldoConta(d.lancs, c), 0));
+    const saldo = somaContas((c) => c.tipo !== 'investimento'); const investido = somaContas((c) => c.tipo === 'investimento');
     const r = F.resumoMes(d.lancs, V.mes);
     const feito = [d.contas.some((c) => c.saldoInicial !== 0), d.cartoes.length > 0, d.lancs.length > 0];
     const guia = !S.guia && !feito.every(Boolean) ? `<section class="card"><h2 class="secao">Vamos organizar suas finanças 🚀</h2><p class="mut">Três passos e o painel já funciona para você.</p><div class="passos">
@@ -208,7 +215,7 @@
     const orc = F.orcamentoMes(d.lancs, d.orcamentos, V.mes).filter((o) => o.pct >= 80).slice(0, 2);
     const fats = F.faturas(d.lancs, d.cartoes).filter((f) => !f.paga);
     const ult = d.lancs.filter((l) => F.mesDe(l.data) === V.mes).sort((a, b) => b.data.localeCompare(a.data)).slice(0, 5);
-    return `<div class="hero"><small>Saldo geral</small><span class="grande num">${m(saldo)}</span>
+    return `<div class="hero"><small>Saldo geral</small><span class="grande num">${m(saldo)}</span>${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
       <div class="duo"><div><small>Receitas do mês</small><b class="verde num">${m(r.receitas)}</b></div><div><small>Despesas do mês</small><b class="verm num">${m(r.despesas)}</b></div></div></div>
     <div class="contas" aria-label="Suas contas">${d.contas.map((c) => `<button class="conta" type="button" data-acao="editar-conta" data-id="${c.id}"><span class="mut"><i style="background:${c.cor}"></i>${esc(c.nome)}</span><b class="num">${m(F.saldoConta(d.lancs, c))}</b></button>`).join('')}<button class="conta nova" type="button" data-acao="nova-conta">+ Conta</button></div>
     ${guia}
@@ -216,13 +223,13 @@
     <div class="duas"><div class="card mini"><small>Receitas</small><b class="pos num">${m(r.receitas)}</b><div class="barra ok" role="img" aria-label="Recebido"><i style="width:${r.receitas ? Math.min(100, (r.recebido / r.receitas) * 100) : 0}%"></i></div><small>Recebido ${m(r.recebido)}</small></div>
       <div class="card mini"><small>Despesas</small><b class="neg num">${m(r.despesas)}</b><div class="barra estourou" role="img" aria-label="Pago"><i style="width:${r.despesas ? Math.min(100, (r.pago / r.despesas) * 100) : 0}%"></i></div><small>Pago ${m(r.pago)}</small></div></div>
     <div class="card" style="display:flex;justify-content:space-between;align-items:center"><span class="mut">Balanço previsto do mês</span><b class="num ${r.saldo >= 0 ? 'pos' : 'neg'}" style="font-size:20px">${m(r.saldo)}</b></div>
-    <section class="card"><div class="sec-h"><h2 class="secao">Contas a pagar</h2><button class="link" type="button" data-acao="ir-pagar">Ver todas</button></div>
+    <section class="card" data-bloco="pagar"><div class="sec-h"><h2 class="secao">Contas a pagar</h2><button class="link" type="button" data-acao="ir-pagar">Ver todas</button></div>
       ${pagar.length ? `<ul class="lista">${pagar.slice(0, 3).map(itemPagar).join('')}</ul>` : '<p class="mut" style="padding:8px 0">Tudo em dia. Nenhum boleto ou fatura pendente. 🎉</p>'}</section>
-    ${orc.length ? `<section class="card"><h2 class="secao">Atenção no orçamento</h2><ul class="lista">${orc.map(rowOrc).join('')}</ul></section>` : ''}
-    <section class="card"><div class="sec-h"><h2 class="secao">Despesas por categoria</h2><button class="link" type="button" data-acao="ir-rel">Relatórios</button></div>
+    ${orc.length ? `<section class="card" data-bloco="orcamento"><h2 class="secao">Atenção no orçamento</h2><ul class="lista">${orc.map(rowOrc).join('')}</ul></section>` : ''}
+    <section class="card" data-bloco="categorias"><div class="sec-h"><h2 class="secao">Despesas por categoria</h2><button class="link" type="button" data-acao="ir-rel">Relatórios</button></div>
       ${cats.length ? rosca(cats, 'Despesas') : '<p class="mut" style="padding:8px 0">Sem despesas neste mês.</p>'}</section>
-    ${d.cartoes.length ? `<section class="card"><div class="sec-h"><h2 class="secao">Cartões</h2><button class="link" type="button" data-acao="ir-cartoes">Abrir</button></div><ul class="lista">${d.cartoes.map((c) => { const f = fats.find((x) => x.cartaoId === c.id); const u = F.limiteUsado(d.lancs, c.id); return `<li><div class="item"><span class="ic" style="${fundo(c.cor)};color:#fff">💳</span><div class="txt"><strong>${esc(c.nome)}</strong><span>${f ? `Fatura vence ${DATA_CURTA(f.vencimento)}` : 'Sem fatura aberta'} · limite livre ${m(c.limite - u)}</span></div><div class="val num">${f ? m(f.total) : m(0)}</div></div></li>`; }).join('')}</ul></section>` : ''}
-    <section class="card"><div class="sec-h"><h2 class="secao">Últimos lançamentos</h2><button class="link" type="button" data-acao="ir-lancs">Ver todos</button></div>
+    ${d.cartoes.length ? `<section class="card" data-bloco="cartoes"><div class="sec-h"><h2 class="secao">Cartões</h2><button class="link" type="button" data-acao="ir-cartoes">Abrir</button></div><ul class="lista">${d.cartoes.map((c) => { const f = fats.find((x) => x.cartaoId === c.id); const u = F.limiteUsado(d.lancs, c.id); return `<li><div class="item"><span class="ic" style="${fundo(c.cor)};color:#fff">💳</span><div class="txt"><strong>${esc(c.nome)}</strong><span>${f ? `Fatura vence ${DATA_CURTA(f.vencimento)}` : 'Sem fatura aberta'} · limite livre ${m(c.limite - u)}</span></div><div class="val num">${f ? m(f.total) : m(0)}</div></div></li>`; }).join('')}</ul></section>` : ''}
+    <section class="card" data-bloco="ultimos"><div class="sec-h"><h2 class="secao">Últimos lançamentos</h2><button class="link" type="button" data-acao="ir-lancs">Ver todos</button></div>
       ${ult.length ? `<ul class="lista">${ult.map(itemLanc).join('')}</ul>` : '<p class="mut" style="padding:8px 0">Nenhum lançamento neste mês.</p>'}</section>`;
   }
 
@@ -231,7 +238,7 @@
     let l = d.lancs.filter((x) => F.mesDe(x.data) === V.mes);
     if (V.filtro !== 'todos') l = l.filter((x) => x.tipo === V.filtro);
     const q = V.q.trim().toLowerCase();
-    if (q) l = l.filter((x) => `${x.desc} ${x.categoria} ${nomeConta(x.conta)}`.toLowerCase().includes(q));
+    if (q) l = l.filter((x) => `${x.desc} ${x.categoria} ${nomeConta(x.conta)} ${(x.tags || []).join(' ')}`.toLowerCase().includes(q));
     if (!l.length) return '<div class="card vazio"><span class="emoji">🗒️</span><p>Nenhum lançamento aqui.</p><button class="btn" type="button" data-acao="novo">Novo lançamento</button></div>';
     const dias = {}; l.sort((a, b) => b.data.localeCompare(a.data)).forEach((x) => { (dias[x.data] = dias[x.data] || []).push(x); });
     return Object.entries(dias).map(([dia, itens]) => {
@@ -281,14 +288,16 @@
   }
   function telaPlanejar() {
     const d = D();
-    const abas = `<div class="abas" role="group">${[['orc', 'Orçamento'], ['obj', 'Objetivos'], ['rel', 'Relatórios']].map(([v, t]) => `<button type="button" data-acao="plano" data-v="${v}" aria-pressed="${V.plano === v}">${t}</button>`).join('')}</div>`;
+    const abas = `<div class="abas" role="group">${[['orc', 'Orçamento'], ['fluxo', 'Fluxo'], ['obj', 'Objetivos'], ['rel', 'Relatórios']].map(([v, t]) => `<button type="button" data-acao="plano" data-v="${v}" aria-pressed="${V.plano === v}">${t}</button>`).join('')}</div>`;
     let corpo = '';
     if (V.plano === 'orc') {
       const o = F.orcamentoMes(d.lancs, d.orcamentos, V.mes);
       const tl = o.reduce((s, x) => s + x.limite, 0); const tg = o.reduce((s, x) => s + x.gasto, 0);
-      corpo = `${seletorMes()}${o.length ? `<div class="card"><small>Orçamento total do mês</small><b class="num" style="font-size:22px;display:block">${m(tg)} <span class="mut" style="font-weight:400">de ${m(tl)}</span></b><div class="barra ${tg > tl ? 'estourou' : 'ok'}" style="margin-top:8px"><i style="width:${tl ? Math.min(100, (tg / tl) * 100) : 0}%"></i></div></div><div class="card" style="padding:4px 14px"><ul class="lista">${o.map(rowOrc).join('')}</ul></div>` : '<div class="card vazio"><span class="emoji">🎯</span><p>Defina quanto você quer gastar por categoria e acompanhe se está dentro do limite.</p></div>'}<button class="btn bloco" type="button" data-acao="novo-orc">Definir limite de categoria</button>`;
+      corpo = `${seletorMes()}${o.length ? `<div class="card"><small>Orçamento total do mês</small><b class="num" style="font-size:22px;display:block">${m(tg)} <span class="mut" style="font-weight:400">de ${m(tl)}</span></b><div class="barra ${tg > tl ? 'estourou' : 'ok'}" style="margin-top:8px"><i style="width:${tl ? Math.min(100, (tg / tl) * 100) : 0}%"></i></div><p class="mut" style="margin-top:10px">${tg > tl ? `Você passou ${m(tg - tl)} do limite total.` : `Ainda dá para gastar ${m(tl - tg)} nas categorias com limite.`}${F.resumoMes(d.lancs, V.mes).despesas - tg > 0.009 ? ` Gastos em outras categorias: ${m(F.resumoMes(d.lancs, V.mes).despesas - tg)}.` : ''}</p></div><div class="card" style="padding:4px 14px"><ul class="lista">${o.map(rowOrc).join('')}</ul></div>` : '<div class="card vazio"><span class="emoji">🎯</span><p>Defina quanto você quer gastar por categoria e acompanhe se está dentro do limite.</p></div>'}<button class="btn bloco" type="button" data-acao="novo-orc">Definir limite de categoria</button>`;
     } else if (V.plano === 'obj') {
       corpo = `${d.objetivos.length ? d.objetivos.map((o) => { const p = o.meta ? Math.min(100, (o.guardado / o.meta) * 100) : 0; return `<section class="card"><div class="sec-h"><h2 class="secao">🎯 ${esc(o.nome)}</h2><b class="num">${Math.round(p)}%</b></div><p class="mut num" style="margin:4px 0 10px">${m(o.guardado)} de ${m(o.meta)}${o.prazo ? ' · até ' + esc(NOME_MES(o.prazo)) : ''}</p><div class="barra"><i style="width:${p}%"></i></div><div class="botoes" style="margin-top:12px"><button class="btn mini" type="button" data-acao="aporte" data-id="${o.id}">Guardar dinheiro</button><button class="btn mini sec" type="button" data-acao="editar-obj" data-id="${o.id}">Editar</button></div></section>`; }).join('') : '<div class="card vazio"><span class="emoji">✈️</span><p>Crie um objetivo (viagem, reserva de emergência, caixa da empresa) e acompanhe quanto já guardou.</p></div>'}<button class="btn bloco" type="button" data-acao="novo-obj">Novo objetivo</button>`;
+    } else if (V.plano === 'fluxo') {
+      corpo = telaFluxo();
     } else {
       const r = F.resumoMes(d.lancs, V.mes); const ev = F.evolucao(d.lancs, V.mes, 6);
       const max = Math.max(1, ...ev.flatMap((e) => [e.receitas, e.despesas]));
@@ -299,6 +308,25 @@
       <button class="btn sec bloco" type="button" data-acao="exportar">Exportar ${esc(NOME_MES(V.mes))} em CSV</button>`;
     }
     return `<div class="tit"><h1>Planejar</h1></div>${abas}${corpo}`;
+  }
+  function telaFluxo() {
+    const d = D(); const f = F.fluxoMes(d.lancs, d.contas, d.cartoes, V.mes); const hoje = F.hojeISO();
+    const [ano, mm] = V.mes.split('-').map(Number); const primeiro = new Date(ano, mm - 1, 1).getDay();
+    const sel = V.dia && F.mesDe(V.dia) === V.mes ? V.dia : (F.mesDe(hoje) === V.mes ? hoje : `${V.mes}-01`);
+    const dsel = f.dias.find((x) => x.data === sel);
+    const est = (n, t, cls = '') => `<div class="card est"><b class="num ${cls}">${n}</b><small>${t}</small></div>`;
+    const saldos = f.dias.map((x) => x.saldo); const mn = Math.min(0, ...saldos); const mx = Math.max(1, ...saldos); const faixa = mx - mn || 1;
+    const pts = f.dias.map((x, i) => `${(i / Math.max(1, f.dias.length - 1)) * 300},${110 - ((x.saldo - mn) / faixa) * 100}`).join(' ');
+    const zeroY = 110 - ((0 - mn) / faixa) * 100;
+    const alerta = f.primeiroNegativo ? `<div class="alerta-fluxo" role="alert"><b>Atenção:</b> pelo que está lançado, seu saldo fica negativo no dia ${f.primeiroNegativo.dia}/${String(mm).padStart(2, '0')} (${m(f.primeiroNegativo.saldo)}). Dá tempo de se organizar.</div>` : '';
+    const celulas = Array.from({ length: primeiro }, () => '<span></span>').concat(f.dias.map((x) => `<button type="button" class="dia-cal${x.data === sel ? ' sel' : ''}${x.data === hoje ? ' hoje' : ''}${x.saldo < 0 ? ' neg' : ''}" data-acao="dia" data-d="${x.data}" aria-pressed="${x.data === sel}" aria-label="Dia ${x.dia}: ${x.itens.length ? x.itens.length + (x.itens.length === 1 ? ' lançamento' : ' lançamentos') + ', saldo previsto ' + F.brl(x.saldo) : 'sem lançamentos'}"><b>${x.dia}</b><span class="pontos">${x.entradas ? '<i class="p-ent"></i>' : ''}${x.saidas ? '<i class="p-sai"></i>' : ''}</span></button>`));
+    return `${seletorMes()}${alerta}
+    <div class="estatisticas">${est(m(f.saldoInicial), 'Saldo no começo do mês')}${est(m(f.entradas), 'Entradas previstas', 'pos')}${est(m(f.saidas), 'Saídas previstas', 'neg')}${est(m(f.saldoFinal), 'Saldo previsto no fim', f.saldoFinal < 0 ? 'neg' : '')}</div>
+    <section class="card"><h2 class="secao">Saldo previsto dia a dia</h2><svg class="linha-saldo" viewBox="0 0 300 120" role="img" aria-label="Gráfico do saldo previsto: começa em ${F.brl(f.saldoInicial)} e termina em ${F.brl(f.saldoFinal)}"><line x1="0" x2="300" y1="${zeroY}" y2="${zeroY}" stroke="#8C8B85" stroke-dasharray="4 4"/><polyline points="${pts}" fill="none" stroke="url(#gs)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><defs><linearGradient id="gs" x1="0" x2="1"><stop offset="0" stop-color="#3A7BFF"/><stop offset="1" stop-color="#C04DFF"/></linearGradient></defs></svg>
+      <p class="mut">A linha tracejada é o zero. Considera tudo que está lançado, pago ou não. Fatura de cartão entra no dia do vencimento.</p></section>
+    <section class="card"><h2 class="secao">Calendário</h2><div class="cal" role="group" aria-label="Calendário de ${esc(NOME_MES(V.mes))}">${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((x) => `<span class="cal-s">${x}</span>`).join('')}${celulas.join('')}</div>
+      <p class="mut" style="margin-top:10px"><i class="p-ent"></i> entra dinheiro &nbsp; <i class="p-sai"></i> sai dinheiro</p></section>
+    <section class="card"><h2 class="secao">${dsel ? `Dia ${dsel.dia}` : 'Dia'}</h2>${dsel && dsel.itens.length ? `<ul class="lista">${dsel.itens.map((i) => `<li><div class="item"><span class="ic" style="background:${i.tipo === 'receita' ? '#D9F2EA' : '#FDE7E4'}">${i.tipo === 'receita' ? '↗' : '↘'}</span><div class="txt"><strong>${esc(i.titulo)}</strong><span>${i.pago ? 'Pago' : 'Pendente'}</span></div><div class="val num ${i.tipo === 'receita' ? 'pos' : 'neg'}">${i.tipo === 'receita' ? '+ ' : '− '}${m(i.valor)}</div></div></li>`).join('')}</ul><p class="mut" style="margin-top:8px">Saldo previsto ao fim do dia: <b class="num">${m(dsel.saldo)}</b></p>` : '<p class="mut" style="padding:8px 0">Nada lançado neste dia.</p>'}</section>`;
   }
   function receitaCat(lancs, mes) {
     const o = {}; lancs.filter((l) => l.tipo === 'receita' && !l.ignorar && F.mesDe(l.data) === mes).forEach((l) => { o[l.categoria] = F.arred((o[l.categoria] || 0) + l.valor); }); return o;
@@ -337,6 +365,7 @@
       linha({ tag: 'label', icone: LI.subir, titulo: 'Importar extrato ou fatura', desc: 'Arquivo OFX ou CSV do seu banco', dentro: '<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden>' })
       + linha({ icone: LI.copia, titulo: 'Cópia de segurança', desc: 'Baixar um arquivo com seus lançamentos', attrs: 'data-acao="backup"' })
       + linha({ tag: 'label', icone: LI.arquivo, titulo: 'Restaurar uma cópia', desc: 'Voltar os dados de um arquivo', dentro: '<input id="rest" type="file" accept=".json" hidden>' })
+      + linha({ icone: LI.texto, titulo: 'Personalizar tela inicial', desc: 'Escolha o que aparece no Início', attrs: 'data-acao="personalizar"' })
       + linha({ icone: LI.brilho, titulo: 'Carregar dados de exemplo', desc: 'Para conhecer o app preenchido', attrs: 'data-acao="exemplo"' }))}
     ${grupo('Sobre',
       linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' })
@@ -394,12 +423,13 @@
     document.body.classList.toggle('deslogado', !USER.logado);
     if (!USER.logado) { $('#menu').innerHTML = ''; $('#tela').innerHTML = telaAuth(); return; }
     document.querySelectorAll('[data-perfil]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.perfil === S.perfil)));
-    const olho = $('[data-acao=olho]'); olho.setAttribute('aria-pressed', String(!!S.oculto)); olho.setAttribute('aria-label', S.oculto ? 'Mostrar valores' : 'Ocultar valores');
+    const olho = $('[data-acao=olho]'); olho.innerHTML = svg(S.oculto ? EYE_OFF : EYE); olho.setAttribute('aria-pressed', String(!!S.oculto)); olho.setAttribute('aria-label', S.oculto ? 'Mostrar valores' : 'Ocultar valores');
     const nav = (id, t) => `<button type="button" data-tela="${id}" ${V.tela === id ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICONES[id]}</svg>${t}</button>`;
     const ab = $('[data-acao=conta-menu]'); ab.innerHTML = avatarHtml(); ab.setAttribute('aria-label', 'Minha conta: ' + USER.info.nome);
     $('#menu').innerHTML = nav('inicio', 'Início') + nav('lancs', 'Lançamentos') + '<button class="mais-novo" type="button" data-acao="menu-novo" aria-label="Novo lançamento">+</button>' + nav('cartoes', 'Cartões') + nav('planejar', 'Planejar')
       + `<div class="menu-fim"><button type="button" class="mf-mais" data-acao="mais">Mais opções</button><div class="menu-user"><button type="button" class="mu-perfil" data-acao="perfil">${avatarHtml('peq')}<span><b>${esc(USER.info.nome)}</b><small>Meu perfil</small></span></button><button type="button" class="mu-sair" data-acao="sair">Sair</button></div></div>`;
     $('#tela').innerHTML = VISTAS[V.tela]();
+    if (V.tela === 'inicio' && S.inicio) document.querySelectorAll('#tela [data-bloco]').forEach((el) => { if (S.inicio[el.dataset.bloco] === false) el.remove(); });
   }
   const ir = (t) => { V.tela = t; render(); window.scrollTo(0, 0); };
 
@@ -416,6 +446,7 @@
   }
   dlg.addEventListener('click', (ev) => { if (ev.target === dlg) dlg.close(); });
   const radios = (nome, arr, sel, cls = '') => `<div class="opcoes ${cls}" role="radiogroup">${arr.map(([v, t, ic]) => `<label><input type="radio" name="${nome}" value="${esc(v)}" ${v === sel ? 'checked' : ''}><span>${ic ? `<em>${ic}</em>` : ''}${esc(t)}</span></label>`).join('')}</div>`;
+  const campoSenha = (rot, attrs) => `<label class="campo"><span>${rot}</span><span class="senha-wrap"><input ${attrs}><button type="button" class="olho-senha" data-olho aria-label="Mostrar a senha" aria-pressed="false">${svg(EYE)}</button></span></label>`;
   const troca = (nome, rot, on) => `<label class="troca"><span>${rot}</span><input type="checkbox" role="switch" name="${nome}" ${on ? 'checked' : ''}></label>`;
   const campo = (rot, html) => `<label class="campo"><span>${rot}</span>${html}</label>`;
   const sele = (nome, arr, sel) => `<select name="${nome}">${arr.map(([v, t]) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
@@ -448,6 +479,7 @@
       ${catsHtml}${contaHtml}
       ${novo && tipo !== 'transf' ? `<div class="dupla">${campo('Repetir', sele('rep', [['nao', 'Não repete'], ['parcelado', 'Parcelado'], ['fixo', 'Fixo todo mês']], 'nao'))}<div id="repn" hidden>${campo('Quantas vezes', '<input name="n" type="number" min="2" max="60" value="2">')}</div></div>` : ''}
       ${tipo === 'despesa' ? troca('boleto', 'É um boleto', !!base.boleto) : ''}
+      ${tipo === 'transf' ? '' : campo('Etiquetas (opcional)', `<input name="tags" maxlength="80" placeholder="Ex.: viagem, casal, projeto" value="${esc((base.tags || []).join(', '))}">`) + troca('ignorar', 'Não contar nos relatórios', !!base.ignorar)}
       ${tipo === 'transf' ? '' : campo('Nota (opcional)', `<textarea name="nota" maxlength="300">${esc(base.nota || '')}</textarea>`)}
       <div class="botoes">${novo ? '' : '<button class="btn perigo" type="button" id="exc">Excluir</button>'}<button class="btn" type="submit">Salvar</button></div>`,
     (fd) => {
@@ -457,7 +489,7 @@
       if (tipo === 'transf' && conta === fd.get('destino')) { aviso('Escolha contas diferentes.'); return false; }
       const reg = tipo === 'transf'
         ? { tipo, desc: 'Transferência', data: fd.get('data'), categoria: 'Transferência', conta, destino: fd.get('destino'), pago: !!fd.get('pago'), boleto: false }
-        : { tipo, desc: fd.get('desc').trim(), data: fd.get('data'), categoria: fd.get('categoria'), conta, boleto: !!fd.get('boleto') && !cartao, pago: !cartao && !!fd.get('pago'), nota: (fd.get('nota') || '').trim() };
+        : { tipo, desc: fd.get('desc').trim(), data: fd.get('data'), categoria: fd.get('categoria'), conta, boleto: !!fd.get('boleto') && !cartao, pago: !cartao && !!fd.get('pago'), nota: (fd.get('nota') || '').trim(), tags: [...new Set(String(fd.get('tags') || '').split(',').map((x) => x.trim().toLowerCase().replace(/^#/, '')).filter(Boolean))].slice(0, 5), ignorar: !!fd.get('ignorar') };
       if (novo) {
         const rep = fd.get('rep') || 'nao'; const n = rep === 'nao' ? 1 : Math.max(2, Math.min(60, parseInt(fd.get('n'), 10) || 2));
         const parte = rep === 'parcelado' ? F.arred(valor / n) : valor;
@@ -500,13 +532,20 @@
   function formConta(c = {}) {
     const novo = !c.id;
     abrir(novo ? 'Nova conta' : 'Editar conta', `${campo('Nome', `<input name="nome" required maxlength="30" value="${esc(c.nome || '')}" placeholder="Ex.: Banco do Brasil, Caixa da loja">`)}
-      ${campo('Saldo inicial (R$)', `<input name="saldo" inputmode="decimal" value="${val2(c.saldoInicial != null ? c.saldoInicial : 0)}">`)}
+      ${campo('Tipo de conta', radios('tipoConta', [['corrente', 'Conta corrente', '🏦'], ['poupanca', 'Poupança', '🐷'], ['carteira', 'Carteira', '👛'], ['vale', 'Vale-refeição', '🍽️'], ['investimento', 'Investimentos', '📈']], c.tipo || 'corrente'))}
+      ${novo ? campo('Saldo inicial (R$)', '<input name="saldo" inputmode="decimal" value="0">') : campo('Saldo atual (R$)', `<input name="saldo" inputmode="decimal" value="${val2(F.saldoConta(D().lancs, c))}"><small class="mut">Se não bater com o do banco, corrija aqui. Criamos um ajuste que não entra nos relatórios.</small>`)}
       ${campo('Cor', radios('cor', CORES.map((x) => [x, '']), c.cor || CORES[D().contas.length % CORES.length], 'cores'))}
       ${troca('soma', 'Somar no saldo geral', !c.fora)}
       <div class="botoes">${novo || D().contas.length < 2 ? '' : '<button class="btn perigo" type="button" id="exc">Excluir</button>'}<button class="btn" type="submit">Salvar</button></div>`,
     (fd) => {
-      const reg = { nome: fd.get('nome').trim(), saldoInicial: F.arred(F.numeroBR(fd.get('saldo') || '0')), cor: fd.get('cor'), fora: !fd.get('soma') };
-      if (novo) D().contas.push({ id: uid(), ...reg }); else Object.assign(D().contas.find((x) => x.id === c.id), reg);
+      const reg = { nome: fd.get('nome').trim(), cor: fd.get('cor'), fora: !fd.get('soma'), tipo: fd.get('tipoConta') || 'corrente' };
+      const valorSaldo = F.arred(F.numeroBR(fd.get('saldo') || '0'));
+      if (novo) D().contas.push({ id: uid(), saldoInicial: valorSaldo, ...reg });
+      else {
+        const alvo = D().contas.find((x) => x.id === c.id); const diff = F.arred(valorSaldo - F.saldoConta(D().lancs, alvo));
+        Object.assign(alvo, reg);
+        if (diff !== 0) D().lancs.push({ id: uid(), tipo: diff > 0 ? 'receita' : 'despesa', desc: 'Ajuste de saldo', valor: Math.abs(diff), data: F.hojeISO(), categoria: 'Ajuste de saldo', conta: alvo.id, pago: true, ignorar: true, boleto: false });
+      }
       salvar(); render(); aviso('Conta salva.');
     }, (f) => {
       f.querySelectorAll('.cores span').forEach((s) => { s.style.background = s.previousElementSibling.value; });
@@ -554,13 +593,20 @@
       (fd) => { const v = F.arred(F.numeroBR(fd.get('v'))); if (!(v > 0)) { aviso('Informe um valor.'); return false; } o.guardado = F.arred(o.guardado + v); salvar(); render(); aviso(o.guardado >= o.meta ? 'Objetivo alcançado! 🎉' : 'Valor guardado.'); });
   }
 
+  function formPersonalizar() {
+    const blocos = [['pagar', 'Contas a pagar'], ['orcamento', 'Atenção no orçamento'], ['categorias', 'Despesas por categoria'], ['cartoes', 'Cartões'], ['ultimos', 'Últimos lançamentos']];
+    S.inicio = S.inicio || {};
+    abrir('Personalizar tela inicial', `<p class="mut">Escolha o que você quer ver no Início. O saldo e o resumo do mês sempre aparecem.</p>${blocos.map(([k, t]) => troca('b-' + k, t, S.inicio[k] !== false)).join('')}`, null, (f) => {
+      f.addEventListener('change', () => { blocos.forEach(([k]) => { S.inicio[k] = f['b-' + k].checked; }); salvar(); render(); });
+    });
+  }
   function formSenha() {
-    abrir('Alterar senha', `${campo('Senha atual', '<input name="atual" type="password" required autocomplete="current-password">')}${campo('Nova senha (mínimo 10 caracteres)', '<input name="nova" type="password" required minlength="10" autocomplete="new-password">')}<div class="botoes"><button class="btn" type="submit">Salvar nova senha</button></div>`, null, (f) => {
+    abrir('Alterar senha', `${campoSenha('Senha atual', 'name="atual" type="password" required autocomplete="current-password"')}${campoSenha('Nova senha (mínimo 10 caracteres)', 'name="nova" type="password" required minlength="10" autocomplete="new-password"')}<div class="botoes"><button class="btn" type="submit">Salvar nova senha</button></div>`, null, (f) => {
       f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('mudar_senha', { atual: f.atual.value, nova: f.nova.value }); dlg.close(); aviso('Senha alterada. Enviamos um e-mail de confirmação.'); } catch (e) { aviso(e.message); } });
     });
   }
   function formExcluirConta() {
-    abrir('Excluir minha conta', `<p>Isso apaga a sua conta e <b>todos</b> os seus dados financeiros do servidor, de forma definitiva. Não dá para desfazer. Antes, se quiser, baixe uma cópia em "Baixar meus dados".</p>${campo('Digite sua senha para confirmar', '<input name="senha" type="password" required autocomplete="current-password">')}<div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn perigo" type="submit">Excluir para sempre</button></div>`, null, (f) => {
+    abrir('Excluir minha conta', `<p>Isso apaga a sua conta e <b>todos</b> os seus dados financeiros do servidor, de forma definitiva. Não dá para desfazer. Antes, se quiser, baixe uma cópia em "Baixar meus dados".</p>${campoSenha('Digite sua senha para confirmar', 'name="senha" type="password" required autocomplete="current-password"')}<div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn perigo" type="submit">Excluir para sempre</button></div>`, null, (f) => {
       f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('excluir', { senha: f.senha.value }); dlg.close(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua conta e todos os seus dados foram apagados.'; render(); } catch (e) { aviso(e.message); } });
     });
   }
@@ -635,6 +681,8 @@
   function baixar(blob, nome) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
 
   document.addEventListener('click', (ev) => {
+    const ol = ev.target.closest('[data-olho]');
+    if (ol) { const i = ol.parentElement.querySelector('input'); const ver = i.type === 'password'; i.type = ver ? 'text' : 'password'; ol.setAttribute('aria-pressed', String(ver)); ol.setAttribute('aria-label', ver ? 'Ocultar a senha' : 'Mostrar a senha'); ol.innerHTML = svg(ver ? EYE_OFF : EYE); return; }
     const t = ev.target.closest('[data-acao],[data-tela],[data-perfil]'); if (!t) return;
     if (t.dataset.tela) { ir(t.dataset.tela); return; }
     if (t.dataset.perfil) { S.perfil = t.dataset.perfil; V.cartao = null; V.fmes = null; salvar(); render(); return; }
@@ -647,6 +695,8 @@
       'trocar-foto': () => $('#foto-arq').click(),
       'remover-foto': async () => { try { const r = await api('preferencias', { foto: null }); USER.info = r.usuario; render(); aviso('Foto removida.'); } catch (e) { aviso(e.message); } },
       senha: () => formSenha(),
+      personalizar: () => formPersonalizar(),
+      oauth: () => { aviso(t.dataset.p === 'google' ? 'Entrar com Google será ativado assim que a conexão com o Google for configurada.' : 'Entrar com Microsoft será ativado assim que a conexão com a Microsoft for configurada.'); },
       'excluir-conta': () => formExcluirConta(),
       'auth-entrar': () => { V.auth = 'entrar'; V.msg = ''; render(); },
       'auth-esqueci': () => { V.auth = 'esqueci'; V.msg = ''; render(); },
@@ -655,6 +705,7 @@
       mais: () => ir('mais'),
       mes: () => { V.mes = F.somaMes(V.mes, +t.dataset.d); render(); },
       fmes: () => { V.fmes = F.somaMes(V.fmes, +t.dataset.d); render(); },
+      dia: () => { V.dia = t.dataset.d; render(); },
       filtro: () => { V.filtro = t.dataset.v; render(); },
       sub: () => { V.sub = t.dataset.v; render(); },
       plano: () => { V.plano = t.dataset.v; render(); },

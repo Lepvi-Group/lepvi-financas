@@ -156,7 +156,40 @@
     }).filter(Boolean);
   }
 
-  const api = { CATEGORIAS, catInfo, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  /* Fluxo de caixa do mês (ideia do Organizze, refeita): saldo no começo do mês e saldo previsto dia a dia.
+     Cartão entra pelo vencimento da fatura, não pela data da compra. */
+  function fluxoMes(lancs, contas, cartoes, mes) {
+    const [a, mm] = mes.split('-').map(Number);
+    const totalDias = new Date(a, mm, 0).getDate();
+    const contaDe = (id) => contas.find((c) => c.id === id);
+    let saldo = contas.filter((c) => !c.fora).reduce((s, c) => s + c.saldoInicial, 0);
+    lancs.forEach((l) => {
+      if (!l.pago || l.data >= `${mes}-01` || l.tipo === 'transf' || ehCartao(l)) return;
+      const c = contaDe(l.conta);
+      if (c && !c.fora) saldo += l.tipo === 'receita' ? l.valor : -l.valor;
+    });
+    saldo = arred(saldo);
+    const porDia = {};
+    const add = (data, tipo, valor, titulo, pago) => { if (mesDe(data) === mes) (porDia[data] = porDia[data] || []).push({ tipo, valor, titulo, pago }); };
+    lancs.forEach((l) => {
+      if (l.tipo === 'transf' || ehCartao(l)) return;
+      const c = contaDe(l.conta);
+      if (c && !c.fora) add(l.data, l.tipo, l.valor, l.desc || l.categoria, !!l.pago);
+    });
+    faturas(lancs, cartoes).filter((f) => !f.paga).forEach((f) => add(f.vencimento, 'despesa', f.total, 'Fatura ' + f.cartao, false));
+    let acum = saldo; let ent = 0; let sai = 0; const dias = [];
+    for (let d = 1; d <= totalDias; d++) {
+      const data = `${mes}-${pad(d)}`; const itens = porDia[data] || [];
+      const e = arred(itens.filter((x) => x.tipo === 'receita').reduce((s, x) => s + x.valor, 0));
+      const s = arred(itens.filter((x) => x.tipo === 'despesa').reduce((t, x) => t + x.valor, 0));
+      acum = arred(acum + e - s); ent += e; sai += s;
+      dias.push({ dia: d, data, entradas: e, saidas: s, saldo: acum, itens });
+    }
+    const negativo = dias.find((x) => x.saldo < 0) || null;
+    return { saldoInicial: saldo, entradas: arred(ent), saidas: arred(sai), saldoFinal: acum, dias, primeiroNegativo: negativo };
+  }
+
+  const api = { CATEGORIAS, catInfo, fluxoMes, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

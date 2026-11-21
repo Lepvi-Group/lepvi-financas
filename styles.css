@@ -434,3 +434,44 @@ body.deslogado .avatar-btn { display: none; }
 html[data-contraste="alto"] .avatar-ini { background: #000; }
 html[data-contraste="alto"] .menu-user { background: #fff; border: 2px solid #000; }
 .est b { text-transform: none; } .est b::first-letter { text-transform: uppercase; }
+
+/* marca maior, texto maior por padrão, olho na senha, entrada social */
+.marca { font-size: 26px; gap: 10px; } .marca svg { width: 34px; height: 34px; }
+@media (max-width: 640px) { .marca { font-size: 23px; } .marca svg { width: 30px; height: 30px; } }
+.icbtn svg { display: block; }
+html[data-texto="grande"] body { zoom: 1.18; } html[data-texto="enorme"] body { zoom: 1.4; }
+@media (min-width: 900px) { html[data-texto="normal"] body { zoom: 1.2; } html[data-texto="grande"] body { zoom: 1.4; } html[data-texto="enorme"] body { zoom: 1.6; } }
+.senha-wrap { position: relative; display: block; }
+.senha-wrap input { padding-right: 56px; }
+.olho-senha { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 46px; height: 46px; border: 0; background: none; border-radius: 12px; color: var(--suave); display: grid; place-items: center; padding: 0; }
+.olho-senha:hover { color: var(--tinta); background: #F0EFEB; }
+.sociais { display: grid; gap: 12px; }
+.btn-social { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 54px; border-radius: 14px; background: #fff; border: 2px solid #CFCEC8; font-weight: 600; font-size: 16px; padding: 0 16px; }
+.btn-social:hover { border-color: var(--tinta); }
+.ou { display: flex; align-items: center; gap: 14px; color: var(--suave); font-size: 14px; margin: 4px 0; }
+.ou::before, .ou::after { content: ""; flex: 1; height: 1px; background: var(--linha); }
+.vit-marca { display: flex; align-items: center; gap: 14px; font-size: 40px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 28px; }
+.vit-marca svg { width: 52px; height: 52px; }
+.vit-marca b { font-weight: 600; background: linear-gradient(90deg, #7FA6FF, #C890FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
+@media (max-width: 640px) { .vit-marca { font-size: 32px; margin-bottom: 14px; } .vit-marca svg { width: 40px; height: 40px; } }
+body.deslogado .topo .marca { display: none; }
+body.deslogado .topo { justify-content: flex-end; }
+.hero-inv { display: block; color: #E4E3DF; font-size: 15px; margin: -8px 0 14px; } .hero-inv b { color: #fff; font-weight: 600; }
+.tag { display: inline-block; padding: 0 8px; border-radius: 999px; background: rgba(138,61,255,.12); color: #6B21D6; font-size: 13px; font-weight: 600; }
+.alerta-fluxo { background: #FEF0C7; color: #6B3A00; border: 2px solid #B54708; border-radius: 16px; padding: 14px 16px; font-size: 16px; }
+.linha-saldo { width: 100%; height: auto; margin-top: 10px; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 12px; }
+.cal-s { text-align: center; font-size: 13px; font-weight: 600; color: var(--suave); padding-bottom: 4px; }
+.dia-cal { min-height: 52px; border: 0; border-radius: 12px; background: #F7F6F3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px 0; }
+.dia-cal b { font-weight: 600; font-size: 16px; }
+.dia-cal.hoje { box-shadow: inset 0 0 0 2px var(--azul); }
+.dia-cal.sel { background: var(--tinta); color: #fff; }
+.dia-cal.neg b { color: var(--vermelho); } .dia-cal.neg.sel b { color: #FFB8AF; }
+.pontos { display: flex; gap: 4px; min-height: 8px; }
+.p-ent, .p-sai { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.p-ent { background: #10B981; } .p-sai { background: #EF4444; }
+html[data-contraste="alto"] .dia-cal { border: 2px solid #000; background: #fff; } html[data-contraste="alto"] .dia-cal.sel { background: #000; }
+html[data-contraste="alto"] .btn-social { border-color: #000; }
+@media (min-width: 640px) { .estatisticas { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1280px) { .estatisticas { grid-template-columns: repeat(4, 1fr); } }
+.est b { overflow-wrap: anywhere; }
