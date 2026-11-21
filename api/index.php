@@ -65,7 +65,7 @@ try {
                     db()->prepare('INSERT INTO consentimentos (id, usuario_id, tipo, versao, quando) VALUES (?,?,?,?,?)')->execute([novo_id(), $uid, $tipo, VERSAO_TERMOS, agora()]);
                 }
                 $t = criar_token($uid, 'verificar', 86400);
-                enviar_email($email, 'Confirme seu e-mail no Lepvi Finanças', email_html('Confirme seu e-mail', '<p>Olá, ' . htmlspecialchars($nome) . '! Falta só confirmar que este e-mail é seu. O link vale por 24 horas.</p>', 'Confirmar meu e-mail', $link('verificar=' . $t)));
+                enviar_email($email, 'Confirme seu e-mail para ativar sua conta no Lepvi Finanças', email_html('Confirme seu e-mail', '<p style="margin:0 0 12px">Olá, ' . htmlspecialchars(explode(' ', $nome)[0]) . '!</p><p style="margin:0 0 12px">Sua conta no Lepvi Finanças está quase pronta. Falta só um passo: confirmar que este e-mail é seu.</p><p style="margin:0">O link abaixo vale por <b>24 horas</b>. Se você não criou esta conta, ignore este e-mail: nada será ativado.</p>', 'Confirmar meu e-mail', $link('verificar=' . $t), 'Falta só um passo para ativar sua conta.'));
             }
             resp(['ok' => true, 'mensagem' => 'Enviamos um e-mail para você confirmar o cadastro. Abra o link do e-mail e depois entre.']);
         }
@@ -107,7 +107,7 @@ try {
                 $s->execute([$email]);
                 if ($u = $s->fetch()) {
                     $t = criar_token($u['id'], 'redefinir', 3600);
-                    enviar_email($email, 'Redefinir sua senha do Lepvi Finanças', email_html('Redefinir senha', '<p>Recebemos um pedido para criar uma nova senha. O link vale por 1 hora. Se não foi você, ignore este e-mail: nada muda.</p>', 'Criar nova senha', $link('redefinir=' . $t)));
+                    enviar_email($email, 'Crie uma nova senha para o Lepvi Finanças', email_html('Redefinir senha', '<p style="margin:0 0 12px">Recebemos um pedido para criar uma nova senha para a sua conta.</p><p style="margin:0">O link vale por <b>1 hora</b>. Se não foi você, ignore este e-mail: sua senha continua a mesma.</p>', 'Criar nova senha', $link('redefinir=' . $t), 'Link para criar uma nova senha (vale por 1 hora).'));
                 }
             }
             resp(['ok' => true, 'mensagem' => 'Se esse e-mail tiver conta, enviamos um link para criar uma nova senha.']);

@@ -301,18 +301,48 @@
     const o = {}; lancs.filter((l) => l.tipo === 'receita' && !l.ignorar && F.mesDe(l.data) === mes).forEach((l) => { o[l.categoria] = F.arred((o[l.categoria] || 0) + l.valor); }); return o;
   }
 
+  const svg = (d) => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const LI = {
+    bell: '<path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    texto: '<path d="M3 19l5-14 5 14M5 14h6M15 19l3.5-9 3.5 9M16.5 16h4"/>',
+    chave: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/>',
+    baixar: '<path d="M12 4v11m-4-4l4 4 4-4M5 20h14"/>',
+    subir: '<path d="M12 16V5m-4 4l4-4 4 4M5 20h14"/>',
+    arquivo: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
+    escudo: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
+    lixo: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+    sair: '<path d="M10 4H5v16h5M15 8l5 4-5 4M20 12H9"/>',
+    brilho: '<path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>',
+    mais: '<path d="M12 5v14M5 12h14"/>',
+    copia: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  };
+  const linha = ({ tag = 'button', icone, cor = '', titulo, desc = '', attrs = '', perigo = false, fim = '›', dentro = '' }) =>
+    `<${tag} class="linha${perigo ? ' perigo' : ''}" ${tag === 'button' ? 'type="button"' : ''} ${attrs}><span class="l-ic"${cor ? ` style="background:${cor}22;color:${cor}"` : ''}>${icone.startsWith('<') && icone.startsWith('<span') ? icone : svg(icone)}</span><span class="l-t"><b>${titulo}</b>${desc ? `<small>${desc}</small>` : ''}</span><span class="l-fim"${fim === '›' ? ' aria-hidden="true"' : ''}>${fim}</span>${dentro}</${tag}>`;
+
   function telaMais() {
-    const d = D();
+    const d = D(); const nome = USER.info.nome || ''; const ini = nome.split(' ').filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '?';
+    const grupo = (t, corpo) => `<section><h2 class="grupo">${t}</h2><div class="card linhas">${corpo}</div></section>`;
     return `<div class="tit"><h1>Mais opções</h1></div>
-    <section class="card"><h2 class="secao">Minha conta</h2><p class="mut" style="margin:4px 0 14px">${esc(USER.info.nome)} · ${esc(USER.info.email)}</p>
-      <label class="troca"><span>Receber avisos de vencimento por e-mail</span><input id="avisos-sw" type="checkbox" role="switch" ${USER.info.avisos ? 'checked' : ''}></label>
-      <div class="botoes" style="margin-top:16px"><button class="btn sec" type="button" data-acao="senha">Alterar senha</button><a class="btn sec" href="api/?a=exportar" download style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">Baixar meus dados</a></div>
-      <div class="botoes" style="margin-top:12px"><button class="btn" type="button" data-acao="sair">Sair</button><button class="btn perigo" type="button" data-acao="excluir-conta">Excluir minha conta</button></div>
-      <p class="mut" style="margin-top:16px"><a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> · <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a></p></section>
-    <section class="card"><div class="sec-h"><h2 class="secao">Contas e carteiras</h2><button class="link" type="button" data-acao="nova-conta">+ Adicionar</button></div><ul class="lista">${d.contas.map((c) => `<li><button class="item" type="button" data-acao="editar-conta" data-id="${c.id}"><span class="ic" style="background:${c.cor}22"><i style="width:14px;height:14px;border-radius:50%;background:${c.cor}"></i></span><span class="txt"><strong>${esc(c.nome)}</strong><span>${c.fora ? 'Fora do saldo geral' : 'Soma no saldo geral'}</span></span><span class="val num">${m(F.saldoConta(d.lancs, c))}</span></button></li>`).join('')}</ul></section>
-    <section class="card"><h2 class="secao">Importar extrato</h2><p class="mut" style="margin:4px 0 12px">Baixe o extrato ou a fatura no app do banco em OFX ou CSV (data;descrição;valor) e importe. Você escolhe a conta antes de confirmar.</p><label class="btn sec" style="display:inline-block;cursor:pointer">Escolher arquivo<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden></label></section>
-    <section class="card"><h2 class="secao">Seus dados</h2><p class="mut" style="margin:4px 0 12px">Seus dados ficam guardados com segurança na sua conta. Se quiser, baixe também uma cópia.</p><div class="botoes" style="flex-wrap:wrap"><button class="btn sec" type="button" data-acao="backup">Baixar cópia</button><label class="btn sec" style="cursor:pointer;text-align:center">Restaurar cópia<input id="rest" type="file" accept=".json" hidden></label></div></section>
-    <section class="card"><h2 class="secao">Outros</h2><div class="botoes" style="flex-wrap:wrap;margin-top:10px"><button class="btn sec" type="button" data-acao="exemplo">Carregar dados de exemplo</button><button class="btn perigo" type="button" data-acao="apagar">Apagar dados ${S.perfil === 'pessoal' ? 'pessoais' : 'da empresa'}</button></div></section>`;
+    <section class="conta-card"><div class="avatar" aria-hidden="true">${esc(ini)}</div><div class="conta-info"><h2>${esc(nome)}</h2><p>${esc(USER.info.email)}</p><span class="selo ok">E-mail confirmado</span></div></section>
+    ${grupo('Preferências',
+      linha({ tag: 'label', icone: LI.bell, titulo: 'Avisos de vencimento por e-mail', desc: 'Vence em breve, vence hoje e já venceu', fim: '', dentro: `<input id="avisos-sw" type="checkbox" role="switch" ${USER.info.avisos ? 'checked' : ''}>` })
+      + linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' }))}
+    <section><div class="sec-h"><h2 class="grupo">Contas e carteiras</h2><button class="link" type="button" data-acao="nova-conta">+ Adicionar</button></div><div class="card linhas">${d.contas.map((c) => linha({ icone: `<span class="bolinha" style="background:${c.cor}"></span>`, cor: c.cor, titulo: esc(c.nome), desc: c.fora ? 'Fora do saldo geral' : 'Soma no saldo geral', fim: `<span class="num">${m(F.saldoConta(d.lancs, c))}</span>`, attrs: `data-acao="editar-conta" data-id="${c.id}"` })).join('')}</div></section>
+    ${grupo('Seus dados',
+      linha({ tag: 'label', icone: LI.subir, titulo: 'Importar extrato ou fatura', desc: 'Arquivo OFX ou CSV do seu banco', dentro: '<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden>' })
+      + linha({ tag: 'a', icone: LI.baixar, titulo: 'Baixar meus dados', desc: 'Arquivo completo da sua conta (LGPD)', attrs: 'href="api/?a=exportar" download' })
+      + linha({ icone: LI.copia, titulo: 'Cópia de segurança', desc: 'Baixar um arquivo com seus lançamentos', attrs: 'data-acao="backup"' })
+      + linha({ tag: 'label', icone: LI.arquivo, titulo: 'Restaurar uma cópia', desc: 'Voltar os dados de um arquivo', dentro: '<input id="rest" type="file" accept=".json" hidden>' })
+      + linha({ icone: LI.brilho, titulo: 'Carregar dados de exemplo', desc: 'Para conhecer o app preenchido', attrs: 'data-acao="exemplo"' }))}
+    ${grupo('Segurança e privacidade',
+      linha({ icone: LI.chave, titulo: 'Alterar senha', attrs: 'data-acao="senha"' })
+      + linha({ tag: 'a', icone: LI.escudo, titulo: 'Política de Privacidade', attrs: 'href="privacidade.html" target="_blank" rel="noopener"' })
+      + linha({ tag: 'a', icone: LI.arquivo, titulo: 'Termos de Uso', attrs: 'href="termos.html" target="_blank" rel="noopener"' }))}
+    ${grupo('Zona de risco',
+      linha({ icone: LI.lixo, titulo: `Apagar dados ${S.perfil === 'pessoal' ? 'pessoais' : 'da empresa'}`, desc: 'Remove os lançamentos deste perfil', perigo: true, attrs: 'data-acao="apagar"' })
+      + linha({ icone: LI.lixo, titulo: 'Excluir minha conta', desc: 'Apaga a conta e todos os dados, para sempre', perigo: true, attrs: 'data-acao="excluir-conta"' }))}
+    <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair da conta</button>
+    <p class="mut centro">Lepvi Finanças · um produto Lepvi Group</p>`;
   }
 
   const VISTAS = { inicio: telaInicio, lancs: telaLancs, cartoes: telaCartoes, planejar: telaPlanejar, mais: telaMais };

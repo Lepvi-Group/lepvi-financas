@@ -205,13 +205,33 @@ function decifrar(string $b64): ?string
 }
 
 /* ---------- e-mail ---------- */
-function email_html(string $titulo, string $corpo, string $botaoTexto = '', string $botaoLink = ''): string
+function email_html(string $titulo, string $corpo, string $botaoTexto = '', string $botaoLink = '', string $pre = ''): string
 {
-    $b = $botaoLink !== '' ? '<p style="margin:24px 0"><a href="' . htmlspecialchars($botaoLink) . '" style="background:#0D0D0F;color:#fff;text-decoration:none;padding:14px 26px;border-radius:12px;font-weight:600;display:inline-block">' . htmlspecialchars($botaoTexto) . '</a></p>' : '';
-    return '<!doctype html><html lang="pt-BR"><body style="margin:0;background:#F2F1EE;font-family:Arial,Helvetica,sans-serif;color:#0D0D0F"><div style="max-width:560px;margin:0 auto;padding:24px"><div style="background:#fff;border-radius:18px;padding:28px">'
-        . '<p style="margin:0 0 16px;font-size:18px;font-weight:700">lepvi <span style="color:#2D4BFF">finanças</span></p><h1 style="font-size:22px;margin:0 0 12px">' . htmlspecialchars($titulo) . '</h1>'
-        . '<div style="font-size:16px;line-height:1.55">' . $corpo . '</div>' . $b
-        . '</div><p style="font-size:13px;color:#4A4944;text-align:center;margin-top:16px">Lepvi Group · lepvi.com.br<br>Você recebe este e-mail porque tem uma conta no Lepvi Finanças.</p></div></body></html>';
+    $site = rtrim(cfg()['site_url'], '/');
+    $fonte = "font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+    $botao = '';
+    if ($botaoLink !== '') {
+        $l = htmlspecialchars($botaoLink, ENT_QUOTES);
+        $botao = '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 8px"><tr><td align="center" bgcolor="#0D0D0F" style="border-radius:12px">'
+            . '<a href="' . $l . '" style="' . $fonte . ';display:inline-block;padding:16px 34px;font-size:16px;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:12px">' . htmlspecialchars($botaoTexto) . '</a></td></tr></table>'
+            . '<p style="margin:14px 0 0;font-size:13px;line-height:1.5;color:#5A5954">Se o botão não funcionar, copie e cole este endereço no navegador:<br><a href="' . $l . '" style="color:#2D4BFF;word-break:break-all">' . $l . '</a></p>';
+    }
+    $faixa = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="25%" height="5" bgcolor="#3A7BFF" style="font-size:0;line-height:0">&nbsp;</td><td width="25%" bgcolor="#2D4BFF" style="font-size:0;line-height:0">&nbsp;</td><td width="25%" bgcolor="#8A3DFF" style="font-size:0;line-height:0">&nbsp;</td><td width="25%" bgcolor="#C04DFF" style="font-size:0;line-height:0">&nbsp;</td></tr></table>';
+    return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>' . htmlspecialchars($titulo) . '</title></head>'
+        . '<body style="margin:0;padding:0;background:#F2F1EE;' . $fonte . ';color:#0D0D0F">'
+        . '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">' . htmlspecialchars($pre !== '' ? $pre : $titulo) . '&#847; &#847; &#847;</div>'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#F2F1EE"><tr><td align="center" style="padding:28px 14px">'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:20px;overflow:hidden">'
+        . '<tr><td bgcolor="#0D0D0F" style="padding:28px 36px"><span style="' . $fonte . ';font-size:24px;font-weight:700;letter-spacing:-.3px;color:#FFFFFF">lepvi <span style="color:#7FA6FF">finanças</span></span><br><span style="' . $fonte . ';font-size:13px;color:#B9B8B2">Suas contas, cartões e boletos em um só lugar</span></td></tr>'
+        . '<tr><td>' . $faixa . '</td></tr>'
+        . '<tr><td style="padding:36px 36px 30px;' . $fonte . '"><h1 style="margin:0 0 16px;font-size:26px;line-height:1.2;font-weight:700;letter-spacing:-.4px;color:#0D0D0F">' . htmlspecialchars($titulo) . '</h1>'
+        . '<div style="font-size:16px;line-height:1.65;color:#2E2D2A">' . $corpo . '</div>' . $botao . '</td></tr>'
+        . '<tr><td style="padding:0 36px"><table role="presentation" width="100%"><tr><td style="border-top:1px solid #E6E5E0;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr>'
+        . '<tr><td style="padding:22px 36px 30px;' . $fonte . ';font-size:13px;line-height:1.6;color:#5A5954">'
+        . '<b style="color:#0D0D0F">Lepvi Group</b> · <a href="https://lepvi.com.br" style="color:#2D4BFF;text-decoration:none">lepvi.com.br</a><br>'
+        . 'Dúvidas? Responda este e-mail ou escreva para <a href="mailto:lepvi@lepvi.com.br" style="color:#2D4BFF;text-decoration:none">lepvi@lepvi.com.br</a>.<br>'
+        . 'Você recebeu esta mensagem por causa de uma conta no Lepvi Finanças. <a href="' . htmlspecialchars($site, ENT_QUOTES) . '/privacidade.html" style="color:#2D4BFF">Política de Privacidade</a></td></tr>'
+        . '</table></td></tr></table></body></html>';
 }
 function enviar_email(string $para, string $assunto, string $html): bool
 {
