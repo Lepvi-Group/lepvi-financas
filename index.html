@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lepvi Finanças | Suas contas, cartões e boletos em um só lugar</title>
+<meta name="description" content="Controle financeiro para pessoa física e jurídica: contas, vários cartões, boletos e vencimentos em um só app. Por Lepvi Group.">
+<meta name="theme-color" content="#0E2238">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icone.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topo">
+  <a class="marca" href="./" aria-label="Lepvi Finanças">
+    <img src="icone.svg" alt="" width="36" height="36">
+    <span>Lepvi <b>Finanças</b></span>
+  </a>
+  <div class="perfil" role="group" aria-label="Perfil">
+    <button type="button" data-perfil="pessoal">Pessoal</button>
+    <button type="button" data-perfil="empresa">Empresa</button>
+  </div>
+</header>
+
+<nav class="menu" id="menu" aria-label="Principal"></nav>
+<main id="tela" tabindex="-1"></main>
+
+<button class="fab" id="novo" type="button" aria-label="Novo lançamento">+</button>
+<dialog id="dlg"></dialog>
+<div class="aviso" id="aviso" role="status" aria-live="polite"></div>
+
+<footer class="rodape">Desenvolvido por <a href="https://lepvi.com.br" target="_blank" rel="noopener">Lepvi Group</a></footer>
+
+<script src="lib.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

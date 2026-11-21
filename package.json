@@ -1,0 +1,8 @@
+{
+  "name": "lepvi-financas",
+  "private": true,
+  "scripts": {
+    "test": "node --test testes/lib.test.js",
+    "start": "python3 -m http.server 4180"
+  }
+}
