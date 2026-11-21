@@ -29,7 +29,7 @@ try {
         header('Content-Disposition: attachment; filename="meus-dados-lepvi-financas.json"');
         echo json_encode([
             'gerado_em' => date('c'),
-            'conta' => ['email' => $u['email'], 'nome' => $u['nome'], 'criada_em' => date('c', (int) $u['criado_em']), 'avisos_por_email' => (bool) $u['avisos'], 'email_confirmado' => (bool) $u['email_verificado']],
+            'conta' => ['email' => $u['email'], 'nome' => $u['nome'], 'tem_foto' => !empty($u['foto']), 'criada_em' => date('c', (int) $u['criado_em']), 'avisos_por_email' => (bool) $u['avisos'], 'email_confirmado' => (bool) $u['email_verificado']],
             'consentimentos' => array_map(fn($x) => ['tipo' => $x['tipo'], 'versao' => $x['versao'], 'em' => date('c', (int) $x['quando'])], $c->fetchAll()),
             'dados_financeiros' => $d ? json_decode((string) decifrar($d['conteudo']), true) : null,
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -154,8 +154,10 @@ try {
             $nome = isset($b['nome']) ? trim((string) $b['nome']) : $u['nome'];
             if ($nome === '' || mb_strlen($nome) > 120) erro('Informe seu nome.', 422);
             $avisos = isset($b['avisos']) ? (int) (bool) $b['avisos'] : (int) $u['avisos'];
-            db()->prepare('UPDATE usuarios SET nome = ?, avisos = ? WHERE id = ?')->execute([$nome, $avisos, $u['id']]);
-            $u['nome'] = $nome; $u['avisos'] = $avisos;
+            $foto = $u['foto'] ?? null;
+            if (array_key_exists('foto', $b)) $foto = ($b['foto'] === null || $b['foto'] === '') ? null : validar_foto((string) $b['foto']);
+            db()->prepare('UPDATE usuarios SET nome = ?, avisos = ?, foto = ? WHERE id = ?')->execute([$nome, $avisos, $foto, $u['id']]);
+            $u['nome'] = $nome; $u['avisos'] = $avisos; $u['foto'] = $foto;
             resp(['usuario' => usuario_publico($u)]);
         }
         case 'mudar_senha': {

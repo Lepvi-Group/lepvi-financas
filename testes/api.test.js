@@ -86,6 +86,20 @@ test('desligar os avisos para de enviar', async () => {
   assert.match(execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), '--hoje=2026-11-30']).toString(), /enviados: 0/);
   await chamar('preferencias', { avisos: true });
 });
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+test('perfil: troca nome e foto, recusa arquivo que não é imagem e remove a foto', async () => {
+  const ok = await chamar('preferencias', { nome: 'Ana Souza Lima', foto: PNG });
+  assert.strictEqual(ok.status, 200);
+  assert.strictEqual(ok.json.usuario.nome, 'Ana Souza Lima');
+  assert.strictEqual(ok.json.usuario.foto, PNG);
+  assert.strictEqual((await chamar('eu', null, { metodo: 'GET' })).json.usuario.foto, PNG);
+  assert.strictEqual((await chamar('preferencias', { foto: 'data:text/html;base64,PGgxPm9pPC9oMT4=' })).status, 422);
+  assert.strictEqual((await chamar('preferencias', { foto: 'data:image/png;base64,AAAA' })).status, 422);
+  assert.strictEqual((await chamar('preferencias', { nome: '   ' })).status, 422);
+  const sem = await chamar('preferencias', { foto: null });
+  assert.strictEqual(sem.json.usuario.foto, null);
+  assert.strictEqual(sem.json.usuario.nome, 'Ana Souza Lima', 'trocar só a foto não muda o nome');
+});
 test('LGPD: exportar entrega os dados e os consentimentos', async () => {
   const r = await fetch(BASE + '?a=exportar', { headers: { Cookie: cookie } });
   const j = await r.json();

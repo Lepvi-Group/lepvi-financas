@@ -127,7 +127,10 @@
       else if (V.auth === 'redefinir') { await api('redefinir', { token: V.token, senha: v.senha }); V.auth = 'entrar'; V.token = ''; V.msg = 'Senha alterada. Entre com a nova senha.'; render(); }
     } catch (e) { er.textContent = e.message; er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; }
   }
-  document.addEventListener('submit', (ev) => { if (ev.target.id === 'auth') { ev.preventDefault(); enviarAuth(ev.target); } });
+  document.addEventListener('submit', (ev) => {
+    if (ev.target.id === 'auth') { ev.preventDefault(); enviarAuth(ev.target); }
+    if (ev.target.id === 'perfil-f') { ev.preventDefault(); const nome = ev.target.nome.value.trim(); api('preferencias', { nome }).then((r) => { USER.info = r.usuario; render(); aviso('Perfil salvo.'); }).catch((e) => aviso(e.message)); }
+  });
   async function iniciar() {
     $('#tela').innerHTML = '<p class="mut" role="status">Carregando…</p>';
     const q = new URLSearchParams(location.search); const tv = q.get('verificar'); const tr = q.get('redefinir');
@@ -314,45 +317,88 @@
     sair: '<path d="M10 4H5v16h5M15 8l5 4-5 4M20 12H9"/>',
     brilho: '<path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>',
     mais: '<path d="M12 5v14M5 12h14"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+    camera: '<path d="M4 8h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>',
     copia: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
   };
   const linha = ({ tag = 'button', icone, cor = '', titulo, desc = '', attrs = '', perigo = false, fim = '›', dentro = '' }) =>
     `<${tag} class="linha${perigo ? ' perigo' : ''}" ${tag === 'button' ? 'type="button"' : ''} ${attrs}><span class="l-ic"${cor ? ` style="background:${cor}22;color:${cor}"` : ''}>${icone.startsWith('<') && icone.startsWith('<span') ? icone : svg(icone)}</span><span class="l-t"><b>${titulo}</b>${desc ? `<small>${desc}</small>` : ''}</span><span class="l-fim"${fim === '›' ? ' aria-hidden="true"' : ''}>${fim}</span>${dentro}</${tag}>`;
 
+  const iniciais = (n) => (n || '').split(' ').filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '?';
+  const avatarHtml = (cls = '') => (USER.info && USER.info.foto ? `<img class="avatar-img ${cls}" src="${esc(USER.info.foto)}" alt="">` : `<span class="avatar-ini ${cls}" aria-hidden="true">${esc(iniciais(USER.info && USER.info.nome))}</span>`);
+  const grupoHtml = (t, corpo) => `<section><h2 class="grupo">${t}</h2><div class="card linhas">${corpo}</div></section>`;
+
   function telaMais() {
-    const d = D(); const nome = USER.info.nome || ''; const ini = nome.split(' ').filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '?';
-    const grupo = (t, corpo) => `<section><h2 class="grupo">${t}</h2><div class="card linhas">${corpo}</div></section>`;
+    const d = D(); const u = USER.info; const grupo = grupoHtml;
     return `<div class="tit"><h1>Mais opções</h1></div>
-    <section class="conta-card"><div class="avatar" aria-hidden="true">${esc(ini)}</div><div class="conta-info"><h2>${esc(nome)}</h2><p>${esc(USER.info.email)}</p><span class="selo ok">E-mail confirmado</span></div></section>
-    ${grupo('Preferências',
-      linha({ tag: 'label', icone: LI.bell, titulo: 'Avisos de vencimento por e-mail', desc: 'Vence em breve, vence hoje e já venceu', fim: '', dentro: `<input id="avisos-sw" type="checkbox" role="switch" ${USER.info.avisos ? 'checked' : ''}>` })
-      + linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' }))}
+    <section><div class="card linhas">${linha({ icone: `<span class="mini-av">${avatarHtml('peq')}</span>`, titulo: esc(u.nome), desc: 'Meu perfil, foto e dados da conta', attrs: 'data-acao="perfil"' })}</div></section>
     <section><div class="sec-h"><h2 class="grupo">Contas e carteiras</h2><button class="link" type="button" data-acao="nova-conta">+ Adicionar</button></div><div class="card linhas">${d.contas.map((c) => linha({ icone: `<span class="bolinha" style="background:${c.cor}"></span>`, cor: c.cor, titulo: esc(c.nome), desc: c.fora ? 'Fora do saldo geral' : 'Soma no saldo geral', fim: `<span class="num">${m(F.saldoConta(d.lancs, c))}</span>`, attrs: `data-acao="editar-conta" data-id="${c.id}"` })).join('')}</div></section>
     ${grupo('Seus dados',
       linha({ tag: 'label', icone: LI.subir, titulo: 'Importar extrato ou fatura', desc: 'Arquivo OFX ou CSV do seu banco', dentro: '<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden>' })
-      + linha({ tag: 'a', icone: LI.baixar, titulo: 'Baixar meus dados', desc: 'Arquivo completo da sua conta (LGPD)', attrs: 'href="api/?a=exportar" download' })
       + linha({ icone: LI.copia, titulo: 'Cópia de segurança', desc: 'Baixar um arquivo com seus lançamentos', attrs: 'data-acao="backup"' })
       + linha({ tag: 'label', icone: LI.arquivo, titulo: 'Restaurar uma cópia', desc: 'Voltar os dados de um arquivo', dentro: '<input id="rest" type="file" accept=".json" hidden>' })
       + linha({ icone: LI.brilho, titulo: 'Carregar dados de exemplo', desc: 'Para conhecer o app preenchido', attrs: 'data-acao="exemplo"' }))}
-    ${grupo('Segurança e privacidade',
-      linha({ icone: LI.chave, titulo: 'Alterar senha', attrs: 'data-acao="senha"' })
+    ${grupo('Sobre',
+      linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' })
       + linha({ tag: 'a', icone: LI.escudo, titulo: 'Política de Privacidade', attrs: 'href="privacidade.html" target="_blank" rel="noopener"' })
       + linha({ tag: 'a', icone: LI.arquivo, titulo: 'Termos de Uso', attrs: 'href="termos.html" target="_blank" rel="noopener"' }))}
-    ${grupo('Zona de risco',
-      linha({ icone: LI.lixo, titulo: `Apagar dados ${S.perfil === 'pessoal' ? 'pessoais' : 'da empresa'}`, desc: 'Remove os lançamentos deste perfil', perigo: true, attrs: 'data-acao="apagar"' })
-      + linha({ icone: LI.lixo, titulo: 'Excluir minha conta', desc: 'Apaga a conta e todos os dados, para sempre', perigo: true, attrs: 'data-acao="excluir-conta"' }))}
+    ${grupo('Zona de risco', linha({ icone: LI.lixo, titulo: `Apagar dados ${S.perfil === 'pessoal' ? 'pessoais' : 'da empresa'}`, desc: 'Remove os lançamentos deste perfil', perigo: true, attrs: 'data-acao="apagar"' }))}
     <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair da conta</button>
     <p class="mut centro">Lepvi Finanças · um produto Lepvi Group</p>`;
   }
 
-  const VISTAS = { inicio: telaInicio, lancs: telaLancs, cartoes: telaCartoes, planejar: telaPlanejar, mais: telaMais };
+  function telaPerfil() {
+    const u = USER.info; const grupo = grupoHtml;
+    const desde = u.criado_em ? new Date(u.criado_em * 1000).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : '';
+    const soma = (k) => ['pessoal', 'empresa'].reduce((t, x) => t + S.dados[x][k].length, 0);
+    const est = (n, t) => `<div class="card est"><b class="num">${n}</b><small>${t}</small></div>`;
+    return `<div class="tit"><h1>Meu perfil</h1></div>
+    <section class="perfil-topo"><div class="foto-grande">${avatarHtml('grande')}<button class="foto-edit" type="button" data-acao="trocar-foto" aria-label="Alterar foto do perfil">${svg(LI.camera)}</button><input id="foto-arq" type="file" accept="image/*" hidden></div>
+      <div class="perfil-nome"><h2>${esc(u.nome)}</h2><p>${esc(u.email)}</p><span class="selo ok">E-mail confirmado</span>${u.foto ? '<br><button class="link" type="button" data-acao="remover-foto">Remover foto</button>' : ''}</div></section>
+    <div class="estatisticas">${est(soma('lancs'), 'Lançamentos')}${est(soma('cartoes'), 'Cartões')}${est(soma('contas'), 'Contas')}${est(desde ? esc(desde) : '—', 'Membro desde')}</div>
+    <section class="card"><h2 class="secao">Dados pessoais</h2><form id="perfil-f" class="auth-f" style="margin-top:16px">${campo('Nome completo', `<input name="nome" required maxlength="120" autocomplete="name" value="${esc(u.nome)}">`)}
+      ${campo('E-mail', `<input value="${esc(u.email)}" disabled aria-describedby="email-dica"><small id="email-dica" class="mut">Para trocar o e-mail, escreva para lepvi@lepvi.com.br.</small>`)}<button class="btn" type="submit">Salvar alterações</button></form></section>
+    ${grupo('Preferências',
+      linha({ tag: 'label', icone: LI.bell, titulo: 'Avisos de vencimento por e-mail', desc: 'Vence em breve, vence hoje e já venceu', fim: '', dentro: `<input id="avisos-sw" type="checkbox" role="switch" ${u.avisos ? 'checked' : ''}>` })
+      + linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' }))}
+    ${grupo('Segurança e privacidade',
+      linha({ icone: LI.chave, titulo: 'Alterar senha', attrs: 'data-acao="senha"' })
+      + linha({ tag: 'a', icone: LI.baixar, titulo: 'Baixar meus dados', desc: 'Arquivo completo da sua conta (LGPD)', attrs: 'href="api/?a=exportar" download' })
+      + linha({ tag: 'a', icone: LI.escudo, titulo: 'Política de Privacidade', attrs: 'href="privacidade.html" target="_blank" rel="noopener"' }))}
+    ${grupo('Zona de risco', linha({ icone: LI.lixo, titulo: 'Excluir minha conta', desc: 'Apaga a conta e todos os dados, para sempre', perigo: true, attrs: 'data-acao="excluir-conta"' }))}
+    <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair da conta</button>`;
+  }
+
+  /* menu da conta (avatar no topo) */
+  function menuConta() {
+    const u = USER.info;
+    abrir('Minha conta', `<div class="conta-card" style="margin:0">${avatarHtml('grande')}<div class="conta-info"><h2>${esc(u.nome)}</h2><p>${esc(u.email)}</p></div></div>
+      <div class="card linhas">${linha({ icone: LI.user, titulo: 'Meu perfil', desc: 'Foto, nome e dados da conta', attrs: 'data-sheet="perfil"' })}${linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', attrs: 'data-sheet="acess"' })}${linha({ icone: LI.mais, titulo: 'Mais opções', desc: 'Contas, importar, cópia de segurança', attrs: 'data-sheet="mais"' })}</div>
+      <button class="btn bloco" type="button" data-sheet="sair">${svg(LI.sair)}&nbsp; Sair da conta</button>`, null, (f) => {
+      f.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => { const a = b.dataset.sheet; dlg.close(); if (a === 'perfil' || a === 'mais') ir(a); else if (a === 'acess') formAcess(); else sair(); }));
+    });
+  }
+  async function sair() { try { await api('sair', {}); } catch (e) { /* já saiu */ } USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Você saiu. Até logo!'; render(); window.scrollTo(0, 0); }
+  async function processarFoto(arq) {
+    if (!arq || !/^image\//.test(arq.type)) { aviso('Escolha um arquivo de imagem (JPG, PNG ou WebP).'); return; }
+    try {
+      const bmp = await createImageBitmap(arq, { imageOrientation: 'from-image' });
+      const lado = Math.min(bmp.width, bmp.height); const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+      c.getContext('2d').drawImage(bmp, (bmp.width - lado) / 2, (bmp.height - lado) / 2, lado, lado, 0, 0, 256, 256);
+      const r = await api('preferencias', { foto: c.toDataURL('image/jpeg', 0.85) }); USER.info = r.usuario; render(); aviso('Foto atualizada.');
+    } catch (e) { aviso(e.message && !/bitmap|decode|source/i.test(e.message) ? e.message : 'Não consegui usar essa foto. Tente um JPG ou PNG.'); }
+  }
+
+  const VISTAS = { inicio: telaInicio, lancs: telaLancs, cartoes: telaCartoes, planejar: telaPlanejar, mais: telaMais, perfil: telaPerfil };
   function render() {
     document.body.classList.toggle('deslogado', !USER.logado);
     if (!USER.logado) { $('#menu').innerHTML = ''; $('#tela').innerHTML = telaAuth(); return; }
     document.querySelectorAll('[data-perfil]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.perfil === S.perfil)));
     const olho = $('[data-acao=olho]'); olho.setAttribute('aria-pressed', String(!!S.oculto)); olho.setAttribute('aria-label', S.oculto ? 'Mostrar valores' : 'Ocultar valores');
     const nav = (id, t) => `<button type="button" data-tela="${id}" ${V.tela === id ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICONES[id]}</svg>${t}</button>`;
-    $('#menu').innerHTML = nav('inicio', 'Início') + nav('lancs', 'Lançamentos') + '<button class="mais-novo" type="button" data-acao="menu-novo" aria-label="Novo lançamento">+</button>' + nav('cartoes', 'Cartões') + nav('planejar', 'Planejar');
+    const ab = $('[data-acao=conta-menu]'); ab.innerHTML = avatarHtml(); ab.setAttribute('aria-label', 'Minha conta: ' + USER.info.nome);
+    $('#menu').innerHTML = nav('inicio', 'Início') + nav('lancs', 'Lançamentos') + '<button class="mais-novo" type="button" data-acao="menu-novo" aria-label="Novo lançamento">+</button>' + nav('cartoes', 'Cartões') + nav('planejar', 'Planejar')
+      + `<div class="menu-fim"><button type="button" class="mf-mais" data-acao="mais">Mais opções</button><div class="menu-user"><button type="button" class="mu-perfil" data-acao="perfil">${avatarHtml('peq')}<span><b>${esc(USER.info.nome)}</b><small>Meu perfil</small></span></button><button type="button" class="mu-sair" data-acao="sair">Sair</button></div></div>`;
     $('#tela').innerHTML = VISTAS[V.tela]();
   }
   const ir = (t) => { V.tela = t; render(); window.scrollTo(0, 0); };
@@ -595,7 +641,11 @@
     const d = D(); const id = t.dataset.id; const a = t.dataset.acao;
     const acoes = {
       acess: () => formAcess(),
-      sair: async () => { try { await api('sair', {}); } catch (e) { /* já saiu */ } USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Você saiu. Até logo!'; render(); window.scrollTo(0, 0); },
+      sair: () => sair(),
+      'conta-menu': () => menuConta(),
+      perfil: () => ir('perfil'),
+      'trocar-foto': () => $('#foto-arq').click(),
+      'remover-foto': async () => { try { const r = await api('preferencias', { foto: null }); USER.info = r.usuario; render(); aviso('Foto removida.'); } catch (e) { aviso(e.message); } },
       senha: () => formSenha(),
       'excluir-conta': () => formExcluirConta(),
       'auth-entrar': () => { V.auth = 'entrar'; V.msg = ''; render(); },
@@ -643,6 +693,7 @@
   document.addEventListener('input', (ev) => { if (ev.target.id === 'busca') { V.q = ev.target.value; $('#lista-lancs').innerHTML = listaLancs(); } });
   document.addEventListener('change', (ev) => {
     const alvo = ev.target;
+    if (alvo.id === 'foto-arq') { processarFoto(alvo.files && alvo.files[0]); alvo.value = ''; return; }
     if (alvo.id === 'avisos-sw') { api('preferencias', { avisos: alvo.checked }).then((r) => { USER.info = r.usuario; aviso(r.usuario.avisos ? 'Avisos por e-mail ligados.' : 'Avisos por e-mail desligados.'); }).catch((e) => { alvo.checked = !alvo.checked; aviso(e.message); }); return; }
     if (alvo.matches && alvo.matches('[data-mostrar]')) { alvo.closest('form').querySelectorAll('input[name=senha],input[name=nova],input[name=atual]').forEach((i) => { i.type = alvo.checked ? 'text' : 'password'; }); return; }
     const el = ev.target; if (!el.files || !el.files[0]) return;

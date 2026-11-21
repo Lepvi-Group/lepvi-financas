@@ -64,6 +64,7 @@ function db(): PDO
             try { $pdo->exec($sql); } catch (Throwable $e2) { /* já existe */ }
         }
     }
+    try { $pdo->query('SELECT foto FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN foto LONGTEXT NULL'); } catch (Throwable $e2) { /* já existe */ } }
     return $pdo;
 }
 
@@ -167,10 +168,20 @@ function usuario_atual(): ?array
     $s->execute([hash_token($t), agora()]);
     return $s->fetch() ?: null;
 }
+/* Foto de perfil: o app já reduz e recomprime (isso também tira dados de localização da imagem); aqui só conferimos. */
+function validar_foto(string $d): string
+{
+    if (!preg_match('#^data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$#', $d, $m)) erro('Foto inválida. Use uma imagem JPG, PNG ou WebP.', 422);
+    if (strlen($d) > 250000) erro('A foto é grande demais.', 413);
+    $bin = base64_decode($m[2], true);
+    $info = $bin !== false ? @getimagesizefromstring($bin) : false;
+    if (!$info || !in_array($info['mime'], ['image/jpeg', 'image/png', 'image/webp'], true) || $info[0] > 1024 || $info[1] > 1024) erro('Foto inválida.', 422);
+    return $d;
+}
 function exigir_usuario(): array { return usuario_atual() ?? erro('Entre para continuar.', 401); }
 function usuario_publico(array $u): array
 {
-    return ['email' => $u['email'], 'nome' => $u['nome'], 'avisos' => (bool) $u['avisos'], 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao']];
+    return ['email' => $u['email'], 'nome' => $u['nome'], 'foto' => $u['foto'] ?? null, 'avisos' => (bool) $u['avisos'], 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao'], 'criado_em' => (int) $u['criado_em']];
 }
 function criar_token(string $uid, string $tipo, int $segundos): string
 {
