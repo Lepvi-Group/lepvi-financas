@@ -64,6 +64,29 @@ test('lê OFX de banco', () => {
   assert.deepStrictEqual([r[0].tipo, r[0].valor, r[0].data], ['despesa', 45.9, '2026-11-05']);
   assert.strictEqual(r[1].tipo, 'receita');
 });
+test('transferência move saldo entre contas e fica fora do resumo', () => {
+  const l = [{ tipo: 'transf', valor: 200, conta: 'a', destino: 'b', data: '2026-11-03', pago: true }];
+  assert.strictEqual(F.saldoConta(l, { id: 'a', saldoInicial: 500 }), 300);
+  assert.strictEqual(F.saldoConta(l, { id: 'b', saldoInicial: 0 }), 200);
+  assert.strictEqual(F.resumoMes(l, '2026-11').despesas, 0);
+});
+test('pagamento de fatura (ignorar) não duplica a despesa no resumo', () => {
+  const l = [
+    { tipo: 'despesa', valor: 300, data: '2026-11-03', categoria: 'Mercado', conta: 'c:n', pago: true },
+    { tipo: 'despesa', valor: 300, data: '2026-11-20', categoria: 'Cartão', conta: 'a', pago: true, ignorar: true },
+  ];
+  assert.strictEqual(F.resumoMes(l, '2026-11').despesas, 300);
+  assert.strictEqual(F.saldoConta(l, { id: 'a', saldoInicial: 1000 }), 700);
+});
+test('orçamento mostra gasto, restante e percentual por categoria', () => {
+  const l = [{ tipo: 'despesa', valor: 450, data: '2026-11-03', categoria: 'Mercado', conta: 'a', pago: true }];
+  const o = F.orcamentoMes(l, { Mercado: 500, Lazer: 200 }, '2026-11');
+  assert.deepStrictEqual([o[0].categoria, o[0].pct, o[0].restante], ['Mercado', 90, 50]);
+});
+test('evolução devolve os últimos meses em ordem', () => {
+  const e = F.evolucao([], '2026-02', 3);
+  assert.deepStrictEqual(e.map((x) => x.mes), ['2025-12', '2026-01', '2026-02']);
+});
 test('lê CSV com data brasileira e valor com vírgula', () => {
   const r = F.lerCSV('data;descricao;valor\n05/11/2026;Mercado;-1.234,56\n06/11/2026;Venda;300,00');
   assert.strictEqual(r.length, 2);
