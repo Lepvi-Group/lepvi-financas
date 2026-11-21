@@ -1,5 +1,5 @@
 /* Funciona sem internet: guarda os arquivos do app e usa a rede só para atualizar. */
-const V = 'lepvi-financas-v5';
+const V = 'lepvi-financas-v7';
 const ARQ = ['./', 'index.html', 'styles.css', 'app.js', 'lib.js', 'manifest.json', 'icone.svg'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(V).then((c) => c.addAll(ARQ))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
@@ -7,6 +7,7 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
+  const u = new URL(e.request.url);
+  if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.includes('/api/')) return; // dados privados nunca ficam no cache
   e.respondWith(fetch(e.request).then((r) => { const c = r.clone(); caches.open(V).then((k) => k.put(e.request, c)); return r; }).catch(() => caches.match(e.request)));
 });

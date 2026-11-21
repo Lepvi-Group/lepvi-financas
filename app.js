@@ -18,14 +18,105 @@
     s.perfil = s.perfil || 'pessoal';
     return s;
   }
-  function carregar() {
-    try { const s = JSON.parse(localStorage.getItem(CHAVE)); if (s && s.dados) return norm(s); } catch (e) { /* começa vazio */ }
-    return norm({ perfil: 'pessoal', dados: {} });
-  }
-  const S = carregar();
-  const V = { tela: 'inicio', mes: F.mesDe(F.hojeISO()), filtro: 'todos', sub: 'todos', q: '', plano: 'orc', reltipo: 'despesa', cartao: null, fmes: null };
+  const PREFS = 'lepvi-financas-prefs';
+  const S = norm({ perfil: 'pessoal', dados: {} }); // dados financeiros: só em memória e no servidor (nunca no aparelho)
+  const USER = { logado: false, info: null };
+  try { const p = JSON.parse(localStorage.getItem(PREFS)); if (p) { S.texto = p.texto; S.contraste = p.contraste; S.oculto = p.oculto; } } catch (e) { /* sem preferências guardadas */ }
+  const V = { tela: 'inicio', mes: F.mesDe(F.hojeISO()), filtro: 'todos', sub: 'todos', q: '', plano: 'orc', reltipo: 'despesa', cartao: null, fmes: null, auth: 'entrar', token: '', msg: '' };
   const D = () => S.dados[S.perfil];
-  const salvar = () => { try { localStorage.setItem(CHAVE, JSON.stringify(S)); } catch (e) { aviso('Não consegui salvar neste navegador.'); } };
+
+  /* ---------- servidor: conta, sessão e dados ---------- */
+  async function api(acao, corpo) {
+    const post = corpo !== undefined; let r;
+    try { r = await fetch('api/?a=' + acao, { method: post ? 'POST' : 'GET', headers: post ? { 'Content-Type': 'application/json', 'X-Lepvi': 'financas' } : { 'X-Lepvi': 'financas' }, body: post ? JSON.stringify(corpo) : undefined }); }
+    catch (e) { const x = new Error('Sem conexão com o servidor. Confira a internet e tente de novo.'); x.rede = true; throw x; }
+    let j = {}; try { j = await r.json(); } catch (e) { /* sem corpo */ }
+    if (!r.ok) { const x = new Error(j.erro || 'Algo deu errado. Tente de novo.'); x.status = r.status; x.conflito = !!j.conflito; if (r.status === 401 && USER.logado) sessaoExpirou(); throw x; }
+    return j;
+  }
+  let versaoServidor = 0; let enviando = false; let precisaEnviar = false; let tmr = null;
+  function limparMemoria() { const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; }
+  function sessaoExpirou() { USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua sessão terminou. Entre de novo.'; render(); }
+  function salvar() {
+    try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, contraste: S.contraste, oculto: S.oculto })); } catch (e) { /* sem armazenamento */ }
+    if (!USER.logado) return;
+    precisaEnviar = true; clearTimeout(tmr); tmr = setTimeout(enviarDados, 600);
+  }
+  async function enviarDados() {
+    if (enviando || !USER.logado) return;
+    enviando = true;
+    while (precisaEnviar && USER.logado) {
+      precisaEnviar = false;
+      try { versaoServidor = (await api('dados', { versao: versaoServidor, conteudo: { perfil: S.perfil, guia: !!S.guia, dados: S.dados } })).versao; }
+      catch (e) {
+        if (e.conflito) { await carregarDados(); render(); aviso('Seus dados foram alterados em outro aparelho. Mostramos a versão mais recente.'); break; }
+        if (e.rede) { precisaEnviar = true; aviso('Sem conexão. Vamos tentar salvar de novo.'); await new Promise((ok) => setTimeout(ok, 5000)); continue; }
+        aviso(e.message); break;
+      }
+    }
+    enviando = false;
+  }
+  window.addEventListener('online', () => { if (precisaEnviar) enviarDados(); });
+  async function carregarDados() {
+    const r = await api('dados');
+    versaoServidor = r.versao;
+    if (r.conteudo && r.conteudo.dados) { const n = norm({ perfil: r.conteudo.perfil, dados: r.conteudo.dados }); S.perfil = n.perfil; S.dados = n.dados; S.guia = !!r.conteudo.guia; return; }
+    limparMemoria();
+    try { // dados da versão antiga do app, que ficavam só neste aparelho: sobem para a conta
+      const antigo = JSON.parse(localStorage.getItem(CHAVE));
+      if (antigo && antigo.dados) { const n = norm(antigo); S.perfil = n.perfil; S.dados = n.dados; S.guia = !!antigo.guia; localStorage.removeItem(CHAVE); salvar(); aviso('Trouxemos para a sua conta os dados que estavam neste aparelho.'); }
+    } catch (e) { /* nada para importar */ }
+  }
+
+  /* ---------- entrar, criar conta, esqueci a senha ---------- */
+  function telaAuth() {
+    const modo = V.auth; const msg = V.msg ? `<p class="ok-msg" role="status">${esc(V.msg)}</p>` : '';
+    const erro = '<p class="erro" role="alert" id="auth-erro" tabindex="-1" hidden></p>';
+    const mostrar = '<label class="troca"><span>Mostrar a senha</span><input type="checkbox" role="switch" data-mostrar></label>';
+    const link = (a, t) => `<button class="link" type="button" data-acao="${a}">${t}</button>`;
+    let titulo; let corpo;
+    if (modo === 'enviado') { titulo = 'Confira seu e-mail'; corpo = `${msg}<button class="btn" type="button" data-acao="auth-entrar">Voltar para entrar</button>`; }
+    else if (modo === 'cadastro') {
+      titulo = 'Criar sua conta';
+      corpo = `<form id="auth" class="auth-f" novalidate>${campo('Seu nome', '<input name="nome" required maxlength="120" autocomplete="name">')}${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campo('Senha (mínimo 10 caracteres)', '<input name="senha" type="password" required minlength="10" autocomplete="new-password">')}${mostrar}
+        <label class="troca"><span>Li e aceito a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> e os <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a></span><input type="checkbox" role="switch" name="aceite" required></label>${erro}
+        <button class="btn bloco" type="submit">Criar conta</button></form><p class="mut">Já tem conta? ${link('auth-entrar', 'Entrar')}</p>`;
+    } else if (modo === 'esqueci') {
+      titulo = 'Esqueci minha senha';
+      corpo = `<form id="auth" class="auth-f" novalidate><p class="mut">Informe o e-mail da sua conta. Se ele existir, enviamos um link para criar uma nova senha.</p>${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${erro}<button class="btn bloco" type="submit">Enviar link</button></form><p class="mut">${link('auth-entrar', 'Voltar para entrar')}</p>`;
+    } else if (modo === 'redefinir') {
+      titulo = 'Criar nova senha';
+      corpo = `<form id="auth" class="auth-f" novalidate>${campo('Nova senha (mínimo 10 caracteres)', '<input name="senha" type="password" required minlength="10" autocomplete="new-password">')}${mostrar}${erro}<button class="btn bloco" type="submit">Salvar nova senha</button></form>`;
+    } else {
+      titulo = 'Entrar';
+      corpo = `${msg}<form id="auth" class="auth-f" novalidate>${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campo('Senha', '<input name="senha" type="password" required autocomplete="current-password">')}${mostrar}${erro}<button class="btn bloco" type="submit">Entrar</button></form>
+        <p class="mut">${link('auth-esqueci', 'Esqueci minha senha')}</p><p class="mut">Ainda não tem conta? ${link('auth-cadastro', 'Criar conta grátis')}</p>`;
+    }
+    return `<section class="auth"><div class="card auth-c"><h1>${titulo}</h1>${modo === 'entrar' ? '<p class="mut">Suas contas, cartões e boletos em um só lugar, para pessoa física e empresa.</p>' : ''}${corpo}</div>
+      <p class="mut auth-seg">🔒 Seus dados financeiros ficam cifrados no servidor e só você acessa. <a href="privacidade.html" target="_blank" rel="noopener">Como protegemos seus dados</a></p></section>`;
+  }
+  async function enviarAuth(f) {
+    const btn = f.querySelector('button[type=submit]'); const er = $('#auth-erro'); er.hidden = true;
+    if (!f.checkValidity()) { er.textContent = 'Preencha todos os campos corretamente' + (f.aceite && !f.aceite.checked ? ' e aceite a Política de Privacidade e os Termos.' : '.'); er.hidden = false; er.focus(); return; }
+    const v = Object.fromEntries(new FormData(f)); btn.disabled = true;
+    try {
+      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha }); USER.logado = true; USER.info = r.usuario; await carregarDados(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
+      else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: !!v.aceite }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
+      else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
+      else if (V.auth === 'redefinir') { await api('redefinir', { token: V.token, senha: v.senha }); V.auth = 'entrar'; V.token = ''; V.msg = 'Senha alterada. Entre com a nova senha.'; render(); }
+    } catch (e) { er.textContent = e.message; er.hidden = false; er.focus(); btn.disabled = false; }
+  }
+  document.addEventListener('submit', (ev) => { if (ev.target.id === 'auth') { ev.preventDefault(); enviarAuth(ev.target); } });
+  async function iniciar() {
+    $('#tela').innerHTML = '<p class="mut" role="status">Carregando…</p>';
+    const q = new URLSearchParams(location.search); const tv = q.get('verificar'); const tr = q.get('redefinir');
+    if (tv || tr) history.replaceState(null, '', location.pathname);
+    if (tv) { try { await api('verificar', { token: tv }); V.msg = 'E-mail confirmado! Agora é só entrar.'; } catch (e) { V.msg = e.message; } }
+    if (tr) { V.auth = 'redefinir'; V.token = tr; }
+    try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ }
+    render();
+  }
+
   const m = (v) => (S.oculto ? 'R$ •••' : F.brl(v));
   function aviso(t) { const el = $('#aviso'); el.textContent = t; el.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('on'), 6000); }
 
@@ -192,14 +283,21 @@
   function telaMais() {
     const d = D();
     return `<div class="tit"><h1>Mais opções</h1></div>
+    <section class="card"><h2 class="secao">Minha conta</h2><p class="mut" style="margin:4px 0 14px">${esc(USER.info.nome)} · ${esc(USER.info.email)}</p>
+      <label class="troca"><span>Receber avisos de vencimento por e-mail</span><input id="avisos-sw" type="checkbox" role="switch" ${USER.info.avisos ? 'checked' : ''}></label>
+      <div class="botoes" style="margin-top:16px"><button class="btn sec" type="button" data-acao="senha">Alterar senha</button><a class="btn sec" href="api/?a=exportar" download style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">Baixar meus dados</a></div>
+      <div class="botoes" style="margin-top:12px"><button class="btn" type="button" data-acao="sair">Sair</button><button class="btn perigo" type="button" data-acao="excluir-conta">Excluir minha conta</button></div>
+      <p class="mut" style="margin-top:16px"><a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> · <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a></p></section>
     <section class="card"><div class="sec-h"><h2 class="secao">Contas e carteiras</h2><button class="link" type="button" data-acao="nova-conta">+ Adicionar</button></div><ul class="lista">${d.contas.map((c) => `<li><button class="item" type="button" data-acao="editar-conta" data-id="${c.id}"><span class="ic" style="background:${c.cor}22"><i style="width:14px;height:14px;border-radius:50%;background:${c.cor}"></i></span><span class="txt"><strong>${esc(c.nome)}</strong><span>${c.fora ? 'Fora do saldo geral' : 'Soma no saldo geral'}</span></span><span class="val num">${m(F.saldoConta(d.lancs, c))}</span></button></li>`).join('')}</ul></section>
     <section class="card"><h2 class="secao">Importar extrato</h2><p class="mut" style="margin:4px 0 12px">Baixe o extrato ou a fatura no app do banco em OFX ou CSV (data;descrição;valor) e importe. Você escolhe a conta antes de confirmar.</p><label class="btn sec" style="display:inline-block;cursor:pointer">Escolher arquivo<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden></label></section>
-    <section class="card"><h2 class="secao">Seus dados</h2><p class="mut" style="margin:4px 0 12px">Tudo fica salvo só neste aparelho. Faça uma cópia de segurança de vez em quando.</p><div class="botoes" style="flex-wrap:wrap"><button class="btn sec" type="button" data-acao="backup">Baixar cópia</button><label class="btn sec" style="cursor:pointer;text-align:center">Restaurar cópia<input id="rest" type="file" accept=".json" hidden></label></div></section>
+    <section class="card"><h2 class="secao">Seus dados</h2><p class="mut" style="margin:4px 0 12px">Seus dados ficam guardados com segurança na sua conta. Se quiser, baixe também uma cópia.</p><div class="botoes" style="flex-wrap:wrap"><button class="btn sec" type="button" data-acao="backup">Baixar cópia</button><label class="btn sec" style="cursor:pointer;text-align:center">Restaurar cópia<input id="rest" type="file" accept=".json" hidden></label></div></section>
     <section class="card"><h2 class="secao">Outros</h2><div class="botoes" style="flex-wrap:wrap;margin-top:10px"><button class="btn sec" type="button" data-acao="exemplo">Carregar dados de exemplo</button><button class="btn perigo" type="button" data-acao="apagar">Apagar dados ${S.perfil === 'pessoal' ? 'pessoais' : 'da empresa'}</button></div></section>`;
   }
 
   const VISTAS = { inicio: telaInicio, lancs: telaLancs, cartoes: telaCartoes, planejar: telaPlanejar, mais: telaMais };
   function render() {
+    document.body.classList.toggle('deslogado', !USER.logado);
+    if (!USER.logado) { $('#menu').innerHTML = ''; $('#tela').innerHTML = telaAuth(); return; }
     document.querySelectorAll('[data-perfil]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.perfil === S.perfil)));
     const olho = $('[data-acao=olho]'); olho.setAttribute('aria-pressed', String(!!S.oculto)); olho.setAttribute('aria-label', S.oculto ? 'Mostrar valores' : 'Ocultar valores');
     const nav = (id, t) => `<button type="button" data-tela="${id}" ${V.tela === id ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICONES[id]}</svg>${t}</button>`;
@@ -359,6 +457,17 @@
       (fd) => { const v = F.arred(F.numeroBR(fd.get('v'))); if (!(v > 0)) { aviso('Informe um valor.'); return false; } o.guardado = F.arred(o.guardado + v); salvar(); render(); aviso(o.guardado >= o.meta ? 'Objetivo alcançado! 🎉' : 'Valor guardado.'); });
   }
 
+  function formSenha() {
+    abrir('Alterar senha', `${campo('Senha atual', '<input name="atual" type="password" required autocomplete="current-password">')}${campo('Nova senha (mínimo 10 caracteres)', '<input name="nova" type="password" required minlength="10" autocomplete="new-password">')}<div class="botoes"><button class="btn" type="submit">Salvar nova senha</button></div>`, null, (f) => {
+      f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('mudar_senha', { atual: f.atual.value, nova: f.nova.value }); dlg.close(); aviso('Senha alterada. Enviamos um e-mail de confirmação.'); } catch (e) { aviso(e.message); } });
+    });
+  }
+  function formExcluirConta() {
+    abrir('Excluir minha conta', `<p>Isso apaga a sua conta e <b>todos</b> os seus dados financeiros do servidor, de forma definitiva. Não dá para desfazer. Antes, se quiser, baixe uma cópia em "Baixar meus dados".</p>${campo('Digite sua senha para confirmar', '<input name="senha" type="password" required autocomplete="current-password">')}<div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn perigo" type="submit">Excluir para sempre</button></div>`, null, (f) => {
+      f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('excluir', { senha: f.senha.value }); dlg.close(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua conta e todos os seus dados foram apagados.'; render(); } catch (e) { aviso(e.message); } });
+    });
+  }
+
   function importar(texto, nome) {
     const lista = /\.csv$|\.txt$/i.test(nome) ? F.lerCSV(texto) : F.lerOFX(texto);
     if (!lista.length) { aviso('Não encontrei lançamentos nesse arquivo.'); return; }
@@ -435,6 +544,12 @@
     const d = D(); const id = t.dataset.id; const a = t.dataset.acao;
     const acoes = {
       acess: () => formAcess(),
+      sair: async () => { try { await api('sair', {}); } catch (e) { /* já saiu */ } USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Você saiu. Até logo!'; render(); window.scrollTo(0, 0); },
+      senha: () => formSenha(),
+      'excluir-conta': () => formExcluirConta(),
+      'auth-entrar': () => { V.auth = 'entrar'; V.msg = ''; render(); },
+      'auth-esqueci': () => { V.auth = 'esqueci'; V.msg = ''; render(); },
+      'auth-cadastro': () => { V.auth = 'cadastro'; V.msg = ''; render(); },
       olho: () => { S.oculto = !S.oculto; salvar(); render(); },
       mais: () => ir('mais'),
       mes: () => { V.mes = F.somaMes(V.mes, +t.dataset.d); render(); },
@@ -476,6 +591,9 @@
   });
   document.addEventListener('input', (ev) => { if (ev.target.id === 'busca') { V.q = ev.target.value; $('#lista-lancs').innerHTML = listaLancs(); } });
   document.addEventListener('change', (ev) => {
+    const alvo = ev.target;
+    if (alvo.id === 'avisos-sw') { api('preferencias', { avisos: alvo.checked }).then((r) => { USER.info = r.usuario; aviso(r.usuario.avisos ? 'Avisos por e-mail ligados.' : 'Avisos por e-mail desligados.'); }).catch((e) => { alvo.checked = !alvo.checked; aviso(e.message); }); return; }
+    if (alvo.matches && alvo.matches('[data-mostrar]')) { alvo.closest('form').querySelectorAll('input[name=senha],input[name=nova],input[name=atual]').forEach((i) => { i.type = alvo.checked ? 'text' : 'password'; }); return; }
     const el = ev.target; if (!el.files || !el.files[0]) return;
     const arq = el.files[0]; const r = new FileReader();
     r.onload = () => {
@@ -501,6 +619,6 @@
     });
   }
   aplicarAcess();
-  render();
+  iniciar();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
