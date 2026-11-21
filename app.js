@@ -27,7 +27,7 @@
   const D = () => S.dados[S.perfil];
   const salvar = () => { try { localStorage.setItem(CHAVE, JSON.stringify(S)); } catch (e) { aviso('Não consegui salvar neste navegador.'); } };
   const m = (v) => (S.oculto ? 'R$ •••' : F.brl(v));
-  function aviso(t) { const el = $('#aviso'); el.textContent = t; el.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('on'), 2600); }
+  function aviso(t) { const el = $('#aviso'); el.textContent = t; el.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('on'), 6000); }
 
   const NOME_MES = (x) => new Date(x + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'long' }) + ' ' + x.slice(0, 4);
   const MES_CURTO = (x) => new Date(x + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
@@ -71,7 +71,7 @@
     const sub = transf ? `${esc(nomeConta(l.conta))} → ${esc(nomeConta(l.destino))}` : `${esc(l.categoria)} · ${cartao ? '💳 ' : ''}${esc(nomeConta(l.conta))}`;
     const sinal = l.tipo === 'receita' ? '+ ' : transf ? '' : '− ';
     const cor = l.tipo === 'receita' ? 'pos' : transf ? '' : 'neg';
-    const visto = cartao ? '' : `<button class="visto ${l.pago ? 'on' : ''}" type="button" data-acao="alternar" data-id="${l.id}" aria-label="${l.pago ? 'Marcar como pendente' : 'Marcar como pago ou recebido'}" aria-pressed="${!!l.pago}">${l.pago ? '✓' : ''}</button>`;
+    const visto = cartao ? '' : `<button class="visto ${l.pago ? 'on' : ''}" type="button" data-acao="alternar" data-id="${l.id}" aria-label="Pago ou recebido: ${esc(l.desc || l.categoria)}" aria-pressed="${!!l.pago}">${l.pago ? '✓' : ''}</button>`;
     return `<li><div class="item"><button class="item" style="border:0;padding:0;flex:1;min-width:0" type="button" data-acao="editar" data-id="${l.id}"><span class="ic" style="background:${info.cor}22">${info.icone}</span><span class="txt"><strong>${esc(l.desc || (transf ? 'Transferência' : l.categoria))}</strong><span>${sub}${!l.pago && !cartao ? ' · <span class="selo hoje">Pendente</span>' : ''}</span></span><span class="val num ${cor}">${sinal}${m(l.valor)}</span></button>${visto}</div></li>`;
   }
   function itemPagar(i) {
@@ -221,7 +221,7 @@
   }
   dlg.addEventListener('click', (ev) => { if (ev.target === dlg) dlg.close(); });
   const radios = (nome, arr, sel, cls = '') => `<div class="opcoes ${cls}" role="radiogroup">${arr.map(([v, t, ic]) => `<label><input type="radio" name="${nome}" value="${esc(v)}" ${v === sel ? 'checked' : ''}><span>${ic ? `<em>${ic}</em>` : ''}${esc(t)}</span></label>`).join('')}</div>`;
-  const troca = (nome, rot, on) => `<label class="troca"><span>${rot}</span><input type="checkbox" name="${nome}" ${on ? 'checked' : ''}></label>`;
+  const troca = (nome, rot, on) => `<label class="troca"><span>${rot}</span><input type="checkbox" role="switch" name="${nome}" ${on ? 'checked' : ''}></label>`;
   const campo = (rot, html) => `<label class="campo"><span>${rot}</span>${html}</label>`;
   const sele = (nome, arr, sel) => `<select name="${nome}">${arr.map(([v, t]) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
   const val2 = (v) => (v != null ? String(v).replace('.', ',') : '');
@@ -257,7 +257,7 @@
       <div class="botoes">${novo ? '' : '<button class="btn perigo" type="button" id="exc">Excluir</button>'}<button class="btn" type="submit">Salvar</button></div>`,
     (fd) => {
       const valor = F.arred(F.numeroBR(fd.get('valor')));
-      if (!(valor > 0)) { aviso('Informe um valor maior que zero.'); return false; }
+      if (!(valor > 0)) { aviso('Informe um valor maior que zero.'); $('#v').focus(); return false; }
       const conta = fd.get('conta'); const cartao = F.ehCartao({ conta });
       if (tipo === 'transf' && conta === fd.get('destino')) { aviso('Escolha contas diferentes.'); return false; }
       const reg = tipo === 'transf'
