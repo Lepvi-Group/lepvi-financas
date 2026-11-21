@@ -245,3 +245,31 @@ html[data-contraste="alto"] dialog { border: 3px solid #000; }
 .btn:active, .icbtn:active, .visto:active, .chips button:active, .abas button:active, .conta:active, .cc:active, .passo:active, .menu button:active { transform: scale(0.97); }
 .aviso { transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1), transform 200ms cubic-bezier(0.23, 1, 0.32, 1); }
 @media (prefers-reduced-motion: reduce) { .btn:active, .icbtn:active, .visto:active, .chips button:active, .abas button:active, .conta:active, .cc:active, .passo:active, .menu button:active { transform: none; } }
+
+/* mais respiro entre botões e blocos */
+main { gap: 20px; padding-top: 8px; }
+.card { padding: 20px; }
+.btn { padding: 13px 24px; min-height: 50px; letter-spacing: .005em; }
+.btn.mini { padding: 8px 18px; }
+.botoes { gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.botoes .btn { min-width: 120px; }
+.chips { gap: 12px; padding-bottom: 6px; }
+.chips button { padding: 10px 20px; }
+.abas { padding: 5px; gap: 4px; }
+.abas button { padding: 11px 12px; }
+.vazio { padding: 40px 20px; }
+.vazio p { margin-bottom: 20px; }
+.vazio .emoji { margin-bottom: 12px; }
+.tit { margin-bottom: 4px; }
+.sec-h { margin-bottom: 6px; }
+.item { padding: 14px 0; gap: 14px; }
+.conta { padding: 14px 16px; }
+.contas { gap: 12px; }
+.passos { gap: 12px; }
+.passo { padding: 14px; }
+.dupla { gap: 14px; }
+dialog form { gap: 18px; }
+.opcoes { gap: 10px; }
+.opcoes.cats { gap: 10px; }
+.menu .mais-novo { margin-bottom: 14px; }
+@media (min-width: 900px) { .menu { grid-auto-rows: 54px; row-gap: 6px; } main { padding-top: 20px; } .topo .dir { gap: 10px; } }
