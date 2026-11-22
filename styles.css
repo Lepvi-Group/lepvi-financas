@@ -691,3 +691,5 @@ html[data-contraste="alto"] dialog.confirma { border: 3px solid #000; }
 .serie-fim { display: block; color: var(--tinta); font-size: 15px; margin-top: 2px; }
 
 .dia-nome { display: inline-block; } .dia-nome::first-letter { text-transform: uppercase; }
+
+.versao-app { font-size: 13px; margin: 4px 0 0; opacity: .8; }

@@ -574,7 +574,7 @@
   const grupoHtml = (t, corpo) => `<section><h2 class="grupo">${t}</h2><div class="card linhas">${corpo}</div></section>`;
 
   function versaoApp() {
-    try { const v = new URL(document.querySelector('script[src*="app.js"]').src).searchParams.get('v'); return v ? `Versão ${esc(v)} do app` : ''; } catch (e) { return ''; }
+    try { const v = new URL(document.querySelector('script[src*="app.js"]').src).searchParams.get('v'); return v ? `Versão ${esc(v)}` : ''; } catch (e) { return ''; }
   }
   function telaMais() {
     const d = D(); const u = USER.info; const grupo = grupoHtml;
@@ -599,7 +599,7 @@
       + linha({ tag: 'a', icone: LI.arquivo, titulo: 'Termos de Uso', attrs: 'href="termos.html" target="_blank" rel="noopener"' }))}
     ${grupo('Zona de risco', linha({ icone: LI.lixo, titulo: 'Apagar todos os meus lançamentos', desc: 'Remove contas, cartões e lançamentos', perigo: true, attrs: 'data-acao="apagar"' }))}
     <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair</button>
-    <p class="mut centro">Lepvi Finanças · um produto Lepvi Group</p><p class="mut centro">${versaoApp()}</p>`;
+    <p class="mut centro versao-app">${versaoApp()}</p>`;
   }
 
   function telaPerfil() {
@@ -622,7 +622,7 @@
       + linha({ tag: 'a', icone: LI.baixar, titulo: 'Baixar meus dados', desc: 'Arquivo completo da sua conta (LGPD)', attrs: 'href="api/?a=exportar" download' })
       + linha({ tag: 'a', icone: LI.escudo, titulo: 'Política de Privacidade', attrs: 'href="privacidade.html" target="_blank" rel="noopener"' }))}
     ${grupo('Zona de risco', linha({ icone: LI.lixo, titulo: 'Excluir meu cadastro', desc: 'Apaga o cadastro e todos os dados, para sempre', perigo: true, attrs: 'data-acao="excluir-conta"' }))}
-    <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair</button><p class="mut centro">${versaoApp()}</p>`;
+    <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair</button>`;
   }
 
   /* menu da conta (avatar no topo) */
