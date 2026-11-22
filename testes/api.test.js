@@ -149,7 +149,9 @@ test('captura pelo endereço público: chave própria, repetido ignorado, revis�
   assert.strictEqual(ok.status, 200);
   assert.strictEqual((await post(token, { texto: 'Compra aprovada no cartão final 1234 de R$ 45,90 em PADARIA DO ZE' })).json.repetido, true, 'o mesmo aviso duas vezes vira um só');
   assert.strictEqual((await post(token, { texto: 'sem valor' })).status, 422);
-  const lista = (await chamar('capturas', null, { metodo: 'GET' })).json.capturas;
+  const info = (await chamar('capturas', null, { metodo: 'GET' })).json;
+  assert.ok(info.chave && info.chave.ultimo_uso > 0, 'o app sabe quando o celular enviou o último aviso');
+  const lista = info.capturas;
   assert.strictEqual(lista.length, 1);
   assert.deepStrictEqual([lista[0].valor, lista[0].final, lista[0].desc], [45.9, '1234', 'PADARIA DO ZE']);
   const novoToken = (await chamar('captura_token', {})).json.token;

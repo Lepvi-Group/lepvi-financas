@@ -20,7 +20,12 @@ try {
     if ($metodo === 'GET' && in_array($acao, ['eu', 'dados', 'exportar', 'capturas', 'anexos', 'anexo'], true)) {
         $u = exigir_usuario();
         if ($acao === 'eu') resp(['usuario' => usuario_publico($u)]);
-        if ($acao === 'capturas') resp(['capturas' => capturas_listar($u['id'])]);
+        if ($acao === 'capturas') {
+            $k = db()->prepare('SELECT criado_em, ultimo_uso FROM chaves_captura WHERE usuario_id = ?');
+            $k->execute([$u['id']]);
+            $ch = $k->fetch();
+            resp(['capturas' => capturas_listar($u['id']), 'chave' => $ch ? ['criada_em' => (int) $ch['criado_em'], 'ultimo_uso' => $ch['ultimo_uso'] !== null ? (int) $ch['ultimo_uso'] : null] : null]);
+        }
         if ($acao === 'anexos') {
             $s = db()->prepare('SELECT id, criado_em FROM anexos WHERE usuario_id = ? AND lanc_id = ? ORDER BY criado_em');
             $s->execute([$u['id'], substr((string) ($_GET['lanc'] ?? ''), 0, 64)]);

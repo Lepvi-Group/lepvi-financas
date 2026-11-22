@@ -199,7 +199,7 @@
 
   /* ---------- compras automáticas (avisos do banco) ---------- */
   async function carregarCapturas() {
-    try { V.rev = (await api('capturas')).capturas || []; } catch (e) { V.rev = V.rev || []; }
+    try { const r = await api('capturas'); V.rev = r.capturas || []; V.chave = r.chave || null; } catch (e) { V.rev = V.rev || []; }
     if (USER.logado && !dlg.open && (V.tela === 'inicio' || V.tela === 'mais')) render();
   }
   const catOpts = (tipo, sel) => catsDe(tipo).filter((c) => c.nome !== 'Cartão').map((c) => `<option value="${esc(c.nome)}" ${c.nome === sel ? 'selected' : ''}>${esc(c.icone)} ${esc(c.nome)}</option>`).join('');
@@ -246,12 +246,17 @@
         <details><summary>iPhone (app Atalhos)</summary><ol class="cap-ol"><li>Abra Atalhos → Automação → Nova automação → <b>Mensagem</b> (ou <b>E-mail</b>) e escolha o remetente do banco.</li><li>Ação <b>Obter conteúdo de URL</b>: coloque o endereço acima, método <b>POST</b>.</li><li>Cabeçalho <b>Authorization</b> com o valor <b>Bearer</b>, um espaço e a sua chave.</li><li>Corpo da solicitação em <b>JSON</b>: campo <b>texto</b> = Conteúdo da mensagem.</li><li>Marque <b>Executar imediatamente</b>.</li></ol></details>
         <details><summary>Android (app MacroDroid, grátis)</summary><ol class="cap-ol"><li>Novo macro → gatilho <b>Notificação recebida</b> e escolha o app do seu banco.</li><li>Ação <b>Requisição HTTP</b>, método <b>POST</b>, o endereço acima.</li><li>Cabeçalho <b>Authorization: Bearer</b> e a sua chave.</li><li>Corpo em JSON com o campo <b>texto</b> recebendo o texto da notificação (use a variável de texto da notificação do app).</li></ol></details>
         <details><summary>Banco que avisa por e-mail</summary><p class="mut">Se o seu e-mail permite regra de encaminhamento automático para um serviço de webhook, aponte para o endereço acima. Se precisar de ajuda, escreva para lepvi@lepvi.com.br.</p></details></section>
-      <section class="card cap-passo"><h3>4. Teste agora</h3><p class="mut">Cole um aviso real do banco (ou use o exemplo) e veja se o app entende.</p>
+      <section class="card cap-passo"><h3>4. Confira se o celular está enviando</h3><p id="cap-status" class="mut" role="status" aria-live="polite"></p><button class="btn sec" type="button" id="cap-verificar">Verificar agora</button><p class="mut">Faça uma compra pequena ou peça ao banco um aviso de teste: quando o celular enviar, aqui aparece "recebido".</p></section>
+      <section class="card cap-passo"><h3>5. Teste o texto do aviso</h3><p class="mut">Cole um aviso real do banco (ou use o exemplo) e veja se o app entende.</p>
         <label class="campo"><span>Texto do aviso</span><textarea id="cap-texto" maxlength="600">Compra aprovada R$ 89,90 no estabelecimento MERCADO SOL com cartão final 1234.</textarea></label>
         <button class="btn sec" type="button" id="cap-testar">Testar</button><p id="cap-res" class="mut" role="status"></p></section>`, null, (f) => {
+      const quando = (t) => { const min = Math.max(0, Math.round((Date.now() / 1000 - t) / 60)); return min < 1 ? 'agora há pouco' : min < 60 ? `há ${min} min` : min < 1440 ? `há ${Math.round(min / 60)} h` : `há ${Math.round(min / 1440)} dia(s)`; };
+      const pintarStatus = () => { const c = V.chave; $('#cap-status', f).textContent = !c ? 'Nenhuma chave criada ainda. Faça o passo 1.' : c.ultimo_uso ? `✅ O celular enviou um aviso ${quando(c.ultimo_uso)}. Está funcionando.` : '⏳ Chave criada, mas nenhum aviso chegou ainda do celular.'; };
+      pintarStatus();
+      $('#cap-verificar', f).onclick = async () => { await carregarCapturas(); pintarStatus(); };
       $('#cap-gerar', f).onclick = async () => {
         if (!confirm('Gerar uma chave nova? A anterior (se existir) deixa de funcionar.')) return;
-        try { const r = await api('captura_token', {}); $('#cap-token', f).value = r.token; $('#cap-chave', f).hidden = false; aviso('Chave gerada. Copie e guarde agora: ela não aparece de novo.'); } catch (e) { aviso(e.message); }
+        try { const r = await api('captura_token', {}); $('#cap-token', f).value = r.token; $('#cap-chave', f).hidden = false; V.chave = { criada_em: Math.floor(Date.now() / 1000), ultimo_uso: null }; pintarStatus(); aviso('Chave gerada. Copie e guarde agora: ela não aparece de novo.'); } catch (e) { aviso(e.message); }
       };
       f.querySelectorAll('[data-copiar]').forEach((b) => b.addEventListener('click', async () => { const el = $(b.dataset.copiar, f); try { await navigator.clipboard.writeText(el.value); aviso('Copiado.'); } catch (e) { el.select(); aviso('Selecione e copie manualmente.'); } }));
       $('#cap-testar', f).onclick = async () => {
