@@ -227,10 +227,10 @@
       d.lancs.push(...novos); V.rev = V.rev.filter((x) => !ids.includes(x.id)); salvar();
       api('capturas_resolver', { ids }).catch(() => {}); render(); aviso(`${novos.length} lançamento(s) criado(s).`);
     }, (f) => {
-      $('#rev-descartar', f).onclick = () => {
+      $('#rev-descartar', f).onclick = async () => {
         const ids = lista.filter((l, i) => f['sel-' + i] && f['sel-' + i].checked).map((l) => l.id);
         if (!ids.length) { aviso('Marque ao menos um item.'); return; }
-        if (!confirm(`Descartar ${ids.length} aviso(s)? Eles não viram lançamento.`)) return;
+        if (!(await confirmar('Descartar avisos?', `${ids.length} aviso(s) do banco serão descartados e não viram lançamento.`, 'Descartar'))) return;
         V.rev = V.rev.filter((x) => !ids.includes(x.id)); api('capturas_resolver', { ids }).catch(() => {}); dlg.close(); render(); aviso('Descartado.');
       };
     });
@@ -255,7 +255,7 @@
       pintarStatus();
       $('#cap-verificar', f).onclick = async () => { await carregarCapturas(); pintarStatus(); };
       $('#cap-gerar', f).onclick = async () => {
-        if (!confirm('Gerar uma chave nova? A anterior (se existir) deixa de funcionar.')) return;
+        if (!(await confirmar('Gerar uma chave nova?', 'A chave anterior, se existir, deixa de funcionar e você precisará atualizar o celular.', 'Gerar chave', false))) return;
         try { const r = await api('captura_token', {}); $('#cap-token', f).value = r.token; $('#cap-chave', f).hidden = false; V.chave = { criada_em: Math.floor(Date.now() / 1000), ultimo_uso: null }; pintarStatus(); aviso('Chave gerada. Copie e guarde agora: ela não aparece de novo.'); } catch (e) { aviso(e.message); }
       };
       f.querySelectorAll('[data-copiar]').forEach((b) => b.addEventListener('click', async () => { const el = $(b.dataset.copiar, f); try { await navigator.clipboard.writeText(el.value); aviso('Copiado.'); } catch (e) { el.select(); aviso('Selecione e copie manualmente.'); } }));
@@ -270,8 +270,8 @@
     const d = D(); const s = F.saldosDivisao(d.lancs);
     abrir('Divisão de despesas', s.length ? `<p class="mut">Quando você paga uma despesa e divide com alguém (em Mais opções do lançamento), a parte dela aparece aqui até ser acertada.</p>${s.map((x, i) => `<section class="card cap-passo"><div class="sec-h"><h3>${esc(x.nome)}</h3><b class="num">${F.brl(x.total)}</b></div><ul class="lista">${x.itens.map((it) => `<li><div class="item"><div class="txt"><strong>${esc(it.desc)}</strong><span>${new Date(it.data + 'T12:00:00').toLocaleDateString('pt-BR')}</span></div><div class="val num">${F.brl(it.valor)}</div></div></li>`).join('')}</ul><button class="btn sec" type="button" data-acerto="${i}">${esc(x.nome)} me pagou tudo</button></section>`).join('')}`
       : '<p class="mut">Ninguém deve nada agora. Para dividir uma despesa, abra ou crie o lançamento, toque em <b>Mais opções</b> e preencha <b>Dividir com</b>.</p>', null, (f) => {
-      f.querySelectorAll('[data-acerto]').forEach((b) => b.addEventListener('click', () => {
-        const x = s[+b.dataset.acerto]; if (!confirm(`Marcar tudo de ${x.nome} como acertado (${F.brl(x.total)})?`)) return;
+      f.querySelectorAll('[data-acerto]').forEach((b) => b.addEventListener('click', async () => {
+        const x = s[+b.dataset.acerto]; if (!(await confirmar('Marcar como acertado?', `${x.nome} pagou tudo o que devia (${F.brl(x.total)}).`, 'Sim, acertado', false))) return;
         d.lancs.forEach((l) => (l.divisao || []).forEach((p) => { if (p.nome === x.nome) p.pago = true; }));
         salvar(); render(); formDivisoes(); aviso('Acertado.');
       }));
@@ -302,7 +302,7 @@
     lista.addEventListener('click', async (ev) => {
       const im = ev.target.closest('img'); if (im) { im.classList.toggle('grande'); return; }
       const del = ev.target.closest('[data-del-an]'); if (!del) return;
-      if (!confirm('Remover esta foto?')) return;
+      if (!(await confirmar('Remover esta foto?', 'A foto do comprovante será apagada.', 'Remover'))) return;
       try { await api('anexo_excluir', { id: del.dataset.delAn }); await pintar(); } catch (e) { aviso(e.message); }
     });
     $('#anexo-arq', f).addEventListener('change', async (ev) => {
@@ -372,6 +372,10 @@
     return `<li><div class="item"><span class="ic" style="background:#EEF0FF">${i.tipo === 'fatura' ? '💳' : i.tipo === 'boleto' ? '🧾' : '📌'}</span><div class="txt"><strong>${esc(i.titulo)}</strong><span>Vence ${DATA_CURTA(i.vencimento)} · ${selo}</span></div><div class="val num">${m(i.valor)}<br><button class="btn mini" type="button" data-acao="pagar" data-tipo="${i.tipo}" data-id="${esc(i.id)}">Paguei</button></div></div></li>`;
   }
 
+  function itemPago(i) {
+    return `<li><div class="item pago-item"><span class="ic" style="background:#D9F2EA">✓</span><div class="txt"><strong>${esc(i.titulo)}</strong><span>Venceu ${DATA_CURTA(i.vencimento)} · <span class="selo ok">Pago</span></span></div><div class="val num">${m(i.valor)}</div></div></li>`;
+  }
+
   /* ---------- telas ---------- */
   function telaInicio() {
     const d = D();
@@ -393,8 +397,8 @@
     <div class="rapidas" role="group" aria-label="Ações rápidas">${[['rap-despesa', '🔻', 'Despesa'], ['rap-receita', '🔺', 'Receita'], ['rap-transf', '🔁', 'Transferir'], ['rap-fatura', '💳', 'Pagar fatura']].map(([a, i, t]) => `<button type="button" class="rap" data-acao="${a}"><span aria-hidden="true">${i}</span><b>${t}</b></button>`).join('')}</div>
     ${guia}
     ${seletorMes()}
-    <div class="duas"><div class="card mini"><small>Receitas</small><b class="pos num">${m(r.receitas)}</b><div class="barra ok" role="img" aria-label="Recebido"><i style="width:${r.receitas ? Math.min(100, (r.recebido / r.receitas) * 100) : 0}%"></i></div><small>Recebido ${m(r.recebido)}</small></div>
-      <div class="card mini"><small>Despesas</small><b class="neg num">${m(r.despesas)}</b><div class="barra estourou" role="img" aria-label="Pago"><i style="width:${r.despesas ? Math.min(100, (r.pago / r.despesas) * 100) : 0}%"></i></div><small>Pago ${m(r.pago)}</small></div></div>
+    <div class="duas"><div class="card kpi"><span class="kpi-t">Receitas do mês</span><b class="pos num">${m(r.receitas)}</b><div class="barra ok" role="img" aria-label="Recebido"><i style="width:${r.receitas ? Math.min(100, (r.recebido / r.receitas) * 100) : 0}%"></i></div><span class="kpi-s">Já recebido: <b class="num">${m(r.recebido)}</b></span></div>
+      <div class="card kpi"><span class="kpi-t">Despesas do mês</span><b class="neg num">${m(r.despesas)}</b><div class="barra estourou" role="img" aria-label="Pago"><i style="width:${r.despesas ? Math.min(100, (r.pago / r.despesas) * 100) : 0}%"></i></div><span class="kpi-s">Já pago: <b class="num">${m(r.pago)}</b></span></div></div>
     <div class="card" style="display:flex;justify-content:space-between;align-items:center"><span class="mut">Balanço previsto do mês</span><b class="num ${r.saldo >= 0 ? 'pos' : 'neg'}" style="font-size:20px">${m(r.saldo)}</b></div>
     <section class="card" data-bloco="pagar"><div class="sec-h"><h2 class="secao">Vencimentos</h2><button class="link" type="button" data-acao="ir-pagar">Ver todas</button></div>
       ${pagar.length ? `<ul class="lista">${pagar.slice(0, 3).map(itemPagar).join('')}</ul>` : '<p class="mut" style="padding:8px 0">Tudo em dia. Nenhum boleto ou fatura pendente. 🎉</p>'}</section>
@@ -428,9 +432,9 @@
       return { itens, futuros, prox, base: String(prox.desc).replace(/ \(\d+\/\d+\)$/, '') };
     }).sort((a, b) => a.prox.data.localeCompare(b.prox.data));
     if (!series.length) return '<div class="card vazio"><span class="emoji">🔁</span><p>Aqui aparecem as contas que se repetem, como aluguel, internet e assinaturas. Ao lançar, abra "Mais opções" e escolha "Fixo todo mês" ou "Parcelado".</p><button class="btn" type="button" data-acao="novo">Novo lançamento</button></div>';
-    return `<p class="mut">Contas que se repetem. Ao encerrar, só os meses que ainda não foram pagos são removidos.</p><div class="card linhas">${series.map((x) => {
+    return `<p class="mut">Suas contas fixas do dia a dia (internet, água, luz, aluguel) e as compras parceladas. Para ver o que vence em cada mês, use a aba <b>A pagar</b>. Ao encerrar uma conta, só os meses ainda não pagos são removidos.</p><div class="card linhas">${series.map((x) => {
       const info = catInfo(x.prox.categoria, x.prox.tipo); const parc = x.prox.modoSerie === 'parcelado';
-      return `<div class="linha serie-lin"><span class="l-ic" style="background:${info.cor}22">${info.icone}</span><span class="l-t"><b>${esc(x.base)}</b><small>${parc ? 'Parcelado' : (ROT_FREQ[x.prox.freq || 'mes'].charAt(0).toUpperCase() + ROT_FREQ[x.prox.freq || 'mes'].slice(1))} · ${x.futuros.length ? 'faltam ' + x.futuros.length + ' · próximo ' + DATA_CURTA(x.prox.data) : 'terminou'} · <span class="num">${m(x.prox.valor)}</span></small></span><span class="serie-bt"><button class="btn mini sec" type="button" data-acao="editar" data-id="${x.prox.id}">Editar</button>${x.futuros.length ? `<button class="btn mini sec" type="button" data-acao="encerrar-serie" data-id="${x.prox.serie}">Encerrar</button>` : ''}</span></div>`;
+      return `<div class="linha serie-lin"><span class="l-ic" style="background:${info.cor}22">${info.icone}</span><span class="l-t"><b>${esc(x.base)}</b><small>${parc ? `Parcelado · parcela ${x.prox.n || '?'} de ${x.prox.de || '?'}` : 'Conta fixa · ' + (ROT_FREQ[x.prox.freq || 'mes'])} · ${x.futuros.length ? 'próximo vencimento ' + DATA_CURTA(x.prox.data) : 'terminou'}${!parc && x.futuros.length ? ' · lançada até ' + esc(NOME_MES(x.itens[x.itens.length - 1].data.slice(0, 7))) : ''} · <span class="num">${m(x.prox.valor)}</span></small></span><span class="serie-bt"><button class="btn mini sec" type="button" data-acao="editar" data-id="${x.prox.id}">Editar</button>${x.futuros.length ? `<button class="btn mini sec" type="button" data-acao="encerrar-serie" data-id="${x.prox.serie}">Encerrar</button>` : ''}</span></div>`;
     }).join('')}</div>`;
   }
   function telaLancs() {
@@ -438,10 +442,15 @@
     const abas = `<div class="abas" role="group"><button type="button" data-acao="sub" data-v="todos" aria-pressed="${V.sub === 'todos'}">Lançamentos</button><button type="button" data-acao="sub" data-v="apagar" aria-pressed="${V.sub === 'apagar'}">A pagar</button><button type="button" data-acao="sub" data-v="series" aria-pressed="${V.sub === 'series'}">Recorrentes</button></div>`;
     if (V.sub === 'series') return `<div class="tit"><h1>Lançamentos</h1></div>${abas}${listaSeries()}`;
     if (V.sub === 'apagar') {
-      const p = F.aPagar(d.lancs, d.cartoes);
-      const g = [['Atrasados', p.filter((i) => i.atrasado)], ['Próximos 7 dias', p.filter((i) => !i.atrasado && i.dias <= 7)], ['Depois', p.filter((i) => i.dias > 7)]];
-      return `<div class="tit"><h1>Lançamentos</h1><button class="btn mini" type="button" data-acao="novo-boleto">+ Boleto</button></div>${abas}
-      ${p.length ? g.filter((x) => x[1].length).map((x) => `<h2 class="secao">${x[0]}</h2><div class="card" style="padding:4px 14px"><ul class="lista">${x[1].map(itemPagar).join('')}</ul></div>`).join('') : '<div class="card vazio"><span class="emoji">🎉</span><p>Nenhum boleto ou fatura pendente.</p><button class="btn" type="button" data-acao="novo-boleto">Cadastrar boleto</button></div>'}`;
+      const c = F.contasDoMes(d.lancs, d.cartoes, V.mes); const hojeMes = F.mesDe(F.hojeISO());
+      const antes = V.mes === hojeMes ? F.aPagar(d.lancs, d.cartoes).filter((i) => i.atrasado && F.mesDe(i.vencimento) < V.mes) : [];
+      const pend = c.itens.filter((i) => !i.pago); const pagas = c.itens.filter((i) => i.pago);
+      const pct = c.total ? Math.round((c.pago / c.total) * 100) : 0;
+      const grupo = (t, arr, fn) => (arr.length ? `<h2 class="secao">${t}</h2><div class="card" style="padding:4px 14px"><ul class="lista">${arr.map(fn).join('')}</ul></div>` : '');
+      return `<div class="tit"><h1>Lançamentos</h1><button class="btn mini" type="button" data-acao="novo-boleto">+ Boleto</button></div>${abas}${seletorMes()}
+      <section class="card mes-resumo"><span class="kpi-t">Contas de ${esc(NOME_MES(V.mes))}</span><b class="num">${m(c.total)}</b><div class="barra ok" role="img" aria-label="${pct}% pago"><i style="width:${pct}%"></i></div><div class="mes-duas"><span>Já pago<b class="num pos">${m(c.pago)}</b></span><span>Falta pagar<b class="num ${c.falta > 0 ? 'neg' : 'pos'}">${m(c.falta)}</b></span></div></section>
+      ${grupo('Atrasadas de meses anteriores', antes, itemPagar)}${grupo('Falta pagar', pend, itemPagar)}${grupo('Já pagas', pagas, itemPago)}
+      ${c.itens.length || antes.length ? '' : '<div class="card vazio"><span class="emoji">🎉</span><p>Nenhuma conta ou fatura neste mês. Cadastre as contas fixas (internet, água, luz) em Novo lançamento → Mais opções → Fixo todo mês.</p><button class="btn" type="button" data-acao="novo-boleto">Cadastrar boleto</button></div>'}`;
     }
     const chip = (v, t) => `<button type="button" data-acao="filtro" data-v="${v}" aria-pressed="${V.filtro === v}">${t}</button>`;
     return `<div class="tit"><h1>Lançamentos</h1></div>${abas}${seletorMes()}
@@ -652,6 +661,17 @@
     if (!dlg.open) dlg.showModal();
   }
   dlg.addEventListener('click', (ev) => { if (ev.target === dlg) dlg.close(); });
+  /* confirmação própria do app (no lugar da caixa feia do navegador) */
+  function confirmar(titulo, texto, ok = 'Confirmar', perigo = true) {
+    return new Promise((resolve) => {
+      const c = document.createElement('dialog'); c.className = 'confirma'; c.setAttribute('role', 'alertdialog'); c.setAttribute('aria-labelledby', 'cf-t'); c.setAttribute('aria-describedby', 'cf-d');
+      c.innerHTML = `<div class="cf-corpo"><span class="cf-ic ${perigo ? 'perigo' : ''}" aria-hidden="true">${perigo ? '!' : '?'}</span><h2 id="cf-t">${esc(titulo)}</h2><p id="cf-d">${esc(texto)}</p><div class="cf-bt"><button class="btn sec" type="button" data-r="0">Cancelar</button><button class="btn ${perigo ? 'perigo' : ''}" type="button" data-r="1">${esc(ok)}</button></div></div>`;
+      const fim = (v) => { c.close(); c.remove(); resolve(v); };
+      c.addEventListener('click', (ev) => { const b = ev.target.closest('[data-r]'); if (b) fim(b.dataset.r === '1'); else if (ev.target === c) fim(false); });
+      c.addEventListener('cancel', (ev) => { ev.preventDefault(); fim(false); });
+      document.body.appendChild(c); c.showModal(); $('[data-r="0"]', c).focus();
+    });
+  }
   const radios = (nome, arr, sel, cls = '') => `<div class="opcoes ${cls}" role="radiogroup">${arr.map(([v, t, ic]) => `<label><input type="radio" name="${nome}" value="${esc(v)}" ${v === sel ? 'checked' : ''}><span>${ic ? `<em>${ic}</em>` : ''}${esc(t)}</span></label>`).join('')}</div>`;
   const campoSenha = (rot, attrs) => `<label class="campo"><span>${rot}</span><span class="senha-wrap"><input ${attrs}><button type="button" class="olho-senha" data-olho aria-label="Mostrar a senha" aria-pressed="false">${svg(EYE)}</button></span></label>`;
   const troca = (nome, rot, on) => `<label class="troca"><span>${rot}</span><input type="checkbox" role="switch" name="${nome}" ${on ? 'checked' : ''}></label>`;
@@ -788,7 +808,8 @@
     const novo = !c.id;
     abrir(novo ? 'Novo cartão' : 'Editar cartão', `${campo('Nome do cartão', `<input name="nome" required maxlength="30" value="${esc(c.nome || '')}" placeholder="Ex.: Nubank, Itaú Empresa">`)}
       ${campo('Limite (R$)', `<input name="limite" required inputmode="decimal" value="${val2(c.limite)}" placeholder="0,00">`)}
-      <div class="dupla">${campo('Dia do fechamento', `<input name="fechamento" type="number" min="1" max="31" required value="${c.fechamento || ''}">`)}${campo('Dia do vencimento', `<input name="vencimento" type="number" min="1" max="31" required value="${c.vencimento || ''}">`)}</div>
+      <p class="rep-resumo"><b>Como funciona:</b> você lança cada compra no cartão e o app monta a fatura sozinho. Compras até o <b>dia do fechamento</b> entram na fatura que vence neste mês; as feitas depois vão para a fatura do mês seguinte. Os dois dias estão no app do seu banco, na tela do cartão.</p>
+      <div class="dupla">${campo('Dia do fechamento', `<input name="fechamento" type="number" min="1" max="31" required value="${c.fechamento || ''}" placeholder="Ex.: 5"><small class="mut">Dia em que a fatura fecha.</small>`)}${campo('Dia do vencimento', `<input name="vencimento" type="number" min="1" max="31" required value="${c.vencimento || ''}" placeholder="Ex.: 12"><small class="mut">Dia de pagar a fatura.</small>`)}</div>
       ${campo('Final do cartão (opcional)', `<input name="final" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="${esc(c.final || '')}" placeholder="4 últimos números"><small class="mut">Ajuda o app a achar o cartão certo nos avisos do banco.</small>`)}
       ${campo('Cor', radios('cor', CORES.map((x) => [x, '']), c.cor || CORES[d_cartoes() % CORES.length], 'cores').replace(/<span>/g, '<span>'))}
       <div class="botoes">${novo ? '' : '<button class="btn perigo" type="button" id="exc">Excluir</button>'}<button class="btn" type="submit">Salvar</button></div>`,
@@ -799,7 +820,7 @@
       salvar(); render(); aviso('Cartão salvo.');
     }, (f) => {
       f.querySelectorAll('.cores span').forEach((s) => { s.style.background = s.previousElementSibling.value; });
-      const exc = $('#exc', f); if (exc) exc.onclick = () => { if (!confirm('Excluir este cartão e as compras dele?')) return; const d = D(); soltarAnexos(d.lancs.filter((l) => l.conta === 'c:' + c.id)); d.cartoes = d.cartoes.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== 'c:' + c.id); V.cartao = null; salvar(); dlg.close(); render(); aviso('Cartão excluído.'); };
+      const exc = $('#exc', f); if (exc) exc.onclick = async () => { if (!(await confirmar('Excluir este cartão?', 'O cartão e todas as compras dele serão apagados. Não dá para desfazer.', 'Excluir'))) return; const d = D(); soltarAnexos(d.lancs.filter((l) => l.conta === 'c:' + c.id)); d.cartoes = d.cartoes.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== 'c:' + c.id); V.cartao = null; salvar(); dlg.close(); render(); aviso('Cartão excluído.'); };
     });
   }
   const d_cartoes = () => D().cartoes.length;
@@ -824,7 +845,7 @@
       salvar(); render(); aviso('Conta salva.');
     }, (f) => {
       f.querySelectorAll('.cores span').forEach((s) => { s.style.background = s.previousElementSibling.value; });
-      const exc = $('#exc', f); if (exc) exc.onclick = () => { if (!confirm('Excluir este banco ou carteira e os lançamentos dele?')) return; const d = D(); soltarAnexos(d.lancs.filter((l) => l.conta === c.id || l.destino === c.id)); d.contas = d.contas.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== c.id && l.destino !== c.id); salvar(); dlg.close(); render(); aviso('Conta excluída.'); };
+      const exc = $('#exc', f); if (exc) exc.onclick = async () => { if (!(await confirmar('Excluir este banco ou carteira?', 'Os lançamentos dele também serão apagados. Não dá para desfazer.', 'Excluir'))) return; const d = D(); soltarAnexos(d.lancs.filter((l) => l.conta === c.id || l.destino === c.id)); d.contas = d.contas.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== c.id && l.destino !== c.id); salvar(); dlg.close(); render(); aviso('Conta excluída.'); };
     });
   }
 
@@ -1007,7 +1028,7 @@
       mes: () => { V.mes = F.somaMes(V.mes, +t.dataset.d); render(); },
       fmes: () => { V.fmes = F.somaMes(V.fmes, +t.dataset.d); render(); },
       dia: () => { V.dia = t.dataset.d; render(); },
-      'encerrar-serie': () => { if (!confirm('Encerrar esta conta que se repete? Os meses que ainda não foram pagos serão removidos.')) return; const hoje = F.hojeISO(); d.lancs = d.lancs.filter((l) => !(l.serie === id && l.data >= hoje && !l.pago)); salvar(); render(); aviso('Série encerrada.'); },
+      'encerrar-serie': async () => { if (!(await confirmar('Encerrar esta conta?', 'Os meses que ainda não foram pagos serão removidos. Os já pagos continuam.', 'Encerrar'))) return; const hoje = F.hojeISO(); d.lancs = d.lancs.filter((l) => !(l.serie === id && l.data >= hoje && !l.pago)); salvar(); render(); aviso('Série encerrada.'); },
       'rap-despesa': () => formLanc({}, 'despesa'),
       'rap-receita': () => formLanc({}, 'receita'),
       'rap-transf': () => formLanc({}, 'transf'),
@@ -1042,8 +1063,8 @@
       'fechar-guia': () => { S.guia = true; salvar(); render(); },
       exportar,
       imprimir: () => { window.print(); },
-      exemplo: () => { if (!d.lancs.length || confirm('Isso substitui os seus dados atuais pelos de exemplo. Continuar?')) exemplo(); },
-      apagar: () => { if (confirm('Apagar todos os seus lançamentos, contas e cartões? Não dá para desfazer.')) { S.dados[S.perfil] = vazio(); V.cartao = null; salvar(); render(); aviso('Dados apagados.'); } },
+      exemplo: async () => { if (!d.lancs.length || await confirmar('Carregar dados de exemplo?', 'Isso substitui os seus dados atuais pelos de exemplo.', 'Substituir')) exemplo(); },
+      apagar: async () => { if (await confirmar('Apagar tudo?', 'Todos os seus lançamentos, contas e cartões serão apagados. Não dá para desfazer.', 'Apagar tudo')) { S.dados[S.perfil] = vazio(); V.cartao = null; salvar(); render(); aviso('Dados apagados.'); } },
       backup: () => baixar(new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' }), `lepvi-financas-${F.hojeISO()}.json`),
     };
     if (acoes[a]) acoes[a]();

@@ -255,7 +255,19 @@
     return { falta, restam, sugerido, planejado, noMes, pctMes: planejado ? Math.min(100, Math.round((noMes / planejado) * 100)) : 0, noAlvo: !planejado || noMes >= planejado };
   }
 
-  const api = { dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  /* visão de um mês: boletos, contas fixas/parceladas, pendências e faturas que vencem nele (pagas e não pagas) */
+  function contasDoMes(lancs, cartoes, mes, hoje = hojeISO()) {
+    const itens = [];
+    lancs.filter((l) => l.tipo === 'despesa' && !ehCartao(l) && mesDe(l.data) === mes && (l.boleto || l.serie || !l.pago))
+      .forEach((l) => itens.push({ tipo: l.boleto ? 'boleto' : 'conta', id: l.id, titulo: l.desc, valor: l.valor, vencimento: l.data, pago: !!l.pago }));
+    faturas(lancs, cartoes).filter((f) => mesDe(f.vencimento) === mes)
+      .forEach((f) => itens.push({ tipo: 'fatura', id: `${f.cartaoId}|${f.mes}`, titulo: `Fatura ${f.cartao}`, valor: f.total, vencimento: f.vencimento, pago: !!f.paga }));
+    const lista = itens.map((i) => ({ ...i, atrasado: !i.pago && i.vencimento < hoje, dias: Math.round((new Date(i.vencimento) - new Date(hoje)) / 86400000) })).sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+    const total = arred(lista.reduce((t, i) => t + i.valor, 0)); const pago = arred(lista.filter((i) => i.pago).reduce((t, i) => t + i.valor, 0));
+    return { itens: lista, total, pago, falta: arred(total - pago) };
+  }
+
+  const api = { contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

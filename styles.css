@@ -15,7 +15,7 @@ h1, h2, h3, p { margin: 0; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 3px solid var(--azul); outline-offset: 2px; }
-.num { font-variant-numeric: tabular-nums; }
+.num { font-variant-numeric: lining-nums proportional-nums; } /* vírgula e ponto bem distintos, importante para baixa visão */
 .pos { color: var(--verde); } .neg { color: var(--vermelho); }
 
 /* topo */
@@ -63,7 +63,11 @@ main > * { min-width: 0; }
 .mes strong::first-letter { text-transform: uppercase; }
 
 .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.mini b { display: block; font-size: 21px; font-weight: 600; margin: 2px 0 8px; }
+.kpi { display: grid; gap: 6px; padding: 18px 20px; }
+.kpi-t { font-size: 16px; font-weight: 600; color: var(--tinta); }
+.kpi > b { display: block; font-size: 28px; font-weight: 600; line-height: 1.1; margin: 0 0 4px; }
+.kpi-s { font-size: 16px; color: var(--tinta); }
+.kpi-s b { font-weight: 600; }
 .barra { height: 8px; background: var(--chip); border-radius: 999px; overflow: hidden; }
 .barra i { display: block; height: 100%; border-radius: 999px; background: var(--gradiente); }
 .barra.ok i { background: var(--verde); } .barra.alerta i { background: var(--ambar); } .barra.estourou i { background: var(--vermelho); }
@@ -655,3 +659,24 @@ html[data-esquema="escuro"]:not([data-contraste="alto"]) select { background-ima
 .anexo { margin: 0; display: grid; gap: 6px; justify-items: start; }
 .anexo img { width: 96px; height: 96px; object-fit: cover; border-radius: 12px; background: var(--chip); border: 1px solid var(--linha); cursor: zoom-in; }
 .anexo img.grande { width: min(100%, 420px); height: auto; max-height: 60vh; object-fit: contain; cursor: zoom-out; }
+
+/* confirmação do app */
+dialog.confirma { max-width: 400px; width: calc(100% - 32px); margin: auto; border-radius: 24px; padding: 0; box-shadow: 0 24px 60px rgba(13,13,15,.35); animation: entra .2s cubic-bezier(.23,1,.32,1); max-height: none; overflow: visible; }
+.cf-corpo { display: grid; gap: 10px; padding: 28px 24px 24px; text-align: center; justify-items: center; }
+.cf-ic { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; font-weight: 700; background: rgba(45,75,255,.12); color: var(--azul); }
+.cf-ic.perigo { background: #FDE7E4; color: var(--vermelho); }
+.cf-corpo h2 { margin: 6px 0 0; font-size: 22px; font-weight: 600; }
+.cf-corpo p { margin: 0; color: var(--suave); line-height: 1.5; font-size: 16px; }
+.cf-bt { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; justify-content: center; }
+.cf-bt .btn { min-width: 128px; }
+html[data-esquema="escuro"]:not([data-contraste="alto"]) .cf-ic.perigo { background: #3A1512; color: #FFB4AB; }
+html[data-contraste="alto"] dialog.confirma { border: 3px solid #000; }
+
+.mes-resumo { display: grid; gap: 8px; }
+.mes-resumo > b { font-size: 30px; font-weight: 600; line-height: 1.1; }
+.mes-duas { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+.mes-duas span { display: grid; font-size: 16px; }
+.mes-duas b { font-size: 20px; font-weight: 600; }
+.pago-item .txt strong { color: var(--suave); }
+.opcoes.cores span { width: 38px; height: 38px; min-height: 0; min-width: 0; flex: none; aspect-ratio: 1 / 1; border-radius: 50%; }
+.opcoes.cores label { display: grid; place-items: center; width: auto; min-height: 0; }

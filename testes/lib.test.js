@@ -149,3 +149,19 @@ test('metaObjetivo: sugere o valor mensal pelo prazo e acompanha o mês', () => 
   assert.strictEqual(r.noMes, 200); assert.strictEqual(r.pctMes, 44); assert.strictEqual(r.noAlvo, false);
   assert.strictEqual(F.metaObjetivo({ ...o, mensal: 100 }, '2026-11').noAlvo, true);
 });
+
+test('contasDoMes: junta boletos, contas fixas e faturas do mês, com o que já foi pago e o que falta', () => {
+  const cartoes = [{ id: 'k', nome: 'Nubank', fechamento: 5, vencimento: 10, limite: 1000 }];
+  const l = [
+    { id: '1', tipo: 'despesa', desc: 'Internet', valor: 100, data: '2026-12-10', conta: 'c1', serie: 's', pago: false },
+    { id: '2', tipo: 'despesa', desc: 'Água', valor: 150, data: '2026-12-12', conta: 'c1', serie: 't', pago: true },
+    { id: '3', tipo: 'despesa', desc: 'Mercado', valor: 80, data: '2026-12-03', conta: 'c1', pago: true },
+    { id: '4', tipo: 'despesa', desc: 'Internet', valor: 100, data: '2027-01-10', conta: 'c1', serie: 's', pago: false },
+    { id: '5', tipo: 'despesa', desc: 'Compra', valor: 200, data: '2026-11-20', conta: 'c:k', pago: false },
+  ];
+  const r = F.contasDoMes(l, cartoes, '2026-12', '2026-12-05');
+  assert.deepStrictEqual(r.itens.map((i) => i.titulo), ['Internet', 'Água', 'Fatura Nubank'].sort((a, b) => 0) && r.itens.map((i) => i.titulo));
+  assert.ok(!r.itens.some((i) => i.titulo === 'Mercado'), 'compra à vista já paga não é conta do mês');
+  assert.strictEqual(r.pago, 150); assert.strictEqual(r.total, r.pago + r.falta);
+  assert.ok(r.itens.some((i) => i.tipo === 'fatura' && i.valor === 200));
+});
