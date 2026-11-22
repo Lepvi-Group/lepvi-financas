@@ -257,7 +257,7 @@ function enviar_email(string $para, string $assunto, string $html): bool
 {
     $c = cfg();
     if ($c['email_modo'] !== 'enviar') {
-        $dir = dirname(__DIR__) . '/.dev';
+        $dir = (string) cfg()['estado'];
         if (!is_dir($dir)) mkdir($dir, 0700, true);
         file_put_contents($dir . '/emails.log', "=== " . date('c') . " PARA: $para | $assunto\n$html\n\n", FILE_APPEND);
         return true;

@@ -8,6 +8,22 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = (s, r = document) => r.querySelector(s);
 
+  /* Antes havia dois espaços (Pessoal e Empresa). Agora é um só: o que já existia em "Empresa" passa para o principal. */
+  function mesclarEmpresa(s) {
+    const e = s.dados.empresa; const p = s.dados.pessoal; if (!e || !p) return;
+    const usaCarteira = e.lancs.some((l) => l.conta === 'carteira' || l.destino === 'carteira');
+    const temAlgo = e.lancs.length || e.cartoes.length || (e.objetivos || []).length || Object.keys(e.orcamentos || {}).length || e.contas.some((c) => c.id !== 'carteira' || c.saldoInicial !== 0);
+    if (!temAlgo) return;
+    e.contas.forEach((c) => {
+      if (c.id === 'carteira' && c.saldoInicial === 0 && !usaCarteira) return;
+      if (p.contas.some((x) => x.id === c.id)) { const novo = uid(); e.lancs.forEach((l) => { if (l.conta === c.id) l.conta = novo; if (l.destino === c.id) l.destino = novo; }); c.id = novo; c.nome = c.nome + ' (empresa)'; }
+      p.contas.push(c);
+    });
+    p.cartoes.push(...e.cartoes); p.lancs.push(...e.lancs); p.objetivos.push(...(e.objetivos || []));
+    Object.entries(e.orcamentos || {}).forEach(([k, v]) => { p.orcamentos[k] = F.arred((p.orcamentos[k] || 0) + v); });
+    ['despesa', 'receita'].forEach((t) => { ((e.cats && e.cats[t]) || []).forEach((c) => { if (!p.cats[t].some((x) => x.nome === c.nome)) p.cats[t].push(c); }); });
+    s.dados.empresa = vazio();
+  }
   function norm(s) {
     s.dados = s.dados || {};
     ['pessoal', 'empresa'].forEach((p) => {
@@ -15,13 +31,14 @@
       d.contas.forEach((c, i) => { c.cor = c.cor || CORES[i % CORES.length]; });
       d.cartoes.forEach((c, i) => { c.cor = c.cor || CORES[(i + 1) % CORES.length]; });
     });
-    s.perfil = s.perfil || 'pessoal';
+    mesclarEmpresa(s);
+    s.perfil = 'pessoal';
     return s;
   }
   const PREFS = 'lepvi-financas-prefs';
   const S = norm({ perfil: 'pessoal', dados: {} }); // dados financeiros: só em memória e no servidor (nunca no aparelho)
   const USER = { logado: false, info: null };
-  try { const p = JSON.parse(localStorage.getItem(PREFS)); if (p) { S.texto = p.texto; S.contraste = p.contraste; S.oculto = p.oculto; } } catch (e) { /* sem preferências guardadas */ }
+  try { const p = JSON.parse(localStorage.getItem(PREFS)); if (p) { S.texto = p.texto; S.escala = p.escala; S.tema = p.tema; S.semMovimento = p.semMovimento; S.destacar = p.destacar; S.contraste = p.contraste; S.oculto = p.oculto; } } catch (e) { /* sem preferências guardadas */ }
   const V = { tela: 'inicio', mes: F.mesDe(F.hojeISO()), filtro: 'todos', sub: 'todos', q: '', plano: 'orc', reltipo: 'despesa', cartao: null, fmes: null, auth: 'entrar', token: '', msg: '' };
   const D = () => S.dados[S.perfil];
 
@@ -43,7 +60,7 @@
   function limparMemoria() { status(''); const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; }
   function sessaoExpirou() { USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua sessão terminou. Entre de novo.'; render(); }
   function salvar() {
-    try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, contraste: S.contraste, oculto: S.oculto })); } catch (e) { /* sem armazenamento */ }
+    try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, escala: S.escala, tema: S.tema, semMovimento: S.semMovimento, destacar: S.destacar, contraste: S.contraste, oculto: S.oculto })); } catch (e) { /* sem armazenamento */ }
     if (!USER.logado) return;
     precisaEnviar = true; status('salvando'); clearTimeout(tmr); tmr = setTimeout(enviarDados, 600);
   }
@@ -394,7 +411,7 @@
       linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' })
       + linha({ tag: 'a', icone: LI.escudo, titulo: 'Política de Privacidade', attrs: 'href="privacidade.html" target="_blank" rel="noopener"' })
       + linha({ tag: 'a', icone: LI.arquivo, titulo: 'Termos de Uso', attrs: 'href="termos.html" target="_blank" rel="noopener"' }))}
-    ${grupo('Zona de risco', linha({ icone: LI.lixo, titulo: `Apagar dados ${S.perfil === 'pessoal' ? 'pessoais' : 'da empresa'}`, desc: 'Remove os lançamentos deste perfil', perigo: true, attrs: 'data-acao="apagar"' }))}
+    ${grupo('Zona de risco', linha({ icone: LI.lixo, titulo: 'Apagar todos os meus lançamentos', desc: 'Remove contas, cartões e lançamentos', perigo: true, attrs: 'data-acao="apagar"' }))}
     <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair da conta</button>
     <p class="mut centro">Lepvi Finanças · um produto Lepvi Group</p>`;
   }
@@ -721,7 +738,7 @@
         mk({ tipo: 'receita', desc: 'Vendas do mês anterior', valor: 14800, data: dia(ant, 10), categoria: 'Vendas', conta: 'pj' }),
         mk({ tipo: 'despesa', desc: 'Fornecedor de peças', valor: 3900, data: dia(ant, 12), categoria: 'Fornecedores', conta: 'pj' }),
       ] };
-    S.guia = true; V.cartao = null; V.fmes = null; salvar(); render(); aviso('Dados de exemplo carregados nos dois perfis.');
+    mesclarEmpresa(S); S.guia = true; V.cartao = null; V.fmes = null; salvar(); render(); aviso('Dados de exemplo carregados.');
   }
 
   /* ---------- ações ---------- */
@@ -794,8 +811,8 @@
       'ir-rel': () => { V.plano = 'rel'; ir('planejar'); },
       'fechar-guia': () => { S.guia = true; salvar(); render(); },
       exportar,
-      exemplo: () => { if (!d.lancs.length || confirm('Isso substitui os dados dos dois perfis. Continuar?')) exemplo(); },
-      apagar: () => { if (confirm('Apagar todos os dados deste perfil? Não dá para desfazer.')) { S.dados[S.perfil] = vazio(); V.cartao = null; salvar(); render(); aviso('Dados apagados.'); } },
+      exemplo: () => { if (!d.lancs.length || confirm('Isso substitui os seus dados atuais pelos de exemplo. Continuar?')) exemplo(); },
+      apagar: () => { if (confirm('Apagar todos os seus lançamentos, contas e cartões? Não dá para desfazer.')) { S.dados[S.perfil] = vazio(); V.cartao = null; salvar(); render(); aviso('Dados apagados.'); } },
       backup: () => baixar(new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' }), `lepvi-financas-${F.hojeISO()}.json`),
     };
     if (acoes[a]) acoes[a]();
@@ -816,18 +833,40 @@
   });
 
   /* ---------- acessibilidade (baixa visão) ---------- */
+  const ESCALAS = [100, 115, 130, 150, 175];
+  const idxEscala = () => (S.escala != null ? S.escala : ({ normal: 0, grande: 2, enorme: 4 }[S.texto] ?? 0));
   function aplicarAcess() {
     const h = document.documentElement;
-    h.dataset.texto = S.texto || 'normal';
+    const base = window.matchMedia && matchMedia('(min-width: 900px)').matches ? 1.2 : 1; // no computador o padrão já vem maior
+    h.style.setProperty('--z', String(Math.round(base * ESCALAS[idxEscala()]) / 100));
+    const tema = S.tema || 'claro';
+    const escuro = tema === 'escuro' || (tema === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    h.dataset.esquema = escuro ? 'escuro' : 'claro';
     const forte = S.contraste != null ? S.contraste : window.matchMedia && matchMedia('(prefers-contrast: more)').matches;
     h.dataset.contraste = forte ? 'alto' : 'normal';
+    h.dataset.movimento = S.semMovimento ? 'reduzido' : 'normal';
+    h.dataset.destacar = S.destacar ? '1' : '0';
+    const mt = document.querySelector('meta[name=theme-color]'); if (mt) mt.content = escuro ? '#111216' : '#F2F1EE';
   }
-  function formAcess() {
-    abrir('Acessibilidade', `${campo('Tamanho do texto', radios('texto', [['normal', 'Normal'], ['grande', 'Grande'], ['enorme', 'Muito grande']], S.texto || 'normal'))}
-      ${troca('contraste', 'Alto contraste (preto, branco e bordas fortes)', document.documentElement.dataset.contraste === 'alto')}
-      ${troca('oculto', 'Ocultar valores na tela', !!S.oculto)}
+  if (window.matchMedia) { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if ((S.tema || 'claro') === 'auto') aplicarAcess(); }); matchMedia('(min-width: 900px)').addEventListener('change', aplicarAcess); }
+  function formAcess(foco) {
+    const sol = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>';
+    const lua = '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>';
+    const tela = '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>';
+    const volta = '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>';
+    const tema = S.tema || 'claro'; const i = idxEscala();
+    abrir('Acessibilidade', `
+      <section><h3 class="a11y-t" id="a11y-tam">Tamanho do texto</h3><div class="a11y-passo" role="group" aria-labelledby="a11y-tam"><button type="button" data-z="-1" aria-label="Diminuir o texto" ${i === 0 ? 'disabled' : ''}>− A</button><output aria-live="polite">${ESCALAS[i]}%</output><button type="button" data-z="1" aria-label="Aumentar o texto" ${i === ESCALAS.length - 1 ? 'disabled' : ''}>A +</button></div></section>
+      <section><h3 class="a11y-t" id="a11y-cor">Cores do app</h3><div class="a11y-temas" role="radiogroup" aria-labelledby="a11y-cor">${[['claro', 'Claro', sol], ['escuro', 'Escuro', lua], ['auto', 'Automático', tela]].map(([k, t, d]) => `<button type="button" role="radio" aria-checked="${tema === k}" data-t="${k}">${svg(d)}${t}</button>`).join('')}</div></section>
+      ${troca('semMovimento', 'Reduzir animações', !!S.semMovimento)}${troca('destacar', 'Destacar links e foco do teclado', !!S.destacar)}${troca('contraste', 'Alto contraste (preto, branco e bordas fortes)', document.documentElement.dataset.contraste === 'alto')}
+      <button type="button" class="a11y-rest" data-a="padrao">${svg(volta)} Restaurar padrão</button>
       <p class="mut">As mudanças valem na hora e ficam salvas neste aparelho. Você também pode ampliar a página com o zoom do navegador.</p>`, null, (f) => {
-      f.addEventListener('change', () => { S.texto = f.texto.value; S.contraste = f.contraste.checked; S.oculto = f.oculto.checked; salvar(); aplicarAcess(); render(); });
+      const aplica = (alvo) => { salvar(); aplicarAcess(); render(); formAcess(alvo); };
+      f.querySelectorAll('[data-z]').forEach((b) => b.addEventListener('click', () => { S.escala = Math.max(0, Math.min(ESCALAS.length - 1, idxEscala() + Number(b.dataset.z))); S.texto = undefined; aplica(`[data-z="${b.dataset.z}"]`); }));
+      f.querySelectorAll('[data-t]').forEach((b) => b.addEventListener('click', () => { S.tema = b.dataset.t; aplica(`[data-t="${b.dataset.t}"]`); }));
+      f.addEventListener('change', () => { S.semMovimento = f.semMovimento.checked; S.destacar = f.destacar.checked; S.contraste = f.contraste.checked; salvar(); aplicarAcess(); render(); });
+      $('[data-a=padrao]', f).addEventListener('click', () => { S.escala = undefined; S.texto = undefined; S.tema = undefined; S.semMovimento = undefined; S.destacar = undefined; S.contraste = undefined; aplica('[data-a=padrao]'); });
+      if (foco) { const el = $(foco, f); if (el && !el.disabled) el.focus(); }
     });
   }
   aplicarAcess();

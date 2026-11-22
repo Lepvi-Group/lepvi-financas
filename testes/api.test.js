@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const RAIZ = path.join(__dirname, '..');
-const DEV = path.join(RAIZ, '.dev');
+const DEV = path.join(require('node:os').tmpdir(), 'lepvi-financas-teste-api');
 const PORTA = 4189;
 const BASE = `http://127.0.0.1:${PORTA}/api/`;
 let servidor;
@@ -29,7 +29,7 @@ const ultimoToken = (param) => { const m = [...emails().matchAll(new RegExp(para
 
 test.before(async () => {
   fs.rmSync(DEV, { recursive: true, force: true });
-  servidor = spawn('php', ['-S', `127.0.0.1:${PORTA}`, '-t', RAIZ], { stdio: 'ignore' });
+  servidor = spawn('php', ['-S', `127.0.0.1:${PORTA}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV } });
   for (let i = 0; i < 40; i++) { try { await fetch(BASE + '?a=eu'); break; } catch (e) { await new Promise((r) => setTimeout(r, 150)); } }
 });
 test.after(() => { servidor.kill(); fs.rmSync(DEV, { recursive: true, force: true }); });
@@ -79,7 +79,7 @@ test('dados: gravam cifrados, versão evita sobrescrever e conflito devolve 409'
   assert.ok(!banco.includes('Nubank') && !banco.includes('"Luz"'), 'dados financeiros precisam estar cifrados no banco');
 });
 test('avisos por e-mail: em breve, hoje e atrasado, sem repetir', async () => {
-  const rodar = (hoje) => execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), `--hoje=${hoje}`]).toString();
+  const rodar = (hoje) => execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), `--hoje=${hoje}`], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV } }).toString();
   assert.match(rodar('2026-11-21'), /enviados: 1/);
   assert.match(rodar('2026-11-21'), /enviados: 0/);
   assert.match(rodar('2026-11-23'), /enviados: 1/);
@@ -89,7 +89,7 @@ test('avisos por e-mail: em breve, hoje e atrasado, sem repetir', async () => {
 });
 test('desligar os avisos para de enviar', async () => {
   assert.strictEqual((await chamar('preferencias', { avisos: false })).json.usuario.avisos, false);
-  assert.match(execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), '--hoje=2026-11-30']).toString(), /enviados: 0/);
+  assert.match(execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), '--hoje=2026-11-30'], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV } }).toString(), /enviados: 0/);
   await chamar('preferencias', { avisos: true });
 });
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
