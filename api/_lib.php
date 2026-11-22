@@ -21,7 +21,9 @@ function cfg(): array
             $c = [
                 'db_dsn' => 'sqlite:' . $estado . '/financas.sqlite',
                 'segredo' => trim((string) @file_get_contents($arqSegredo)),
-                'site_url' => 'https://' . $m[2],
+                // O app responde em mais de um endereço; cada pessoa usa o que abriu. Rotinas sem navegador (avisos por e-mail) usam o principal.
+                'hosts' => array_values(array_unique([strtolower($m[2]), 'financas.lepvi.com.br'])),
+                'site_url' => 'https://' . (in_array(strtolower($_SERVER['HTTP_HOST'] ?? ''), [strtolower($m[2]), 'financas.lepvi.com.br'], true) ? strtolower($_SERVER['HTTP_HOST']) : 'financas.lepvi.com.br'),
                 'email_modo' => 'enviar',
                 'cookie_seguro' => true,
                 'estado' => $estado,
@@ -102,8 +104,8 @@ function exigir_origem(): void
     if (($_SERVER['HTTP_X_LEPVI'] ?? '') !== 'financas') erro('Pedido não permitido.', 403);
     $origem = $_SERVER['HTTP_ORIGIN'] ?? '';
     if ($origem !== '') {
-        $esperado = parse_url(cfg()['site_url'], PHP_URL_HOST);
-        if (parse_url($origem, PHP_URL_HOST) !== $esperado) erro('Origem não permitida.', 403);
+        $esperados = cfg()['hosts'] ?? [parse_url(cfg()['site_url'], PHP_URL_HOST)];
+        if (!in_array(parse_url($origem, PHP_URL_HOST), $esperados, true)) erro('Origem não permitida.', 403);
     }
 }
 function corpo(int $max = 2000000): array

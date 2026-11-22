@@ -3,7 +3,7 @@
   const F = window.Fin;
   const CHAVE = 'lepvi-financas-v1';
   const CORES = ['#2D4BFF', '#8A3DFF', '#C04DFF', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#0D0D0F'];
-  const vazio = () => ({ contas: [{ id: 'carteira', nome: 'Carteira', saldoInicial: 0, cor: '#10B981' }], cartoes: [], lancs: [], orcamentos: {}, objetivos: [] });
+  const vazio = () => ({ cats: { despesa: [], receita: [] }, contas: [{ id: 'carteira', nome: 'Carteira', saldoInicial: 0, cor: '#10B981' }], cartoes: [], lancs: [], orcamentos: {}, objetivos: [] });
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = (s, r = document) => r.querySelector(s);
@@ -176,6 +176,8 @@
     planejar: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   };
 
+  const catInfo = (n, t) => { const d = D(); const c = [...((d.cats && d.cats.despesa) || []), ...((d.cats && d.cats.receita) || [])].find((x) => x.nome === n); return c ? { nome: c.nome, icone: c.icone, cor: c.cor } : F.catInfo(n, t); };
+  const catsDe = (tipo) => F.CATEGORIAS[tipo].concat((D().cats && D().cats[tipo]) || []);
   const nomeConta = (id) => {
     if (!id) return '';
     if (F.ehCartao({ conta: id })) { const c = D().cartoes.find((x) => x.id === id.slice(2)); return c ? c.nome : 'Cartão'; }
@@ -194,13 +196,13 @@
       <div class="legenda">${entradas.slice(0, 6).map(([n, v, cor]) => `<div><i style="background:${cor}"></i><span>${esc(n)}</span><b class="num">${Math.round((v / total) * 100)}% · ${m(v)}</b></div>`).join('')}</div></div>`;
   }
   const entradasCat = (porCat, tipo) => {
-    const lista = Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([n, v]) => [n, v, F.catInfo(n, tipo).cor]);
+    const lista = Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([n, v]) => [n, v, catInfo(n, tipo).cor]);
     if (lista.length > 6) { const resto = lista.slice(5).reduce((s, e) => s + e[1], 0); return lista.slice(0, 5).concat([['Outras', resto, '#94A3B8']]); }
     return lista;
   };
   function itemLanc(l) {
     const transf = l.tipo === 'transf';
-    const info = transf ? { icone: '🔁', cor: '#2D4BFF' } : F.catInfo(l.categoria, l.tipo);
+    const info = transf ? { icone: '🔁', cor: '#2D4BFF' } : catInfo(l.categoria, l.tipo);
     const cartao = F.ehCartao(l);
     const sub = transf ? `${esc(nomeConta(l.conta))} → ${esc(nomeConta(l.destino))}` : `${esc(l.categoria)} · ${cartao ? '💳 ' : ''}${esc(nomeConta(l.conta))}${(l.tags || []).map((t) => ` <span class="tag">#${esc(t)}</span>`).join('')}`;
     const sinal = l.tipo === 'receita' ? '+ ' : transf ? '' : '− ';
@@ -296,7 +298,7 @@
   }
 
   function rowOrc(o) {
-    const info = F.catInfo(o.categoria, 'despesa'); const cls = o.pct >= 100 ? 'estourou' : o.pct >= 80 ? 'alerta' : 'ok';
+    const info = catInfo(o.categoria, 'despesa'); const cls = o.pct >= 100 ? 'estourou' : o.pct >= 80 ? 'alerta' : 'ok';
     return `<li><button class="item" type="button" data-acao="editar-orc" data-id="${esc(o.categoria)}"><span class="ic" style="background:${info.cor}22">${info.icone}</span><span class="txt"><strong>${esc(o.categoria)}</strong><span class="num">${m(o.gasto)} de ${m(o.limite)}</span><div class="barra ${cls}" style="margin-top:6px"><i style="width:${Math.min(100, o.pct)}%"></i></div></span><span class="val num ${o.restante < 0 ? 'neg' : ''}">${o.pct}%<small>${o.restante >= 0 ? 'faltam ' + m(o.restante) : 'acima ' + m(-o.restante)}</small></span></button></li>`;
   }
   function telaPlanejar() {
@@ -379,6 +381,7 @@
       + linha({ icone: LI.copia, titulo: 'Cópia de segurança', desc: 'Baixar um arquivo com seus lançamentos', attrs: 'data-acao="backup"' })
       + linha({ tag: 'label', icone: LI.arquivo, titulo: 'Restaurar uma cópia', desc: 'Voltar os dados de um arquivo', dentro: '<input id="rest" type="file" accept=".json" hidden>' })
       + linha({ icone: LI.texto, titulo: 'Personalizar tela inicial', desc: 'Escolha o que aparece no Início', attrs: 'data-acao="personalizar"' })
+      + linha({ icone: LI.mais, titulo: 'Categorias personalizadas', desc: 'Crie as suas, com ícone e cor', attrs: 'data-acao="categorias"' })
       + linha({ icone: LI.brilho, titulo: 'Carregar dados de exemplo', desc: 'Para conhecer o app preenchido', attrs: 'data-acao="exemplo"' }))}
     ${grupo('Sobre',
       linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' })
@@ -479,22 +482,26 @@
     const opcContas = tipo === 'despesa' ? (modo === 'cartao' ? cartoes : contas.concat(cartoes)) : contas;
     const contaSel = base.conta || (modo === 'cartao' ? cartoes[0][0] : contas[0][0]);
     const titulo = { despesa: 'Despesa', receita: 'Receita', transf: 'Transferência' }[tipo];
-    const catsHtml = tipo === 'transf' ? '' : campo('Categoria', radios('categoria', F.CATEGORIAS[tipo].filter((c) => c.nome !== 'Cartão' || base.categoria === 'Cartão').map((c) => [c.nome, c.nome, c.icone]), base.categoria || F.CATEGORIAS[tipo][0].nome, 'cats'));
+    const catsHtml = tipo === 'transf' ? '' : campo('Categoria', radios('categoria', catsDe(tipo).filter((c) => c.nome !== 'Cartão' || base.categoria === 'Cartão').map((c) => [c.nome, c.nome, c.icone]), base.categoria || F.CATEGORIAS[tipo][0].nome, 'cats').replace(/<\/div>$/, '<button type="button" class="nova-cat" data-nova-cat><em>＋</em>Nova categoria</button></div>'));
     const contaHtml = tipo === 'transf'
       ? `<div class="dupla">${campo('Sai de', sele('conta', contas, base.conta))}${campo('Entra em', sele('destino', contas, base.destino || (contas[1] || contas[0])[0]))}</div>`
       : campo(tipo === 'receita' ? 'Receber em' : 'Pagar com', radios('conta', opcContas, contaSel));
     const rotPago = tipo === 'receita' ? 'Já recebi' : tipo === 'transf' ? 'Já foi feita' : 'Já paguei';
-    abrir((novo ? 'Nova ' : 'Editar ') + titulo.toLowerCase(), `
-      <div class="valor-box ${tipo}"><label for="v">Valor</label><input id="v" name="valor" inputmode="decimal" required autocomplete="off" placeholder="0,00" value="${val2(base.valor)}"></div>
+    const abas = novo ? `<div class="abas3" role="group" aria-label="Tipo de lançamento">${[['despesa', 'Despesa'], ['receita', 'Receita'], ['transf', 'Transferência']].map(([k, t]) => `<button type="button" data-aba="${k}" aria-pressed="${tipo === k}" class="${k}">${t}</button>`).join('')}</div>` : '';
+    const extras = tipo === 'transf' ? '' : `<details class="mais-campos"${base.tags && base.tags.length || base.nota || base.ignorar ? ' open' : ''}><summary>Mais opções</summary><div class="mais-corpo">
+        ${novo ? `<div class="dupla">${campo('Repetir', sele('rep', [['nao', 'Não repete'], ['parcelado', 'Parcelado'], ['fixo', 'Fixo todo mês']], 'nao'))}<div id="repn" hidden>${campo('Quantas vezes', '<input name="n" type="number" min="2" max="60" value="2">')}</div></div>` : ''}
+        ${tipo === 'despesa' ? troca('boleto', 'É um boleto', !!base.boleto) : ''}
+        ${campo('Etiquetas', `<input name="tags" maxlength="80" placeholder="Ex.: viagem, casal, projeto" value="${esc((base.tags || []).join(', '))}">`)}${troca('ignorar', 'Não contar nos relatórios', !!base.ignorar)}
+        ${campo('Nota', `<textarea name="nota" maxlength="300">${esc(base.nota || '')}</textarea>`)}</div></details>`;
+    abrir((novo ? 'Novo lançamento' : 'Editar ' + titulo.toLowerCase()), `
+      ${abas}
+      <div class="valor-box ${tipo}"><label for="v">Valor</label><div class="valor-lin"><span aria-hidden="true">R$</span><input id="v" name="valor" inputmode="decimal" required autocomplete="off" placeholder="0,00" value="${val2(base.valor)}"></div></div>
       ${tipo === 'transf' ? '' : campo('Descrição', `<input name="desc" required maxlength="80" value="${esc(base.desc || '')}" placeholder="Ex.: Mercado, Aluguel, Venda de peças">`)}
-      <div class="campo"><span>Data</span><div class="dupla" style="grid-template-columns:auto auto 1fr"><button class="btn sec mini" type="button" data-data="${F.hojeISO()}">Hoje</button><button class="btn sec mini" type="button" data-data="${ontem()}">Ontem</button><input name="data" type="date" required value="${base.data || F.hojeISO()}"></div></div>
+      <div class="campo"><span>Data</span><div class="data-lin"><button class="btn sec mini" type="button" data-data="${F.hojeISO()}">Hoje</button><button class="btn sec mini" type="button" data-data="${ontem()}">Ontem</button><input name="data" type="date" required value="${base.data || F.hojeISO()}"></div></div>
       ${F.ehCartao({ conta: contaSel }) && tipo === 'despesa' ? '' : troca('pago', rotPago, novo ? true : !!base.pago)}
       ${catsHtml}${contaHtml}
-      ${novo && tipo !== 'transf' ? `<div class="dupla">${campo('Repetir', sele('rep', [['nao', 'Não repete'], ['parcelado', 'Parcelado'], ['fixo', 'Fixo todo mês']], 'nao'))}<div id="repn" hidden>${campo('Quantas vezes', '<input name="n" type="number" min="2" max="60" value="2">')}</div></div>` : ''}
-      ${tipo === 'despesa' ? troca('boleto', 'É um boleto', !!base.boleto) : ''}
-      ${tipo === 'transf' ? '' : campo('Etiquetas (opcional)', `<input name="tags" maxlength="80" placeholder="Ex.: viagem, casal, projeto" value="${esc((base.tags || []).join(', '))}">`) + troca('ignorar', 'Não contar nos relatórios', !!base.ignorar)}
-      ${tipo === 'transf' ? '' : campo('Nota (opcional)', `<textarea name="nota" maxlength="300">${esc(base.nota || '')}</textarea>`)}
-      <div class="botoes">${novo ? '' : '<button class="btn perigo" type="button" id="exc">Excluir</button>'}<button class="btn" type="submit">Salvar</button></div>`,
+      ${extras}
+      <div class="botoes rodape-form">${novo ? '' : '<button class="btn perigo" type="button" id="exc">Excluir</button>'}<button class="btn" type="submit">Salvar lançamento</button></div>`,
     (fd) => {
       const valor = F.arred(F.numeroBR(fd.get('valor')));
       if (!(valor > 0)) { aviso('Informe um valor maior que zero.'); $('#v').focus(); return false; }
@@ -515,6 +522,9 @@
       } else Object.assign(d.lancs.find((x) => x.id === base.id), reg, { valor });
       V.mes = F.mesDe(reg.data); salvar(); render(); aviso('Lançamento salvo.');
     }, (f) => {
+      const lerForm = () => ({ valor: f.valor.value, desc: f.desc ? f.desc.value : '', data: f.data.value, conta: base.conta && base.conta.startsWith('c:') ? base.conta : undefined });
+      f.querySelectorAll('[data-aba]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.aba !== tipo) formLanc(lerForm(), b.dataset.aba); }));
+      const nc = $('[data-nova-cat]', f); if (nc) nc.addEventListener('click', () => formCategoria(tipo, (nome) => formLanc({ ...lerForm(), categoria: nome }, modo)));
       const exc = $('#exc', f); if (exc) exc.onclick = () => { d.lancs = d.lancs.filter((x) => x.id !== base.id); salvar(); dlg.close(); render(); aviso('Lançamento excluído.'); };
       f.querySelectorAll('[data-data]').forEach((b) => b.addEventListener('click', () => { f.data.value = b.dataset.data; }));
       if (f.rep) f.rep.addEventListener('change', () => { $('#repn', f).hidden = f.rep.value === 'nao'; });
@@ -523,6 +533,34 @@
     });
   }
 
+  const EMOJIS = ['🍔', '☕', '🐶', '🧴', '🎁', '🏋️', '✈️', '🚌', '⛽', '📱', '💡', '🧾', '👶', '🏥', '🎮', '📚', '🛠️', '🌱', '🎵', '🧹', '💼', '🏠', '🚗', '💰'];
+  function formCategoria(tipo, depois) {
+    const d = D(); d.cats = d.cats || { despesa: [], receita: [] };
+    abrir(`Nova categoria de ${tipo === 'receita' ? 'receita' : 'despesa'}`, `${campo('Nome', '<input name="nome" required maxlength="24" placeholder="Ex.: Pet, Academia, Presentes">')}
+      ${campo('Ícone', radios('icone', EMOJIS.map((e) => [e, '', e]), EMOJIS[0], 'emojis'))}
+      ${campo('Cor', radios('cor', CORES.map((x) => [x, '']), CORES[0], 'cores'))}
+      <div class="botoes rodape-form"><button class="btn sec" type="button" id="cat-voltar">Voltar</button><button class="btn" type="submit">Salvar categoria</button></div>`,
+    (fd) => {
+      const nome = fd.get('nome').trim();
+      if (!nome) { aviso('Dê um nome para a categoria.'); return false; }
+      if (catsDe(tipo).some((c) => c.nome.toLowerCase() === nome.toLowerCase())) { aviso('Você já tem uma categoria com esse nome.'); return false; }
+      d.cats[tipo].push({ nome, icone: fd.get('icone'), cor: fd.get('cor') });
+      salvar(); aviso('Categoria criada.');
+      if (depois) { depois(nome); return false; }
+      render();
+    }, (f) => {
+      f.querySelectorAll('.cores span').forEach((x) => { x.style.background = x.previousElementSibling.value; });
+      $('#cat-voltar', f).onclick = () => { if (depois) depois(null); else dlg.close(); };
+    });
+  }
+  function formCategorias() {
+    const d = D(); d.cats = d.cats || { despesa: [], receita: [] };
+    const lista = (tipo, t) => `<h3 class="grupo" style="margin-top:6px">${t}</h3>${d.cats[tipo].length ? `<div class="card linhas">${d.cats[tipo].map((c, i) => `<div class="linha"><span class="l-ic" style="background:${c.cor}22">${esc(c.icone)}</span><span class="l-t"><b>${esc(c.nome)}</b></span><button class="link" type="button" data-del-cat="${tipo}|${i}">Excluir</button></div>`).join('')}</div>` : '<p class="mut">Nenhuma criada ainda.</p>'}<button class="btn sec" type="button" data-add-cat="${tipo}">+ Nova categoria de ${t.toLowerCase()}</button>`;
+    abrir('Categorias personalizadas', `<p class="mut">As categorias padrão ficam sempre disponíveis. Excluir uma sua não apaga os lançamentos que já usam o nome dela.</p>${lista('despesa', 'Despesas')}${lista('receita', 'Receitas')}`, null, (f) => {
+      f.querySelectorAll('[data-del-cat]').forEach((b) => b.addEventListener('click', () => { const [t, i] = b.dataset.delCat.split('|'); d.cats[t].splice(+i, 1); salvar(); formCategorias(); }));
+      f.querySelectorAll('[data-add-cat]').forEach((b) => b.addEventListener('click', () => formCategoria(b.dataset.addCat, () => formCategorias())));
+    });
+  }
   function formCartao(c = {}) {
     const novo = !c.id;
     abrir(novo ? 'Novo cartão' : 'Editar cartão', `${campo('Nome do cartão', `<input name="nome" required maxlength="30" value="${esc(c.nome || '')}" placeholder="Ex.: Nubank, Itaú Empresa">`)}
@@ -580,7 +618,7 @@
   }
 
   function formOrc(cat) {
-    const d = D(); const lista = F.CATEGORIAS.despesa.filter((c) => c.nome !== 'Cartão');
+    const d = D(); const lista = catsDe('despesa').filter((c) => c.nome !== 'Cartão');
     abrir('Limite por categoria', `${campo('Categoria', radios('categoria', lista.map((c) => [c.nome, c.nome, c.icone]), cat || lista[0].nome, 'cats'))}
       ${campo('Limite mensal (R$)', `<input name="limite" required inputmode="decimal" value="${val2(cat ? d.orcamentos[cat] : '')}" placeholder="0,00">`)}
       <div class="botoes">${cat ? '<button class="btn perigo" type="button" id="exc">Remover</button>' : ''}<button class="btn" type="submit">Salvar</button></div>`,
@@ -709,6 +747,7 @@
       'remover-foto': async () => { try { const r = await api('preferencias', { foto: null }); USER.info = r.usuario; render(); aviso('Foto removida.'); } catch (e) { aviso(e.message); } },
       senha: () => formSenha(),
       personalizar: () => formPersonalizar(),
+      categorias: () => formCategorias(),
       oauth: () => { window.location.href = 'api/oauth.php?a=iniciar&p=' + encodeURIComponent(t.dataset.p); },
       'excluir-conta': () => formExcluirConta(),
       'auth-entrar': () => { V.auth = 'entrar'; V.msg = ''; render(); },
