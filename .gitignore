@@ -2,3 +2,4 @@
 node_modules
 .dev/
 api/_config.php
+api/diag.php

@@ -510,3 +510,11 @@ dialog form { padding-bottom: 0; }
 .opcoes.emojis em { font-style: normal; font-size: 24px; }
 html[data-contraste="alto"] .abas3 { background: #fff; border: 2px solid #000; } html[data-contraste="alto"] .abas3 button[aria-pressed="true"] { background: #000; color: #fff; }
 html[data-contraste="alto"] .rodape-form { background: #fff; }
+
+.status-salvo { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--suave); padding: 0 6px; }
+.status-salvo i { width: 12px; height: 12px; border-radius: 50%; background: #10B981; display: inline-block; }
+.status-salvo[data-estado="salvando"] i { background: #F59E0B; animation: pulsa 1.2s infinite; }
+.status-salvo[data-estado="erro"] i, .status-salvo[data-estado="conflito"] i { background: #EF4444; }
+.status-salvo[data-estado="erro"], .status-salvo[data-estado="conflito"] { color: var(--vermelho); }
+.status-salvo[hidden], body.deslogado .status-salvo { display: none; }
+@media (max-width: 640px) { .status-salvo b { display: none; } .topo .status-salvo { order: 2; } }

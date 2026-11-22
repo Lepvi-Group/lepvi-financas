@@ -34,33 +34,40 @@
     if (!r.ok) { const x = new Error(j.erro || 'Algo deu errado. Tente de novo.'); x.status = r.status; x.conflito = !!j.conflito; if (r.status === 401 && USER.logado) sessaoExpirou(); throw x; }
     return j;
   }
+  function status(estado) {
+    const el = document.getElementById('status-salvo'); if (!el) return;
+    const t = { ok: 'Salvo', salvando: 'Salvando…', erro: 'Não salvou', conflito: 'Atualizado de outro aparelho', '': '' }[estado] || '';
+    el.dataset.estado = estado; el.querySelector('b').textContent = t; el.hidden = !t; el.title = t;
+  }
   let versaoServidor = 0; let enviando = false; let precisaEnviar = false; let tmr = null;
-  function limparMemoria() { const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; }
+  function limparMemoria() { status(''); const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; }
   function sessaoExpirou() { USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua sessão terminou. Entre de novo.'; render(); }
   function salvar() {
     try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, contraste: S.contraste, oculto: S.oculto })); } catch (e) { /* sem armazenamento */ }
     if (!USER.logado) return;
-    precisaEnviar = true; clearTimeout(tmr); tmr = setTimeout(enviarDados, 600);
+    precisaEnviar = true; status('salvando'); clearTimeout(tmr); tmr = setTimeout(enviarDados, 600);
   }
   async function enviarDados() {
     if (enviando || !USER.logado) return;
     enviando = true;
     while (precisaEnviar && USER.logado) {
       precisaEnviar = false;
-      try { versaoServidor = (await api('dados', { versao: versaoServidor, conteudo: { perfil: S.perfil, guia: !!S.guia, dados: S.dados } })).versao; }
+      try { versaoServidor = (await api('dados', { versao: versaoServidor, conteudo: { perfil: S.perfil, guia: !!S.guia, inicio: S.inicio || {}, dados: S.dados } })).versao; if (!precisaEnviar) status('ok'); }
       catch (e) {
-        if (e.conflito) { await carregarDados(); render(); aviso('Seus dados foram alterados em outro aparelho. Mostramos a versão mais recente.'); break; }
-        if (e.rede) { precisaEnviar = true; aviso('Sem conexão. Vamos tentar salvar de novo.'); await new Promise((ok) => setTimeout(ok, 5000)); continue; }
-        aviso(e.message); break;
+        if (e.conflito) { await carregarDados(); render(); status('conflito'); aviso('Seus dados foram alterados em outra janela ou aparelho. Mostramos a versão mais recente: confira se o seu último lançamento está aí.'); break; }
+        if (e.rede) { precisaEnviar = true; status('erro'); aviso('Sem conexão. Vamos tentar salvar de novo.'); await new Promise((ok) => setTimeout(ok, 5000)); continue; }
+        status('erro'); aviso('Não consegui salvar: ' + e.message); break;
       }
     }
     enviando = false;
   }
   window.addEventListener('online', () => { if (precisaEnviar) enviarDados(); });
+  window.addEventListener('beforeunload', (ev) => { if (USER.logado && (precisaEnviar || enviando)) { ev.preventDefault(); ev.returnValue = ''; } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && precisaEnviar && USER.logado) { clearTimeout(tmr); enviarDados(); } });
   async function carregarDados() {
     const r = await api('dados');
     versaoServidor = r.versao;
-    if (r.conteudo && r.conteudo.dados) { const n = norm({ perfil: r.conteudo.perfil, dados: r.conteudo.dados }); S.perfil = n.perfil; S.dados = n.dados; S.guia = !!r.conteudo.guia; return; }
+    if (r.conteudo && r.conteudo.dados) { const n = norm({ perfil: r.conteudo.perfil, dados: r.conteudo.dados }); S.perfil = n.perfil; S.dados = n.dados; S.guia = !!r.conteudo.guia; S.inicio = r.conteudo.inicio || S.inicio || {}; status('ok'); return; }
     limparMemoria();
     try { // dados da versão antiga do app, que ficavam só neste aparelho: sobem para a conta
       const antigo = JSON.parse(localStorage.getItem(CHAVE));
