@@ -51,10 +51,13 @@
     if (!r.ok) { const x = new Error(j.erro || 'Algo deu errado. Tente de novo.'); x.status = r.status; x.conflito = !!j.conflito; if (r.status === 401 && USER.logado) sessaoExpirou(); throw x; }
     return j;
   }
+  /* "Salvo" aparece por 2 segundos depois de cada alteração e some; problemas (não salvou, conflito) ficam até resolver */
   function status(estado) {
     const el = document.getElementById('status-salvo'); if (!el) return;
-    const t = { erro: 'Não salvou', conflito: 'Atualizado de outro aparelho' }[estado] || ''; // "Salvo" e "Salvando" ficam escondidos: só avisa quando há problema
+    clearTimeout(status.t);
+    const t = { ok: 'Salvo', erro: 'Não salvou', conflito: 'Atualizado de outro aparelho' }[estado] || '';
     el.dataset.estado = estado; el.querySelector('b').textContent = t; el.hidden = !t; el.title = t;
+    if (estado === 'ok') status.t = setTimeout(() => { el.hidden = true; }, 2000);
   }
   let versaoServidor = 0; let enviando = false; let precisaEnviar = false; let tmr = null;
   function limparMemoria() { status(''); const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; }
