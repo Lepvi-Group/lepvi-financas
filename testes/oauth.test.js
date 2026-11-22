@@ -39,3 +39,12 @@ test('recusa resposta sem e-mail ou sem identificador', () => {
   assert.strictEqual(r.sem_email, 'sem-email');
   assert.strictEqual(r.sem_sub, 'dados');
 });
+
+test('Cloudflare Turnstile: sem chaves fica desligado; com chaves só passa token válido; se a Cloudflare cair, não trava ninguém', () => {
+  assert.strictEqual(r.ts_sem_chaves, true);
+  assert.strictEqual(r.ts_config, 'sk');
+  assert.strictEqual(r.ts_token_bom, true);
+  assert.strictEqual(r.ts_token_ruim, false);
+  assert.strictEqual(r.ts_sem_token, false);
+  assert.strictEqual(r.ts_cloudflare_fora_do_ar, true);
+});

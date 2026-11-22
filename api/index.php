@@ -8,6 +8,7 @@ $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $link = fn(string $q) => rtrim(cfg()['site_url'], '/') . '/?' . $q;
 
 try {
+    if ($metodo === 'GET' && $acao === 'config') resp(['turnstile' => turnstile_config()['site_key'] ?? null]);
     // Entrada com Google/Microsoft: dados da pessoa que ainda precisa aceitar a Política e os Termos
     if ($metodo === 'GET' && $acao === 'oauth_pendente') {
         $pend = ler_assinado((string) ($_COOKIE['lf_novo'] ?? ''));
@@ -63,6 +64,7 @@ try {
             resp(['usuario' => usuario_publico($novo)]);
         }
         case 'cadastro': {
+            exigir_turnstile($b);
             $ip = 'cad:' . ip_hash();
             if (limite_estourou($ip, 10, 3600)) erro('Muitas tentativas. Tente de novo em alguns minutos.', 429);
             registrar_tentativa($ip);
@@ -97,6 +99,7 @@ try {
             resp(['ok' => true]);
         }
         case 'entrar': {
+            exigir_turnstile($b);
             $email = mb_strtolower(trim((string) ($b['email'] ?? '')));
             $senha = (string) ($b['senha'] ?? '');
             $kE = 'login:e:' . hash('sha256', $email); $kI = 'login:i:' . ip_hash();
@@ -120,6 +123,7 @@ try {
             resp(['ok' => true]);
         }
         case 'esqueci': {
+            exigir_turnstile($b);
             $email = mb_strtolower(trim((string) ($b['email'] ?? '')));
             $kI = 'esq:i:' . ip_hash(); $kE = 'esq:e:' . hash('sha256', $email);
             if (!limite_estourou($kI, 8, 3600) && !limite_estourou($kE, 3, 3600) && filter_var($email, FILTER_VALIDATE_EMAIL)) {

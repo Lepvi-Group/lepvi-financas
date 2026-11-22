@@ -224,6 +224,35 @@ function decifrar(string $b64): ?string
     return $r === false ? null : $r;
 }
 
+/* ---------- Cloudflare Turnstile (barra robôs no cadastro, entrada e recuperação de senha) ---------- */
+/* As chaves ficam em financas-dados/turnstile.json (fora da pasta pública): {"site_key":"...","secret":"..."}. Sem o arquivo, a proteção fica desligada. */
+function turnstile_config(): ?array
+{
+    $arq = rtrim((string) cfg()['estado'], '/') . '/turnstile.json';
+    $j = is_file($arq) ? json_decode((string) file_get_contents($arq), true) : null;
+    return is_array($j) && !empty($j['site_key']) && !empty($j['secret']) ? ['site_key' => (string) $j['site_key'], 'secret' => (string) $j['secret']] : null;
+}
+function turnstile_verificar(?string $token, ?string $ip = null): bool
+{
+    $c = turnstile_config();
+    if (!$c) return true;
+    if (!$token || strlen($token) > 2100) return false;
+    $campos = ['secret' => $c['secret'], 'response' => $token] + ($ip ? ['remoteip' => $ip] : []);
+    if (isset($GLOBALS['TURNSTILE_HTTP'])) { $r = ($GLOBALS['TURNSTILE_HTTP'])($campos); }
+    else {
+        $ch = curl_init('https://challenges.cloudflare.com/turnstile/v0/siteverify');
+        curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($campos), CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8]);
+        $bruto = curl_exec($ch); curl_close($ch);
+        $r = is_string($bruto) ? json_decode($bruto, true) : null;
+    }
+    if (!is_array($r)) return true; // a Cloudflare não respondeu: não trava quem é gente por causa de uma falha deles
+    return ($r['success'] ?? false) === true;
+}
+function exigir_turnstile(array $b): void
+{
+    if (!turnstile_verificar(isset($b['turnstile']) ? (string) $b['turnstile'] : null, $_SERVER['REMOTE_ADDR'] ?? null)) erro('Confirme que você não é um robô e tente de novo.', 400);
+}
+
 /* ---------- e-mail ---------- */
 function email_html(string $titulo, string $corpo, string $botaoTexto = '', string $botaoLink = '', string $pre = ''): string
 {

@@ -93,9 +93,21 @@
   }
 
   /* ---------- entrar, criar conta, esqueci a senha ---------- */
+  let tsId = null;
+  async function carregarTurnstile() {
+    try { V.ts = (await api('config')).turnstile || null; } catch (e) { V.ts = null; }
+    if (V.ts && !window.turnstile && !document.getElementById('ts-script')) {
+      const sc = document.createElement('script'); sc.id = 'ts-script'; sc.async = true; sc.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'; sc.onload = montarTurnstile; document.head.appendChild(sc);
+    }
+  }
+  function montarTurnstile() {
+    const box = document.getElementById('ts-box'); if (!box || !V.ts || !window.turnstile) return;
+    box.innerHTML = ''; V.tsTok = '';
+    tsId = window.turnstile.render(box, { sitekey: V.ts, language: 'pt-br', theme: document.documentElement.dataset.esquema === 'escuro' ? 'dark' : 'light', callback: (t) => { V.tsTok = t; }, 'expired-callback': () => { V.tsTok = ''; }, 'error-callback': () => { V.tsTok = ''; } });
+  }
   function telaAuth() {
     const modo = V.auth; const msg = V.msg ? `<p class="${V.msgErro ? 'erro' : 'ok-msg'}" role="${V.msgErro ? 'alert' : 'status'}">${esc(V.msg)}</p>` : '';
-    const erro = '<p class="erro" role="alert" id="auth-erro" tabindex="-1" hidden></p>';
+    const erro = `${V.ts ? '<div id="ts-box" class="ts-box"></div>' : ''}<p class="erro" role="alert" id="auth-erro" tabindex="-1" hidden></p>`;
     const mostrar = '';
     const link = (a, t) => `<button class="link" type="button" data-acao="${a}">${t}</button>`;
     const gIc = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#4285F4" d="M22.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.9a5 5 0 0 1-2.2 3.3v2.7h3.5c2.1-1.9 3.4-4.7 3.4-7.9z"/><path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.6l-3.5-2.7c-1 .6-2.2 1-3.7 1-2.8 0-5.2-1.9-6-4.5H2.4v2.8A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M6 14.2a6.6 6.6 0 0 1 0-4.4V7H2.4a11 11 0 0 0 0 10z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1A11 11 0 0 0 2.4 7L6 9.8c.8-2.6 3.2-4.4 6-4.4z"/></svg>';
@@ -153,14 +165,15 @@
   async function enviarAuth(f) {
     const btn = f.querySelector('button[type=submit]'); const er = $('#auth-erro'); er.hidden = true;
     if (!f.checkValidity()) { er.textContent = 'Preencha todos os campos corretamente' + (f.aceite && !f.aceite.checked ? ' e aceite a Política de Privacidade e os Termos.' : '.'); er.hidden = false; er.focus(); return; }
+    if (V.ts && ['entrar', 'cadastro', 'esqueci'].includes(V.auth) && !V.tsTok) { er.textContent = 'Confirme que você não é um robô (marque a caixa acima do botão).'; er.hidden = false; er.focus(); return; }
     const v = Object.fromEntries(new FormData(f)); const rotulo = btn.textContent; btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = V.auth === 'entrar' ? 'Entrando…' : 'Enviando…';
     try {
-      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha }); USER.logado = true; USER.info = r.usuario; await carregarDados(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
-      else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: !!v.aceite }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
+      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha, turnstile: V.tsTok }); USER.logado = true; USER.info = r.usuario; await carregarDados(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
+      else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: !!v.aceite, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: !!v.aceite }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; await carregarDados(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
-      else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
+      else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'redefinir') { await api('redefinir', { token: V.token, senha: v.senha }); V.auth = 'entrar'; V.token = ''; V.msg = 'Senha alterada. Entre com a nova senha.'; render(); }
-    } catch (e) { er.textContent = e.message; er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; }
+    } catch (e) { er.textContent = e.message; er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; if (window.turnstile && tsId !== null) { window.turnstile.reset(tsId); V.tsTok = ''; } }
   }
   document.addEventListener('submit', (ev) => {
     if (ev.target.id === 'auth') { ev.preventDefault(); enviarAuth(ev.target); }
@@ -179,6 +192,7 @@
     if (tv) { try { await api('verificar', { token: tv }); V.msg = 'E-mail confirmado! Agora é só entrar.'; } catch (e) { V.msg = e.message; } }
     if (tr) { V.auth = 'redefinir'; V.token = tr; }
     try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ }
+    if (!USER.logado) await carregarTurnstile();
     render();
   }
 
@@ -247,7 +261,7 @@
     const r = F.resumoMes(d.lancs, V.mes);
     const feito = [d.contas.some((c) => c.saldoInicial !== 0), d.cartoes.length > 0, d.lancs.length > 0];
     const guia = !S.guia && !feito.every(Boolean) ? `<section class="card"><h2 class="secao">Vamos organizar suas finanças 🚀</h2><p class="mut">Três passos e o painel já funciona para você.</p><div class="passos">
-      ${[['Cadastre sua conta e o saldo de hoje', 'editar-conta-1'], ['Cadastre seus cartões de crédito', 'novo-cartao'], ['Lance sua primeira despesa ou receita', 'novo']].map((p, i) => `<button class="passo ${feito[i] ? 'feito' : ''}" type="button" data-acao="${p[1]}" data-id="${d.contas[0].id}"><span class="n">${feito[i] ? '✓' : i + 1}</span><strong>${p[0]}</strong></button>`).join('')}</div>
+      ${[['Cadastre onde está seu dinheiro e o saldo de hoje', 'editar-conta-1'], ['Cadastre seus cartões de crédito', 'novo-cartao'], ['Lance sua primeira despesa ou receita', 'novo']].map((p, i) => `<button class="passo ${feito[i] ? 'feito' : ''}" type="button" data-acao="${p[1]}" data-id="${d.contas[0].id}"><span class="n">${feito[i] ? '✓' : i + 1}</span><strong>${p[0]}</strong></button>`).join('')}</div>
       <p style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec mini" type="button" data-acao="exemplo">Ver com dados de exemplo</button><button class="link" type="button" data-acao="fechar-guia">Dispensar</button></p></section>` : '';
     const pagar = F.aPagar(d.lancs, d.cartoes);
     const cats = entradasCat(r.porCategoria, 'despesa');
@@ -256,14 +270,14 @@
     const ult = d.lancs.filter((l) => F.mesDe(l.data) === V.mes).sort((a, b) => b.data.localeCompare(a.data)).slice(0, 5);
     return `<div class="hero"><small>Saldo geral</small><span class="grande num">${m(saldo)}</span>${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
       <div class="duo"><div><small>Receitas do mês</small><b class="verde num">${m(r.receitas)}</b></div><div><small>Despesas do mês</small><b class="verm num">${m(r.despesas)}</b></div></div></div>
-    <div class="contas" aria-label="Suas contas">${d.contas.map((c) => `<button class="conta" type="button" data-acao="editar-conta" data-id="${c.id}"><span class="mut"><i style="background:${c.cor}"></i>${esc(c.nome)}</span><b class="num">${m(F.saldoConta(d.lancs, c))}</b></button>`).join('')}<button class="conta nova" type="button" data-acao="nova-conta">+ Conta</button></div>
+    <div class="contas" aria-label="Seus bancos e carteiras">${d.contas.map((c) => `<button class="conta" type="button" data-acao="editar-conta" data-id="${c.id}"><span class="mut"><i style="background:${c.cor}"></i>${esc(c.nome)}</span><b class="num">${m(F.saldoConta(d.lancs, c))}</b></button>`).join('')}<button class="conta nova" type="button" data-acao="nova-conta">+ Banco ou carteira</button></div>
     <div class="rapidas" role="group" aria-label="Ações rápidas">${[['rap-despesa', '🔻', 'Despesa'], ['rap-receita', '🔺', 'Receita'], ['rap-transf', '🔁', 'Transferir'], ['rap-fatura', '💳', 'Pagar fatura']].map(([a, i, t]) => `<button type="button" class="rap" data-acao="${a}"><span aria-hidden="true">${i}</span><b>${t}</b></button>`).join('')}</div>
     ${guia}
     ${seletorMes()}
     <div class="duas"><div class="card mini"><small>Receitas</small><b class="pos num">${m(r.receitas)}</b><div class="barra ok" role="img" aria-label="Recebido"><i style="width:${r.receitas ? Math.min(100, (r.recebido / r.receitas) * 100) : 0}%"></i></div><small>Recebido ${m(r.recebido)}</small></div>
       <div class="card mini"><small>Despesas</small><b class="neg num">${m(r.despesas)}</b><div class="barra estourou" role="img" aria-label="Pago"><i style="width:${r.despesas ? Math.min(100, (r.pago / r.despesas) * 100) : 0}%"></i></div><small>Pago ${m(r.pago)}</small></div></div>
     <div class="card" style="display:flex;justify-content:space-between;align-items:center"><span class="mut">Balanço previsto do mês</span><b class="num ${r.saldo >= 0 ? 'pos' : 'neg'}" style="font-size:20px">${m(r.saldo)}</b></div>
-    <section class="card" data-bloco="pagar"><div class="sec-h"><h2 class="secao">Contas a pagar</h2><button class="link" type="button" data-acao="ir-pagar">Ver todas</button></div>
+    <section class="card" data-bloco="pagar"><div class="sec-h"><h2 class="secao">Vencimentos</h2><button class="link" type="button" data-acao="ir-pagar">Ver todas</button></div>
       ${pagar.length ? `<ul class="lista">${pagar.slice(0, 3).map(itemPagar).join('')}</ul>` : '<p class="mut" style="padding:8px 0">Tudo em dia. Nenhum boleto ou fatura pendente. 🎉</p>'}</section>
     ${orc.length ? `<section class="card" data-bloco="orcamento"><h2 class="secao">Atenção no orçamento</h2><ul class="lista">${orc.map(rowOrc).join('')}</ul></section>` : ''}
     <section class="card" data-bloco="categorias"><div class="sec-h"><h2 class="secao">Despesas por categoria</h2><button class="link" type="button" data-acao="ir-rel">Relatórios</button></div>
@@ -297,7 +311,7 @@
     if (!series.length) return '<div class="card vazio"><span class="emoji">🔁</span><p>Aqui aparecem as contas que se repetem, como aluguel, internet e assinaturas. Ao lançar, abra "Mais opções" e escolha "Fixo todo mês" ou "Parcelado".</p><button class="btn" type="button" data-acao="novo">Novo lançamento</button></div>';
     return `<p class="mut">Contas que se repetem. Ao encerrar, só os meses que ainda não foram pagos são removidos.</p><div class="card linhas">${series.map((x) => {
       const info = catInfo(x.prox.categoria, x.prox.tipo); const parc = x.prox.modoSerie === 'parcelado';
-      return `<div class="linha serie-lin"><span class="l-ic" style="background:${info.cor}22">${info.icone}</span><span class="l-t"><b>${esc(x.base)}</b><small>${parc ? 'Parcelado' : 'Fixo todo mês'} · ${x.futuros.length ? 'faltam ' + x.futuros.length + ' · próximo ' + DATA_CURTA(x.prox.data) : 'terminou'} · <span class="num">${m(x.prox.valor)}</span></small></span><span class="serie-bt"><button class="btn mini sec" type="button" data-acao="editar" data-id="${x.prox.id}">Editar</button>${x.futuros.length ? `<button class="btn mini sec" type="button" data-acao="encerrar-serie" data-id="${x.prox.serie}">Encerrar</button>` : ''}</span></div>`;
+      return `<div class="linha serie-lin"><span class="l-ic" style="background:${info.cor}22">${info.icone}</span><span class="l-t"><b>${esc(x.base)}</b><small>${parc ? 'Parcelado' : (ROT_FREQ[x.prox.freq || 'mes'].charAt(0).toUpperCase() + ROT_FREQ[x.prox.freq || 'mes'].slice(1))} · ${x.futuros.length ? 'faltam ' + x.futuros.length + ' · próximo ' + DATA_CURTA(x.prox.data) : 'terminou'} · <span class="num">${m(x.prox.valor)}</span></small></span><span class="serie-bt"><button class="btn mini sec" type="button" data-acao="editar" data-id="${x.prox.id}">Editar</button>${x.futuros.length ? `<button class="btn mini sec" type="button" data-acao="encerrar-serie" data-id="${x.prox.serie}">Encerrar</button>` : ''}</span></div>`;
     }).join('')}</div>`;
   }
   function telaLancs() {
@@ -426,7 +440,7 @@
     const d = D(); const u = USER.info; const grupo = grupoHtml;
     return `<div class="tit"><h1>Mais opções</h1></div>
     <section><div class="card linhas">${linha({ icone: `<span class="mini-av">${avatarHtml('peq')}</span>`, titulo: esc(u.nome), desc: 'Meu perfil, foto e dados da conta', attrs: 'data-acao="perfil"' })}</div></section>
-    <section><div class="sec-h"><h2 class="grupo">Contas e carteiras</h2><button class="link" type="button" data-acao="nova-conta">+ Adicionar</button></div><div class="card linhas">${d.contas.map((c) => linha({ icone: `<span class="bolinha" style="background:${c.cor}"></span>`, cor: c.cor, titulo: esc(c.nome), desc: c.fora ? 'Fora do saldo geral' : 'Soma no saldo geral', fim: `<span class="num">${m(F.saldoConta(d.lancs, c))}</span>`, attrs: `data-acao="editar-conta" data-id="${c.id}"` })).join('')}</div></section>
+    <section><div class="sec-h"><h2 class="grupo">Bancos e carteiras</h2><button class="link" type="button" data-acao="nova-conta">+ Adicionar</button></div><div class="card linhas">${d.contas.map((c) => linha({ icone: `<span class="bolinha" style="background:${c.cor}"></span>`, cor: c.cor, titulo: esc(c.nome), desc: c.fora ? 'Fora do saldo geral' : 'Soma no saldo geral', fim: `<span class="num">${m(F.saldoConta(d.lancs, c))}</span>`, attrs: `data-acao="editar-conta" data-id="${c.id}"` })).join('')}</div></section>
     ${grupo('Seus dados',
       linha({ tag: 'label', icone: LI.subir, titulo: 'Importar extrato ou fatura', desc: 'Arquivo OFX ou CSV do seu banco', dentro: '<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden>' })
       + linha({ icone: LI.copia, titulo: 'Cópia de segurança', desc: 'Baixar um arquivo com seus lançamentos', attrs: 'data-acao="backup"' })
@@ -439,7 +453,7 @@
       + linha({ tag: 'a', icone: LI.escudo, titulo: 'Política de Privacidade', attrs: 'href="privacidade.html" target="_blank" rel="noopener"' })
       + linha({ tag: 'a', icone: LI.arquivo, titulo: 'Termos de Uso', attrs: 'href="termos.html" target="_blank" rel="noopener"' }))}
     ${grupo('Zona de risco', linha({ icone: LI.lixo, titulo: 'Apagar todos os meus lançamentos', desc: 'Remove contas, cartões e lançamentos', perigo: true, attrs: 'data-acao="apagar"' }))}
-    <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair da conta</button>
+    <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair</button>
     <p class="mut centro">Lepvi Finanças · um produto Lepvi Group</p>`;
   }
 
@@ -461,16 +475,16 @@
       linha({ icone: LI.chave, titulo: 'Alterar senha', attrs: 'data-acao="senha"' })
       + linha({ tag: 'a', icone: LI.baixar, titulo: 'Baixar meus dados', desc: 'Arquivo completo da sua conta (LGPD)', attrs: 'href="api/?a=exportar" download' })
       + linha({ tag: 'a', icone: LI.escudo, titulo: 'Política de Privacidade', attrs: 'href="privacidade.html" target="_blank" rel="noopener"' }))}
-    ${grupo('Zona de risco', linha({ icone: LI.lixo, titulo: 'Excluir minha conta', desc: 'Apaga a conta e todos os dados, para sempre', perigo: true, attrs: 'data-acao="excluir-conta"' }))}
-    <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair da conta</button>`;
+    ${grupo('Zona de risco', linha({ icone: LI.lixo, titulo: 'Excluir meu cadastro', desc: 'Apaga o cadastro e todos os dados, para sempre', perigo: true, attrs: 'data-acao="excluir-conta"' }))}
+    <button class="btn sec bloco" type="button" data-acao="sair">${svg(LI.sair)}&nbsp; Sair</button>`;
   }
 
   /* menu da conta (avatar no topo) */
   function menuConta() {
     const u = USER.info;
-    abrir('Minha conta', `<div class="conta-card" style="margin:0">${avatarHtml('grande')}<div class="conta-info"><h2>${esc(u.nome)}</h2><p>${esc(u.email)}</p></div></div>
+    abrir('Meu perfil', `<div class="conta-card" style="margin:0">${avatarHtml('grande')}<div class="conta-info"><h2>${esc(u.nome)}</h2><p>${esc(u.email)}</p></div></div>
       <div class="card linhas">${linha({ icone: LI.user, titulo: 'Meu perfil', desc: 'Foto, nome e dados da conta', attrs: 'data-sheet="perfil"' })}${linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', attrs: 'data-sheet="acess"' })}${linha({ icone: LI.mais, titulo: 'Mais opções', desc: 'Contas, importar, cópia de segurança', attrs: 'data-sheet="mais"' })}</div>
-      <button class="btn bloco" type="button" data-sheet="sair">${svg(LI.sair)}&nbsp; Sair da conta</button>`, null, (f) => {
+      <button class="btn bloco" type="button" data-sheet="sair">${svg(LI.sair)}&nbsp; Sair</button>`, null, (f) => {
       f.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => { const a = b.dataset.sheet; dlg.close(); if (a === 'perfil' || a === 'mais') ir(a); else if (a === 'acess') formAcess(); else sair(); }));
     });
   }
@@ -488,11 +502,11 @@
   const VISTAS = { inicio: telaInicio, lancs: telaLancs, cartoes: telaCartoes, planejar: telaPlanejar, mais: telaMais, perfil: telaPerfil };
   function render() {
     document.body.classList.toggle('deslogado', !USER.logado);
-    if (!USER.logado) { $('#menu').innerHTML = ''; $('#tela').innerHTML = telaAuth(); return; }
+    if (!USER.logado) { $('#menu').innerHTML = ''; $('#tela').innerHTML = telaAuth(); montarTurnstile(); return; }
     document.querySelectorAll('[data-perfil]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.perfil === S.perfil)));
     const olho = $('[data-acao=olho]'); olho.innerHTML = svg(S.oculto ? EYE_OFF : EYE); olho.setAttribute('aria-pressed', String(!!S.oculto)); olho.setAttribute('aria-label', S.oculto ? 'Mostrar valores' : 'Ocultar valores');
     const nav = (id, t) => `<button type="button" data-tela="${id}" ${V.tela === id ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICONES[id]}</svg>${t}</button>`;
-    const ab = $('[data-acao=conta-menu]'); ab.innerHTML = avatarHtml(); ab.setAttribute('aria-label', 'Minha conta: ' + USER.info.nome);
+    const ab = $('[data-acao=conta-menu]'); ab.innerHTML = avatarHtml(); ab.setAttribute('aria-label', 'Meu perfil: ' + USER.info.nome);
     $('#menu').innerHTML = nav('inicio', 'Início') + nav('lancs', 'Lançamentos') + '<button class="mais-novo" type="button" data-acao="menu-novo" aria-label="Novo lançamento">+</button>' + nav('cartoes', 'Cartões') + nav('planejar', 'Planejar')
       + `<div class="menu-fim"><button type="button" class="mf-mais" data-acao="mais">Mais opções</button><div class="menu-user"><button type="button" class="mu-perfil" data-acao="perfil">${avatarHtml('peq')}<span><b>${esc(USER.info.nome)}</b><small>Meu perfil</small></span></button><button type="button" class="mu-sair" data-acao="sair">Sair</button></div></div>`;
     $('#tela').innerHTML = VISTAS[V.tela]();
@@ -525,6 +539,13 @@
     });
   }
 
+  /* data do i-ésimo lançamento de uma série: semana, 15 dias, mês ou ano (dia 31 em mês curto vira o último dia) */
+  function dataSerie(iso, freq, i) {
+    if (freq === 'semana' || freq === 'quinzena') { const x = new Date(iso + 'T12:00:00'); x.setDate(x.getDate() + i * (freq === 'semana' ? 7 : 14)); return F.hojeISO(x); }
+    const mes = F.somaMes(F.mesDe(iso), freq === 'ano' ? 12 * i : i); const ult = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
+    return `${mes}-${String(Math.min(Number(iso.slice(8, 10)), ult)).padStart(2, '0')}`;
+  }
+  const ROT_FREQ = { semana: 'toda semana', quinzena: 'a cada 15 dias', mes: 'todo mês', ano: 'todo ano' };
   function formLanc(base = {}, modo) {
     const d = D(); const novo = !base.id;
     const tipo = base.tipo === 'transf' || modo === 'transf' ? 'transf' : base.tipo || (modo === 'receita' ? 'receita' : 'despesa');
@@ -540,14 +561,14 @@
     const rotPago = tipo === 'receita' ? 'Já recebi' : tipo === 'transf' ? 'Já foi feita' : 'Já paguei';
     const abas = novo ? `<div class="abas3" role="group" aria-label="Tipo de lançamento">${[['despesa', 'Despesa'], ['receita', 'Receita'], ['transf', 'Transferência']].map(([k, t]) => `<button type="button" data-aba="${k}" aria-pressed="${tipo === k}" class="${k}">${t}</button>`).join('')}</div>` : '';
     const extras = tipo === 'transf' ? '' : `<details class="mais-campos"${base.tags && base.tags.length || base.nota || base.ignorar ? ' open' : ''}><summary>Mais opções</summary><div class="mais-corpo">
-        ${novo ? `<div class="dupla">${campo('Repetir', sele('rep', [['nao', 'Não repete'], ['parcelado', 'Parcelado'], ['fixo', 'Fixo todo mês']], 'nao'))}<div id="repn" hidden>${campo('Quantas vezes', '<input name="n" type="number" min="2" max="60" value="2">')}</div></div>` : ''}
+        ${novo ? `${campo('Repetir', radios('rep', [['nao', 'Não repete'], ['parcelado', 'Parcelado'], ['fixo', 'Fixo todo mês']], 'nao'))}<div id="repn" class="rep-bloco" hidden><div id="freq-box">${campo('De quanto em quanto tempo', radios('freq', [['semana', 'Toda semana'], ['quinzena', 'A cada 15 dias'], ['mes', 'Todo mês'], ['ano', 'Todo ano']], 'mes'))}</div>${campo('<span id="n-rot">Quantas vezes no total (contando este)</span>', '<input name="n" type="number" min="2" max="120" value="12" inputmode="numeric">')}<p class="rep-resumo" id="rep-resumo" aria-live="polite"></p></div>` : ''}
         ${tipo === 'despesa' ? troca('boleto', 'É um boleto', !!base.boleto) : ''}
         ${campo('Etiquetas', `<input name="tags" maxlength="80" placeholder="Ex.: viagem, casal, projeto" value="${esc((base.tags || []).join(', '))}">`)}${troca('ignorar', 'Não contar nos relatórios', !!base.ignorar)}
         ${campo('Nota', `<textarea name="nota" maxlength="300">${esc(base.nota || '')}</textarea>`)}</div></details>`;
     abrir((novo ? 'Novo lançamento' : 'Editar ' + titulo.toLowerCase()), `
       ${abas}
       <div class="valor-box ${tipo}"><label for="v">Valor</label><div class="valor-lin"><span aria-hidden="true">R$</span><input id="v" name="valor" inputmode="decimal" required autocomplete="off" placeholder="0,00" value="${val2(base.valor)}"></div></div>
-      ${base.serie ? `<div class="serie-aviso"><b>Este lançamento se repete (${base.n || '?'} de ${base.de || '?'}).</b>${campo('Aplicar as mudanças a', sele('aplicar', [['este', 'Só este lançamento'], ['proximos', 'Este e os próximos'], ['todos', 'Todos da série']], 'este'))}</div>` : ''}
+      ${base.serie ? `<div class="serie-aviso"><b>Este lançamento se repete (${base.n || '?'} de ${base.de || '?'}).</b>${campo('Aplicar as mudanças a', radios('aplicar', [['este', 'Só este'], ['proximos', 'Este e os próximos'], ['todos', 'Todos da série']], 'este'))}</div>` : ''}
       ${tipo === 'transf' ? '' : campo('Descrição', `<input name="desc" required maxlength="80" value="${esc(base.desc || '')}" placeholder="Ex.: Mercado, Aluguel, Venda de peças">`)}
       <div class="campo"><span>Data</span><div class="data-lin"><button class="btn sec mini" type="button" data-data="${F.hojeISO()}">Hoje</button><button class="btn sec mini" type="button" data-data="${ontem()}">Ontem</button><input name="data" type="date" required value="${base.data || F.hojeISO()}"></div></div>
       ${F.ehCartao({ conta: contaSel }) && tipo === 'despesa' ? '' : troca('pago', rotPago, novo ? true : !!base.pago)}
@@ -563,13 +584,11 @@
         ? { tipo, desc: 'Transferência', data: fd.get('data'), categoria: 'Transferência', conta, destino: fd.get('destino'), pago: !!fd.get('pago'), boleto: false }
         : { tipo, desc: fd.get('desc').trim(), data: fd.get('data'), categoria: fd.get('categoria'), conta, boleto: !!fd.get('boleto') && !cartao, pago: !cartao && !!fd.get('pago'), nota: (fd.get('nota') || '').trim(), tags: [...new Set(String(fd.get('tags') || '').split(',').map((x) => x.trim().toLowerCase().replace(/^#/, '')).filter(Boolean))].slice(0, 5), ignorar: !!fd.get('ignorar') };
       if (novo) {
-        const rep = fd.get('rep') || 'nao'; const n = rep === 'nao' ? 1 : Math.max(2, Math.min(60, parseInt(fd.get('n'), 10) || 2));
+        const rep = fd.get('rep') || 'nao'; const n = rep === 'nao' ? 1 : Math.max(2, Math.min(120, parseInt(fd.get('n'), 10) || 2)); const freq = rep === 'parcelado' ? 'mes' : (fd.get('freq') || 'mes');
         const parte = rep === 'parcelado' ? F.arred(valor / n) : valor; const serie = n > 1 ? uid() : undefined;
         for (let i = 0; i < n; i++) {
-          const dia = Number(reg.data.slice(8, 10)); const mes = F.somaMes(F.mesDe(reg.data), i);
-          const ult = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
           const v = rep === 'parcelado' && i === n - 1 ? F.arred(valor - parte * (n - 1)) : parte;
-          d.lancs.push({ ...reg, ...(serie ? { serie, n: i + 1, de: n, modoSerie: rep } : {}), id: uid(), valor: v, desc: rep === 'parcelado' ? `${reg.desc} (${i + 1}/${n})` : reg.desc, data: `${mes}-${String(Math.min(dia, ult)).padStart(2, '0')}`, pago: i === 0 ? reg.pago : false });
+          d.lancs.push({ ...reg, ...(serie ? { serie, n: i + 1, de: n, modoSerie: rep, freq } : {}), id: uid(), valor: v, desc: rep === 'parcelado' ? `${reg.desc} (${i + 1}/${n})` : reg.desc, data: dataSerie(reg.data, freq, i), pago: i === 0 ? reg.pago : false });
         }
       } else {
         const alvo = d.lancs.find((x) => x.id === base.id); const aplicar = base.serie ? (fd.get('aplicar') || 'este') : 'este';
@@ -584,24 +603,35 @@
       const nc = $('[data-nova-cat]', f); if (nc) nc.addEventListener('click', () => formCategoria(tipo, (nome) => formLanc({ ...lerForm(), categoria: nome }, modo)));
       const exc = $('#exc', f); if (exc) exc.onclick = () => { if (base.serie) { excluirSerie(base); return; } d.lancs = d.lancs.filter((x) => x.id !== base.id); salvar(); dlg.close(); render(); aviso('Lançamento excluído.'); };
       f.querySelectorAll('[data-data]').forEach((b) => b.addEventListener('click', () => { f.data.value = b.dataset.data; }));
-      if (f.rep) f.rep.addEventListener('change', () => { $('#repn', f).hidden = f.rep.value === 'nao'; });
+      const resumo = () => {
+        if (!f.rep) return; const v = f.rep.value; $('#repn', f).hidden = v === 'nao'; if (v === 'nao') return;
+        const n = Math.max(2, Math.min(120, parseInt(f.n.value, 10) || 2)); const val = F.numeroBR(f.valor.value) || 0; const fr = v === 'parcelado' ? 'mes' : (f.freq ? f.freq.value : 'mes');
+        const fmt = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR'); const ini = f.data.value || F.hojeISO(); const fim = dataSerie(ini, fr, n - 1);
+        $('#freq-box', f).hidden = v === 'parcelado'; $('#n-rot', f).textContent = v === 'parcelado' ? 'Número de parcelas' : 'Quantas vezes no total (contando este)';
+        $('#rep-resumo', f).textContent = v === 'parcelado' ? `Vai criar ${n} parcelas de ${F.brl(F.arred(val / n))} (total ${F.brl(val)}), ${ROT_FREQ[fr]}, de ${fmt(ini)} até ${fmt(fim)}.` : `Vai criar ${n} lançamentos de ${F.brl(val)}, ${ROT_FREQ[fr]}, de ${fmt(ini)} até ${fmt(fim)}.`;
+      };
+      f.querySelectorAll('input[name=rep]').forEach((r) => r.addEventListener('change', () => { const v = f.rep.value; if (v === 'fixo' && f.n.value === '2') f.n.value = '12'; if (v === 'parcelado' && f.n.value === '12') f.n.value = '2'; resumo(); }));
+      f.querySelectorAll('input[name=freq]').forEach((r) => r.addEventListener('change', resumo));
+      ['n', 'valor', 'data'].forEach((k) => f[k] && f[k].addEventListener('input', resumo));
       if (f.boleto && f.pago) f.boleto.addEventListener('change', () => { if (f.boleto.checked) f.pago.checked = false; });
       setTimeout(() => { if (novo) f.valor.focus(); }, 60);
     });
   }
 
-  const EMOJIS = ['🍔', '☕', '🐶', '🧴', '🎁', '🏋️', '✈️', '🚌', '⛽', '📱', '💡', '🧾', '👶', '🏥', '🎮', '📚', '🛠️', '🌱', '🎵', '🧹', '💼', '🏠', '🚗', '💰'];
+  const EMOJIS = ['🏠', '💡', '💧', '🔥', '🌐', '📶', '📱', '💻', '📺', '🔌', '🧾', '🏦', '🍔', '🍕', '🍽️', '☕', '🍺', '🛒', '🥖', '🍎', '🚗', '🚌', '⛽', '🚲', '✈️', '🚕', '🚇', '🛵', '💊', '🏥', '🦷', '🧴', '💇', '💅', '🏋️', '🧘', '👶', '🐶', '🐱', '🎁', '🧸', '🎓', '📚', '✏️', '🎮', '🎬', '🎵', '🎟️', '🏖️', '🎉', '⚽', '🎨', '💼', '💰', '💳', '📈', '🛠️', '📦', '📣', '🧹', '🌱', '🐷', '🪙', '✂️'];
   function formCategoria(tipo, depois) {
     const d = D(); d.cats = d.cats || { despesa: [], receita: [] };
     abrir(`Nova categoria de ${tipo === 'receita' ? 'receita' : 'despesa'}`, `${campo('Nome', '<input name="nome" required maxlength="24" placeholder="Ex.: Pet, Academia, Presentes">')}
       ${campo('Ícone', radios('icone', EMOJIS.map((e) => [e, '', e]), EMOJIS[0], 'emojis'))}
+      ${campo('Não achou? Digite ou cole qualquer emoji', '<input name="icone_outro" maxlength="8" placeholder="Ex.: 🌐" autocomplete="off">')}
       ${campo('Cor', radios('cor', CORES.map((x) => [x, '']), CORES[0], 'cores'))}
       <div class="botoes rodape-form"><button class="btn sec" type="button" id="cat-voltar">Voltar</button><button class="btn" type="submit">Salvar categoria</button></div>`,
     (fd) => {
       const nome = fd.get('nome').trim();
       if (!nome) { aviso('Dê um nome para a categoria.'); return false; }
       if (catsDe(tipo).some((c) => c.nome.toLowerCase() === nome.toLowerCase())) { aviso('Você já tem uma categoria com esse nome.'); return false; }
-      d.cats[tipo].push({ nome, icone: fd.get('icone'), cor: fd.get('cor') });
+      const outro = String(fd.get('icone_outro') || '').trim(); const icone = outro ? ([...new Intl.Segmenter('pt', { granularity: 'grapheme' }).segment(outro)][0] || { segment: fd.get('icone') }).segment : fd.get('icone');
+      d.cats[tipo].push({ nome, icone, cor: fd.get('cor') });
       salvar(); aviso('Categoria criada.');
       if (depois) { depois(nome); return false; }
       render();
@@ -645,8 +675,8 @@
 
   function formConta(c = {}) {
     const novo = !c.id;
-    abrir(novo ? 'Nova conta' : 'Editar conta', `${campo('Nome', `<input name="nome" required maxlength="30" value="${esc(c.nome || '')}" placeholder="Ex.: Banco do Brasil, Caixa da loja">`)}
-      ${campo('Tipo de conta', radios('tipoConta', [['corrente', 'Conta corrente', '🏦'], ['poupanca', 'Poupança', '🐷'], ['carteira', 'Carteira', '👛'], ['vale', 'Vale-refeição', '🍽️'], ['investimento', 'Investimentos', '📈']], c.tipo || 'corrente'))}
+    abrir(novo ? 'Novo banco ou carteira' : 'Editar banco ou carteira', `${campo('Nome', `<input name="nome" required maxlength="30" value="${esc(c.nome || '')}" placeholder="Ex.: Banco do Brasil, Caixa da loja">`)}
+      ${campo('Tipo', radios('tipoConta', [['corrente', 'Conta corrente', '🏦'], ['poupanca', 'Poupança', '🐷'], ['carteira', 'Carteira', '👛'], ['vale', 'Vale-refeição', '🍽️'], ['investimento', 'Investimentos', '📈']], c.tipo || 'corrente'))}
       ${novo ? campo('Saldo inicial (R$)', '<input name="saldo" inputmode="decimal" value="0">') : campo('Saldo atual (R$)', `<input name="saldo" inputmode="decimal" value="${val2(F.saldoConta(D().lancs, c))}"><small class="mut">Se não bater com o do banco, corrija aqui. Criamos um ajuste que não entra nos relatórios.</small>`)}
       ${campo('Cor', radios('cor', CORES.map((x) => [x, '']), c.cor || CORES[D().contas.length % CORES.length], 'cores'))}
       ${troca('soma', 'Somar no saldo geral', !c.fora)}
@@ -663,7 +693,7 @@
       salvar(); render(); aviso('Conta salva.');
     }, (f) => {
       f.querySelectorAll('.cores span').forEach((s) => { s.style.background = s.previousElementSibling.value; });
-      const exc = $('#exc', f); if (exc) exc.onclick = () => { if (!confirm('Excluir esta conta e os lançamentos dela?')) return; const d = D(); d.contas = d.contas.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== c.id && l.destino !== c.id); salvar(); dlg.close(); render(); aviso('Conta excluída.'); };
+      const exc = $('#exc', f); if (exc) exc.onclick = () => { if (!confirm('Excluir este banco ou carteira e os lançamentos dele?')) return; const d = D(); d.contas = d.contas.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== c.id && l.destino !== c.id); salvar(); dlg.close(); render(); aviso('Conta excluída.'); };
     });
   }
 
@@ -716,7 +746,7 @@
   }
 
   function formPersonalizar() {
-    const blocos = [['pagar', 'Contas a pagar'], ['orcamento', 'Atenção no orçamento'], ['categorias', 'Despesas por categoria'], ['cartoes', 'Cartões'], ['ultimos', 'Últimos lançamentos']];
+    const blocos = [['pagar', 'Vencimentos'], ['orcamento', 'Atenção no orçamento'], ['categorias', 'Despesas por categoria'], ['cartoes', 'Cartões'], ['ultimos', 'Últimos lançamentos']];
     S.inicio = S.inicio || {};
     abrir('Personalizar tela inicial', `<p class="mut">Escolha o que você quer ver no Início. O saldo e o resumo do mês sempre aparecem.</p>${blocos.map(([k, t]) => troca('b-' + k, t, S.inicio[k] !== false)).join('')}`, null, (f) => {
       f.addEventListener('change', () => { blocos.forEach(([k]) => { S.inicio[k] = f['b-' + k].checked; }); salvar(); render(); });
@@ -728,8 +758,8 @@
     });
   }
   function formExcluirConta() {
-    abrir('Excluir minha conta', `<p>Isso apaga a sua conta e <b>todos</b> os seus dados financeiros do servidor, de forma definitiva. Não dá para desfazer. Antes, se quiser, baixe uma cópia em "Baixar meus dados".</p>${campoSenha('Digite sua senha para confirmar', 'name="senha" type="password" required autocomplete="current-password"')}<div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn perigo" type="submit">Excluir para sempre</button></div>`, null, (f) => {
-      f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('excluir', { senha: f.senha.value }); dlg.close(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua conta e todos os seus dados foram apagados.'; render(); } catch (e) { aviso(e.message); } });
+    abrir('Excluir meu cadastro', `<p>Isso apaga o seu cadastro e <b>todos</b> os seus dados financeiros do servidor, de forma definitiva. Não dá para desfazer. Antes, se quiser, baixe uma cópia em "Baixar meus dados".</p>${campoSenha('Digite sua senha para confirmar', 'name="senha" type="password" required autocomplete="current-password"')}<div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn perigo" type="submit">Excluir para sempre</button></div>`, null, (f) => {
+      f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('excluir', { senha: f.senha.value }); dlg.close(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Seu cadastro e todos os seus dados foram apagados.'; render(); } catch (e) { aviso(e.message); } });
     });
   }
 

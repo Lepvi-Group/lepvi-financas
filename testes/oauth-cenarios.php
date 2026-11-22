@@ -68,6 +68,16 @@ $out['microsoft_volta_sem_confirmar'] = oauth_resolver('microsoft', ['sub' => 'm
 $out['sem_email'] = oauth_resolver('google', ['sub' => 'g-9'])['erro'] ?? null;
 $out['sem_sub'] = oauth_resolver('google', ['email' => 'a@b.com'])['erro'] ?? null;
 
+// 5. Cloudflare Turnstile
+$out['ts_sem_chaves'] = turnstile_verificar(null);
+file_put_contents($estado . '/turnstile.json', json_encode(['site_key' => 'sk', 'secret' => 'segredo']));
+$out['ts_config'] = turnstile_config()['site_key'] ?? null;
+$GLOBALS['TURNSTILE_HTTP'] = fn($c) => ['success' => $c['response'] === 'token-bom' && $c['secret'] === 'segredo'];
+$out['ts_token_bom'] = turnstile_verificar('token-bom');
+$out['ts_token_ruim'] = turnstile_verificar('token-ruim');
+$out['ts_sem_token'] = turnstile_verificar('');
+$GLOBALS['TURNSTILE_HTTP'] = fn($c) => null;
+$out['ts_cloudflare_fora_do_ar'] = turnstile_verificar('qualquer');
 echo json_encode($out);
 array_map('unlink', glob($estado . '/*') ?: []);
 @rmdir($estado);
