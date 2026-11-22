@@ -2,7 +2,7 @@
   "name": "lepvi-financas",
   "private": true,
   "scripts": {
-    "test": "node --test testes/lib.test.js testes/api.test.js",
+    "test": "node --test testes/lib.test.js testes/api.test.js testes/oauth.test.js",
     "start": "php -S 127.0.0.1:4180 -t ."
   }
 }

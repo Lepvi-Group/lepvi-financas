@@ -70,7 +70,7 @@
 
   /* ---------- entrar, criar conta, esqueci a senha ---------- */
   function telaAuth() {
-    const modo = V.auth; const msg = V.msg ? `<p class="ok-msg" role="status">${esc(V.msg)}</p>` : '';
+    const modo = V.auth; const msg = V.msg ? `<p class="${V.msgErro ? 'erro' : 'ok-msg'}" role="${V.msgErro ? 'alert' : 'status'}">${esc(V.msg)}</p>` : '';
     const erro = '<p class="erro" role="alert" id="auth-erro" tabindex="-1" hidden></p>';
     const mostrar = '';
     const link = (a, t) => `<button class="link" type="button" data-acao="${a}">${t}</button>`;
@@ -79,7 +79,13 @@
     const social = (rotulo) => `<div class="sociais"><button class="btn-social" type="button" data-acao="oauth" data-p="google">${gIc}<span>${rotulo} com Google</span></button><button class="btn-social" type="button" data-acao="oauth" data-p="microsoft">${mIc}<span>${rotulo} com Microsoft</span></button></div><p class="ou"><span>ou use seu e-mail</span></p>`;
     let titulo; let corpo;
     if (modo === 'enviado') { titulo = 'Confira seu e-mail'; corpo = `${msg}<button class="btn" type="button" data-acao="auth-entrar">Voltar para entrar</button>`; }
-    else if (modo === 'cadastro') {
+    else if (modo === 'oauth-aceite') {
+      const pd = V.pend || {};
+      titulo = 'Quase lá';
+      corpo = `<p>Você entrou com <b>${esc(pd.provedor || '')}</b> como <b>${esc(pd.email || '')}</b>. Para criar sua conta, aceite a Política de Privacidade e os Termos de Uso.</p><form id="auth" class="auth-f" novalidate>
+        <label class="troca"><span>Li e aceito a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> e os <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a></span><input type="checkbox" role="switch" name="aceite" required></label>${erro}
+        <button class="btn bloco" type="submit">Criar minha conta</button></form><p class="mut">${link('auth-entrar', 'Cancelar')}</p>`;
+    } else if (modo === 'cadastro') {
       titulo = 'Criar sua conta';
       corpo = `${social('Cadastrar')}<form id="auth" class="auth-f" novalidate>${campo('Seu nome', '<input name="nome" required maxlength="120" autocomplete="name">')}${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campoSenha('Senha (mínimo 10 caracteres)', 'name="senha" type="password" required minlength="10" autocomplete="new-password"')}${mostrar}
         <label class="troca"><span>Li e aceito a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> e os <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a></span><input type="checkbox" role="switch" name="aceite" required></label>${erro}
@@ -127,6 +133,7 @@
     try {
       if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha }); USER.logado = true; USER.info = r.usuario; await carregarDados(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
       else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: !!v.aceite }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
+      else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: !!v.aceite }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; await carregarDados(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
       else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'redefinir') { await api('redefinir', { token: V.token, senha: v.senha }); V.auth = 'entrar'; V.token = ''; V.msg = 'Senha alterada. Entre com a nova senha.'; render(); }
     } catch (e) { er.textContent = e.message; er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; }
@@ -139,6 +146,12 @@
     $('#tela').innerHTML = '<p class="mut" role="status">Carregando…</p>';
     const q = new URLSearchParams(location.search); const tv = q.get('verificar'); const tr = q.get('redefinir');
     if (tv || tr) history.replaceState(null, '', location.pathname);
+    const oa = q.get('oauth'); const op = q.get('p');
+    if (oa) history.replaceState(null, '', location.pathname);
+    const NOME_P = op === 'google' ? 'Google' : 'Microsoft';
+    const MENS = { 'nao-configurado': `Entrar com ${NOME_P} ainda não está ativo. Use seu e-mail e senha por enquanto.`, erro: 'Não foi possível entrar. Tente de novo.', cancelado: 'Você cancelou a entrada.', muitas: 'Muitas tentativas. Espere alguns minutos.', 'erro-conta-existente': 'Já existe uma conta com este e-mail. Entre com a senha e tente de novo.', 'erro-confirme-email': 'Confirme seu e-mail pelo link que enviamos antes de entrar.', 'erro-sem-email': 'O provedor não informou seu e-mail. Use e-mail e senha.', 'erro-dados': 'Não foi possível entrar. Tente de novo.' };
+    if (oa === 'aceite') { try { V.pend = await api('oauth_pendente'); V.auth = 'oauth-aceite'; } catch (e) { V.msg = e.message; V.msgErro = true; } }
+    else if (oa && oa !== 'ok') { V.msg = MENS[oa] || MENS.erro; V.msgErro = true; }
     if (tv) { try { await api('verificar', { token: tv }); V.msg = 'E-mail confirmado! Agora é só entrar.'; } catch (e) { V.msg = e.message; } }
     if (tr) { V.auth = 'redefinir'; V.token = tr; }
     try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ }
@@ -696,7 +709,7 @@
       'remover-foto': async () => { try { const r = await api('preferencias', { foto: null }); USER.info = r.usuario; render(); aviso('Foto removida.'); } catch (e) { aviso(e.message); } },
       senha: () => formSenha(),
       personalizar: () => formPersonalizar(),
-      oauth: () => { aviso(t.dataset.p === 'google' ? 'Entrar com Google será ativado assim que a conexão com o Google for configurada.' : 'Entrar com Microsoft será ativado assim que a conexão com a Microsoft for configurada.'); },
+      oauth: () => { window.location.href = 'api/oauth.php?a=iniciar&p=' + encodeURIComponent(t.dataset.p); },
       'excluir-conta': () => formExcluirConta(),
       'auth-entrar': () => { V.auth = 'entrar'; V.msg = ''; render(); },
       'auth-esqueci': () => { V.auth = 'esqueci'; V.msg = ''; render(); },

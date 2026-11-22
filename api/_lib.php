@@ -24,6 +24,7 @@ function cfg(): array
                 'site_url' => 'https://' . $m[2],
                 'email_modo' => 'enviar',
                 'cookie_seguro' => true,
+                'estado' => $estado,
             ];
         }
         $c += [
@@ -34,7 +35,10 @@ function cfg(): array
             'email_de' => 'lepvi@lepvi.com.br',
             'email_modo' => 'log',      // 'log' (testes) ou 'enviar' (produção)
             'cookie_seguro' => false,
+            'estado' => dirname(__DIR__) . '/.dev',
         ];
+        if (getenv('LEPVI_FINANCAS_DSN')) $c['db_dsn'] = (string) getenv('LEPVI_FINANCAS_DSN');
+        if (getenv('LEPVI_FINANCAS_ESTADO')) $c['estado'] = (string) getenv('LEPVI_FINANCAS_ESTADO');
     }
     return $c;
 }
@@ -64,6 +68,7 @@ function db(): PDO
             try { $pdo->exec($sql); } catch (Throwable $e2) { /* já existe */ }
         }
     }
+    try { $pdo->query('SELECT 1 FROM identidades LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('CREATE TABLE IF NOT EXISTS identidades (provedor VARCHAR(20) NOT NULL, sub VARCHAR(190) NOT NULL, usuario_id VARCHAR(32) NOT NULL, criado_em INTEGER NOT NULL, PRIMARY KEY (provedor, sub))'); } catch (Throwable $e2) { /* já existe */ } }
     try { $pdo->query('SELECT foto FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN foto LONGTEXT NULL'); } catch (Throwable $e2) { /* já existe */ } }
     return $pdo;
 }

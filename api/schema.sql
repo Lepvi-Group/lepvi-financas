@@ -52,3 +52,10 @@ CREATE TABLE IF NOT EXISTS consentimentos (
   quando INTEGER NOT NULL
 );
 CREATE INDEX idx_consent_usuario ON consentimentos (usuario_id);
+CREATE TABLE IF NOT EXISTS identidades (
+  provedor VARCHAR(20) NOT NULL,
+  sub VARCHAR(190) NOT NULL,
+  usuario_id VARCHAR(32) NOT NULL,
+  criado_em INTEGER NOT NULL,
+  PRIMARY KEY (provedor, sub)
+);

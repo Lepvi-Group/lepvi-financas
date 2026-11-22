@@ -1,13 +1,19 @@
 <?php
 declare(strict_types=1);
 /* Lepvi Finanças: API. Uma ação por chamada: /api/?a=entrar etc. Produto separado do site e do Hub. */
-require __DIR__ . '/_lib.php';
+require __DIR__ . '/_oauth.php';
 
 $acao = (string) ($_GET['a'] ?? '');
 $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $link = fn(string $q) => rtrim(cfg()['site_url'], '/') . '/?' . $q;
 
 try {
+    // Entrada com Google/Microsoft: dados da pessoa que ainda precisa aceitar a Política e os Termos
+    if ($metodo === 'GET' && $acao === 'oauth_pendente') {
+        $pend = ler_assinado((string) ($_COOKIE['lf_novo'] ?? ''));
+        if (!$pend) erro('Pedido expirado. Entre de novo.', 404);
+        resp(['provedor' => oauth_provedores()[$pend['p']]['nome'] ?? '', 'email' => $pend['email'], 'nome' => $pend['nome']]);
+    }
     // Leitura sem efeito colateral (exportar baixa um arquivo).
     if ($metodo === 'GET' && in_array($acao, ['eu', 'dados', 'exportar'], true)) {
         $u = exigir_usuario();
@@ -41,6 +47,21 @@ try {
     $b = corpo();
 
     switch ($acao) {
+        case 'oauth_concluir': {
+            $pend = ler_assinado((string) ($_COOKIE['lf_novo'] ?? ''));
+            if (!$pend) erro('Pedido expirado. Entre de novo.', 410);
+            if (($b['aceite'] ?? false) !== true) erro('É preciso aceitar a Política de Privacidade e os Termos de Uso.', 422);
+            [$novo, $confirmar] = oauth_criar($pend);
+            setcookie('lf_novo', '', ['expires' => 1, 'path' => '/', 'secure' => (bool) cfg()['cookie_seguro'], 'httponly' => true, 'samesite' => 'Lax']);
+            if ($confirmar) {
+                $t = criar_token($novo['id'], 'verificar', 86400);
+                enviar_email($novo['email'], 'Confirme seu e-mail para ativar sua conta no Lepvi Finanças', email_html('Confirme seu e-mail', '<p style="margin:0 0 12px">Olá, ' . htmlspecialchars(explode(' ', $novo['nome'])[0]) . '!</p><p style="margin:0">Falta só confirmar que este e-mail é seu. O link vale por <b>24 horas</b>.</p>', 'Confirmar meu e-mail', $link('verificar=' . $t), 'Falta só um passo para ativar sua conta.'));
+                resp(['ok' => true, 'mensagem' => 'Enviamos um e-mail para você confirmar o cadastro. Abra o link e depois entre com a Microsoft.']);
+            }
+            db()->prepare('UPDATE usuarios SET ultimo_login = ? WHERE id = ?')->execute([agora(), $novo['id']]);
+            abrir_sessao($novo['id']);
+            resp(['usuario' => usuario_publico($novo)]);
+        }
         case 'cadastro': {
             $ip = 'cad:' . ip_hash();
             if (limite_estourou($ip, 10, 3600)) erro('Muitas tentativas. Tente de novo em alguns minutos.', 429);
