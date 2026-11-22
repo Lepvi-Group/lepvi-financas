@@ -637,3 +637,21 @@ html[data-esquema="escuro"]:not([data-contraste="alto"]) select { background-ima
 
 .rep-bloco { display: grid; gap: 14px; }
 .rep-resumo { background: rgba(45,75,255,.08); border-radius: 14px; padding: 12px 14px; font-size: 15px; line-height: 1.45; margin: 0; }
+
+/* compras automáticas, fotos de comprovante */
+.rev-card { display: grid; gap: 10px; border: 2px solid var(--azul); }
+.rev-card .btn { justify-self: start; }
+.rev-lin { grid-template-columns: 1fr; }
+.rev-sel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 520px) { .rev-sel { grid-template-columns: 1fr; } }
+.cap-passo { display: grid; gap: 10px; margin-bottom: 14px; }
+.cap-passo h3 { margin: 0; font-size: 18px; }
+.cap-passo details { border-top: 1px solid var(--linha); padding: 10px 0; }
+.cap-passo summary { font-weight: 600; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.cap-ol { margin: 6px 0 0; padding-left: 22px; display: grid; gap: 8px; line-height: 1.45; }
+.cap-passo input[readonly] { font-family: ui-monospace, Menlo, monospace; font-size: 15px; }
+.anexos-box { display: grid; gap: 10px; }
+.anexos { display: flex; flex-wrap: wrap; gap: 12px; }
+.anexo { margin: 0; display: grid; gap: 6px; justify-items: start; }
+.anexo img { width: 96px; height: 96px; object-fit: cover; border-radius: 12px; background: var(--chip); border: 1px solid var(--linha); cursor: zoom-in; }
+.anexo img.grande { width: min(100%, 420px); height: auto; max-height: 60vh; object-fit: contain; cursor: zoom-out; }

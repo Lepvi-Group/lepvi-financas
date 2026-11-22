@@ -59,3 +59,22 @@ CREATE TABLE IF NOT EXISTS identidades (
   criado_em INTEGER NOT NULL,
   PRIMARY KEY (provedor, sub)
 );
+CREATE TABLE IF NOT EXISTS chaves_captura (
+  hash VARCHAR(64) NOT NULL PRIMARY KEY,
+  usuario_id VARCHAR(32) NOT NULL,
+  criado_em INTEGER NOT NULL,
+  ultimo_uso INTEGER NULL
+);
+CREATE TABLE IF NOT EXISTS capturas (
+  id VARCHAR(32) NOT NULL PRIMARY KEY,
+  usuario_id VARCHAR(32) NOT NULL,
+  conteudo LONGTEXT NOT NULL,
+  criado_em INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS anexos (
+  id VARCHAR(32) NOT NULL PRIMARY KEY,
+  usuario_id VARCHAR(32) NOT NULL,
+  lanc_id VARCHAR(64) NOT NULL,
+  conteudo LONGTEXT NOT NULL,
+  criado_em INTEGER NOT NULL
+);

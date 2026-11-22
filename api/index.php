@@ -2,6 +2,7 @@
 declare(strict_types=1);
 /* Lepvi Finanças: API. Uma ação por chamada: /api/?a=entrar etc. Produto separado do site e do Hub. */
 require __DIR__ . '/_oauth.php';
+require __DIR__ . '/_captura.php';
 
 $acao = (string) ($_GET['a'] ?? '');
 $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -16,9 +17,22 @@ try {
         resp(['provedor' => oauth_provedores()[$pend['p']]['nome'] ?? '', 'email' => $pend['email'], 'nome' => $pend['nome']]);
     }
     // Leitura sem efeito colateral (exportar baixa um arquivo).
-    if ($metodo === 'GET' && in_array($acao, ['eu', 'dados', 'exportar'], true)) {
+    if ($metodo === 'GET' && in_array($acao, ['eu', 'dados', 'exportar', 'capturas', 'anexos', 'anexo'], true)) {
         $u = exigir_usuario();
         if ($acao === 'eu') resp(['usuario' => usuario_publico($u)]);
+        if ($acao === 'capturas') resp(['capturas' => capturas_listar($u['id'])]);
+        if ($acao === 'anexos') {
+            $s = db()->prepare('SELECT id, criado_em FROM anexos WHERE usuario_id = ? AND lanc_id = ? ORDER BY criado_em');
+            $s->execute([$u['id'], substr((string) ($_GET['lanc'] ?? ''), 0, 64)]);
+            resp(['anexos' => $s->fetchAll()]);
+        }
+        if ($acao === 'anexo') {
+            $s = db()->prepare('SELECT conteudo FROM anexos WHERE usuario_id = ? AND id = ?');
+            $s->execute([$u['id'], substr((string) ($_GET['id'] ?? ''), 0, 32)]);
+            $c = $s->fetchColumn();
+            if ($c === false) erro('Anexo não encontrado.', 404);
+            resp(['dataUrl' => decifrar((string) $c)]);
+        }
         if ($acao === 'dados') {
             $s = db()->prepare('SELECT conteudo, versao FROM dados WHERE usuario_id = ?');
             $s->execute([$u['id']]);
@@ -175,14 +189,51 @@ try {
             $pdo->commit();
             resp(['versao' => $nova]);
         }
+        case 'captura_token': {
+            $t = 'lf_' . token_aleatorio();
+            db()->prepare('DELETE FROM chaves_captura WHERE usuario_id = ?')->execute([$u['id']]);
+            db()->prepare('INSERT INTO chaves_captura (hash, usuario_id, criado_em) VALUES (?,?,?)')->execute([hash_token($t), $u['id'], agora()]);
+            resp(['token' => $t]);
+        }
+        case 'captura_teste': {
+            $c = captura_interpretar((string) ($b['texto'] ?? ''));
+            if (!$c) erro('Não achei um valor em reais nesse texto. Cole o aviso completo do banco.', 422);
+            $c['origem'] = 'teste'; $c['h'] = sha1($c['texto'] . $c['valor'] . agora());
+            resp(['captura' => ['id' => captura_guardar($u['id'], $c)] + $c]);
+        }
+        case 'capturas_resolver': {
+            $ids = isset($b['ids']) && is_array($b['ids']) ? array_slice(array_map('strval', $b['ids']), 0, 200) : [];
+            foreach ($ids as $id) db()->prepare('DELETE FROM capturas WHERE usuario_id = ? AND id = ?')->execute([$u['id'], substr($id, 0, 32)]);
+            resp(['ok' => true]);
+        }
+        case 'anexo_enviar': {
+            $lanc = substr((string) ($b['lanc'] ?? ''), 0, 64); $d = (string) ($b['dataUrl'] ?? '');
+            if ($lanc === '') erro('Lançamento inválido.', 422);
+            if (!preg_match('#^data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$#', $d, $m) || strlen($d) > 900000) erro('Imagem inválida ou grande demais.', 422);
+            $bin = base64_decode($m[2], true); $info = $bin !== false ? @getimagesizefromstring($bin) : false;
+            if (!$info || $info[0] > 2400 || $info[1] > 2400) erro('Imagem inválida.', 422);
+            $n = db()->prepare('SELECT COUNT(*) FROM anexos WHERE usuario_id = ? AND lanc_id = ?'); $n->execute([$u['id'], $lanc]);
+            if ((int) $n->fetchColumn() >= 5) erro('Cada lançamento aceita até 5 fotos.', 422);
+            $t = db()->prepare('SELECT COUNT(*) FROM anexos WHERE usuario_id = ?'); $t->execute([$u['id']]);
+            if ((int) $t->fetchColumn() >= 300) erro('Você chegou ao limite de fotos guardadas.', 422);
+            $id = novo_id();
+            db()->prepare('INSERT INTO anexos (id, usuario_id, lanc_id, conteudo, criado_em) VALUES (?,?,?,?,?)')->execute([$id, $u['id'], $lanc, cifrar($d), agora()]);
+            resp(['id' => $id]);
+        }
+        case 'anexo_excluir': {
+            if (!empty($b['id'])) db()->prepare('DELETE FROM anexos WHERE usuario_id = ? AND id = ?')->execute([$u['id'], substr((string) $b['id'], 0, 32)]);
+            elseif (!empty($b['lanc'])) db()->prepare('DELETE FROM anexos WHERE usuario_id = ? AND lanc_id = ?')->execute([$u['id'], substr((string) $b['lanc'], 0, 64)]);
+            resp(['ok' => true]);
+        }
         case 'preferencias': {
             $nome = isset($b['nome']) ? trim((string) $b['nome']) : $u['nome'];
             if ($nome === '' || mb_strlen($nome) > 120) erro('Informe seu nome.', 422);
             $avisos = isset($b['avisos']) ? (int) (bool) $b['avisos'] : (int) $u['avisos'];
             $foto = $u['foto'] ?? null;
             if (array_key_exists('foto', $b)) $foto = ($b['foto'] === null || $b['foto'] === '') ? null : validar_foto((string) $b['foto']);
-            db()->prepare('UPDATE usuarios SET nome = ?, avisos = ?, foto = ? WHERE id = ?')->execute([$nome, $avisos, $foto, $u['id']]);
-            $u['nome'] = $nome; $u['avisos'] = $avisos; $u['foto'] = $foto;
+            $resumo = isset($b['resumo']) ? (int) (bool) $b['resumo'] : (int) ($u['resumo'] ?? 1);
+            db()->prepare('UPDATE usuarios SET nome = ?, avisos = ?, foto = ?, resumo = ? WHERE id = ?')->execute([$nome, $avisos, $foto, $resumo, $u['id']]);
+            $u['nome'] = $nome; $u['avisos'] = $avisos; $u['foto'] = $foto; $u['resumo'] = $resumo;
             resp(['usuario' => usuario_publico($u)]);
         }
         case 'mudar_senha': {
@@ -201,7 +252,7 @@ try {
             if (limite_estourou($k, 5, 900)) erro('Muitas tentativas. Espere 15 minutos.', 429);
             if (!senha_confere($u, (string) ($b['senha'] ?? ''))) { registrar_tentativa($k); erro('Senha incorreta.', 401); }
             $pdo = db(); $pdo->beginTransaction();
-            foreach (['sessoes', 'tokens', 'dados', 'avisos', 'consentimentos'] as $t) $pdo->prepare("DELETE FROM $t WHERE usuario_id = ?")->execute([$u['id']]);
+            foreach (['sessoes', 'tokens', 'dados', 'avisos', 'consentimentos', 'identidades', 'chaves_captura', 'capturas', 'anexos'] as $t) $pdo->prepare("DELETE FROM $t WHERE usuario_id = ?")->execute([$u['id']]);
             $pdo->prepare('DELETE FROM usuarios WHERE id = ?')->execute([$u['id']]);
             $pdo->commit();
             fechar_cookie();

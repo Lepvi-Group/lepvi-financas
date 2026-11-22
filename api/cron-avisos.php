@@ -50,6 +50,49 @@ function itens_a_pagar(array $d): array
     return $itens;
 }
 
+/* Resumo da semana (rodado às segundas): quanto gastou, o que mudou, onde mais gastou e o que vence nos próximos 7 dias. */
+function resumo_semanal_rodar(string $hoje): int
+{
+    $enviados = 0; $semana = date('o-\WW', strtotime($hoje));
+    $dia = fn(int $n) => date('Y-m-d', strtotime("$hoje $n days"));
+    $ini = $dia(-7); $fim = $dia(-1); $iniAnt = $dia(-14); $fimAnt = $dia(-8);
+    foreach (db()->query('SELECT * FROM usuarios WHERE resumo = 1 AND email_verificado = 1')->fetchAll() as $u) {
+        $chave = 'semanal|' . $semana;
+        $j = db()->prepare('SELECT 1 FROM avisos WHERE usuario_id = ? AND chave = ?'); $j->execute([$u['id'], $chave]);
+        if ($j->fetchColumn()) continue;
+        $s = db()->prepare('SELECT conteudo FROM dados WHERE usuario_id = ?'); $s->execute([$u['id']]);
+        $bruto = $s->fetchColumn(); $S = $bruto ? json_decode((string) decifrar($bruto), true) : null;
+        if (!is_array($S)) continue;
+        $tot = 0.0; $ant = 0.0; $rec = 0.0; $cats = []; $lista = []; $proximos = [];
+        foreach (($S['dados'] ?? []) as $d) {
+            foreach (($d['lancs'] ?? []) as $l) {
+                if (!empty($l['ignorar']) || ($l['tipo'] ?? '') === 'transf') continue;
+                $v = (float) ($l['valor'] ?? 0); $dt = (string) ($l['data'] ?? '');
+                if (($l['tipo'] ?? '') === 'despesa') {
+                    if ($dt >= $ini && $dt <= $fim) { $tot += $v; $cats[$l['categoria'] ?? 'Outros'] = ($cats[$l['categoria'] ?? 'Outros'] ?? 0) + $v; $lista[] = ['t' => (string) ($l['desc'] ?? ''), 'v' => $v, 'd' => $dt]; }
+                    elseif ($dt >= $iniAnt && $dt <= $fimAnt) $ant += $v;
+                } elseif (($l['tipo'] ?? '') === 'receita' && $dt >= $ini && $dt <= $fim) $rec += $v;
+            }
+            foreach (itens_a_pagar($d) as $i) { $dias = (int) round((strtotime($i['venc']) - strtotime($hoje)) / 86400); if ($dias >= 0 && $dias <= 7) $proximos[] = $i + ['dias' => $dias]; }
+        }
+        if ($tot == 0.0 && $rec == 0.0 && !$proximos) continue;
+        arsort($cats); usort($lista, fn($a, $b) => $b['v'] <=> $a['v']); usort($proximos, fn($a, $b) => strcmp($a['venc'], $b['venc']));
+        $dif = $tot - $ant; $nome = explode(' ', trim($u['nome']))[0];
+        $tr = fn(string $a, string $b, string $cor = '#0D0D0F') => '<tr><td style="padding:9px 0;border-top:1px solid #E6E5E0">' . $a . '</td><td style="padding:9px 0;border-top:1px solid #E6E5E0;text-align:right;white-space:nowrap;color:' . $cor . '"><b>' . $b . '</b></td></tr>';
+        $corpo = '<p>Olá, ' . htmlspecialchars($nome) . '! Veja como foi a sua semana (' . data_br($ini) . ' a ' . data_br($fim) . '):</p>'
+            . '<table style="width:100%;border-collapse:collapse;margin:8px 0 4px">' . $tr('Você gastou', brl($tot)) . $tr('Semana anterior', brl($ant), '#4A4944') . $tr($dif > 0 ? 'A mais que na semana anterior' : 'A menos que na semana anterior', brl(abs($dif)), $dif > 0 ? '#B42318' : '#0A7656') . ($rec > 0 ? $tr('Entrou', brl($rec), '#0A7656') : '') . '</table>';
+        if ($cats) { $corpo .= '<h2 style="font-size:17px;margin:20px 0 6px">Onde você mais gastou</h2><table style="width:100%;border-collapse:collapse">'; foreach (array_slice($cats, 0, 3, true) as $k => $v) $corpo .= $tr(htmlspecialchars((string) $k), brl($v)); $corpo .= '</table>'; }
+        if ($lista) { $corpo .= '<h2 style="font-size:17px;margin:20px 0 6px">Maiores gastos</h2><table style="width:100%;border-collapse:collapse">'; foreach (array_slice($lista, 0, 3) as $x) $corpo .= $tr(htmlspecialchars($x['t']) . ' <span style="color:#4A4944;font-size:13px">' . data_br($x['d']) . '</span>', brl($x['v'])); $corpo .= '</table>'; }
+        if ($proximos) { $corpo .= '<h2 style="font-size:17px;margin:20px 0 6px;color:#2D4BFF">Vence nos próximos 7 dias</h2><table style="width:100%;border-collapse:collapse">'; foreach (array_slice($proximos, 0, 8) as $x) $corpo .= $tr(htmlspecialchars($x['titulo']) . ' <span style="color:#4A4944;font-size:13px">' . ($x['dias'] === 0 ? 'hoje' : 'em ' . $x['dias'] . ($x['dias'] === 1 ? ' dia' : ' dias')) . '</span>', brl($x['valor'])); $corpo .= '</table>'; }
+        $corpo .= '<p style="font-size:14px;color:#4A4944;margin-top:22px">Para desligar este resumo: Meu perfil → Resumo semanal.</p>';
+        if (enviar_email($u['email'], '📊 Seu resumo da semana · ' . brl($tot) . ' gastos', email_html('Resumo da semana', $corpo, 'Abrir o Lepvi Finanças', rtrim(cfg()['site_url'], '/') . '/'))) {
+            db()->prepare('INSERT INTO avisos (usuario_id, chave, enviado_em) VALUES (?,?,?)')->execute([$u['id'], $chave, agora()]); $enviados++;
+        }
+    }
+    return $enviados;
+}
+if (in_array('--semanal', $argv, true)) { echo date('c') . ' resumos enviados: ' . resumo_semanal_rodar($hoje) . "\n"; exit; }
+
 $usuarios = db()->query('SELECT * FROM usuarios WHERE avisos = 1 AND email_verificado = 1')->fetchAll();
 $enviados = 0;
 foreach ($usuarios as $u) {

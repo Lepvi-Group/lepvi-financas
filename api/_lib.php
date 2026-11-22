@@ -71,6 +71,10 @@ function db(): PDO
         }
     }
     try { $pdo->query('SELECT 1 FROM identidades LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('CREATE TABLE IF NOT EXISTS identidades (provedor VARCHAR(20) NOT NULL, sub VARCHAR(190) NOT NULL, usuario_id VARCHAR(32) NOT NULL, criado_em INTEGER NOT NULL, PRIMARY KEY (provedor, sub))'); } catch (Throwable $e2) { /* já existe */ } }
+    try { $pdo->query('SELECT 1 FROM capturas LIMIT 1'); } catch (Throwable $e) {
+        foreach (['CREATE TABLE IF NOT EXISTS chaves_captura (hash VARCHAR(64) NOT NULL PRIMARY KEY, usuario_id VARCHAR(32) NOT NULL, criado_em INTEGER NOT NULL, ultimo_uso INTEGER NULL)', 'CREATE TABLE IF NOT EXISTS capturas (id VARCHAR(32) NOT NULL PRIMARY KEY, usuario_id VARCHAR(32) NOT NULL, conteudo LONGTEXT NOT NULL, criado_em INTEGER NOT NULL)', 'CREATE TABLE IF NOT EXISTS anexos (id VARCHAR(32) NOT NULL PRIMARY KEY, usuario_id VARCHAR(32) NOT NULL, lanc_id VARCHAR(64) NOT NULL, conteudo LONGTEXT NOT NULL, criado_em INTEGER NOT NULL)'] as $sql) { try { $pdo->exec($sql); } catch (Throwable $e2) { /* já existe */ } }
+    }
+    try { $pdo->query('SELECT resumo FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN resumo INTEGER NOT NULL DEFAULT 1'); } catch (Throwable $e2) { /* já existe */ } }
     try { $pdo->query('SELECT foto FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN foto LONGTEXT NULL'); } catch (Throwable $e2) { /* já existe */ } }
     return $pdo;
 }
@@ -188,7 +192,7 @@ function validar_foto(string $d): string
 function exigir_usuario(): array { return usuario_atual() ?? erro('Entre para continuar.', 401); }
 function usuario_publico(array $u): array
 {
-    return ['email' => $u['email'], 'nome' => $u['nome'], 'foto' => $u['foto'] ?? null, 'avisos' => (bool) $u['avisos'], 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao'], 'criado_em' => (int) $u['criado_em']];
+    return ['email' => $u['email'], 'nome' => $u['nome'], 'foto' => $u['foto'] ?? null, 'avisos' => (bool) $u['avisos'], 'resumo' => (bool) ($u['resumo'] ?? 1), 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao'], 'criado_em' => (int) $u['criado_em']];
 }
 function criar_token(string $uid, string $tipo, int $segundos): string
 {

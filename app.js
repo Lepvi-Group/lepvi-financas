@@ -194,7 +194,104 @@
     try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ }
     if (!USER.logado) await carregarTurnstile();
     render();
+    if (USER.logado) carregarCapturas();
   }
+
+  /* ---------- compras automáticas (avisos do banco) ---------- */
+  async function carregarCapturas() {
+    try { V.rev = (await api('capturas')).capturas || []; } catch (e) { V.rev = V.rev || []; }
+    if (USER.logado && !dlg.open && (V.tela === 'inicio' || V.tela === 'mais')) render();
+  }
+  const catOpts = (tipo, sel) => catsDe(tipo).filter((c) => c.nome !== 'Cartão').map((c) => `<option value="${esc(c.nome)}" ${c.nome === sel ? 'selected' : ''}>${esc(c.icone)} ${esc(c.nome)}</option>`).join('');
+  function formRevisar() {
+    const d = D(); const lista = V.rev || [];
+    if (!lista.length) {
+      abrir('Para revisar', '<p class="mut">Nada para revisar agora. Quando o banco avisar uma compra, ela aparece aqui para você conferir e lançar com um toque.</p><div class="botoes rodape-form"><button class="btn sec" type="button" data-acao="captura-config">Configurar avisos automáticos</button></div>');
+      return;
+    }
+    const opcConta = (tipo, sel) => (tipo === 'receita' ? d.contas.map((c) => [c.id, c.nome]) : d.contas.map((c) => [c.id, c.nome]).concat(d.cartoes.map((c) => ['c:' + c.id, '💳 ' + c.nome])))
+      .map(([v, t]) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(t)}</option>`).join('');
+    const contaPadrao = (l) => { if (l.tipo === 'receita' || !d.cartoes.length || !l.final) return d.contas[0].id; const c = d.cartoes.find((x) => x.final && x.final === l.final); return 'c:' + (c || d.cartoes[0]).id; };
+    const linhas = lista.map((l, i) => `<div class="imp-lin rev-lin"><label class="imp-sel"><input type="checkbox" name="sel-${i}" checked aria-label="Lançar ${esc(l.desc)}"><span class="imp-d"><b>${esc(l.desc)}</b><small>${new Date(l.data + 'T12:00:00').toLocaleDateString('pt-BR')} · <span class="num ${l.tipo === 'receita' ? 'pos' : 'neg'}">${l.tipo === 'receita' ? '+' : '−'} ${F.brl(l.valor)}</span></small></span></label><span class="rev-sel"><select name="cat-${i}" aria-label="Categoria de ${esc(l.desc)}">${catOpts(l.tipo, F.sugerirCategoria(l.desc, l.tipo, d.lancs))}</select><select name="conta-${i}" aria-label="Conta de ${esc(l.desc)}">${opcConta(l.tipo, contaPadrao(l))}</select></span></div>`).join('');
+    abrir('Para revisar', `<p class="mut">Estes avisos vieram do seu banco. Confira a categoria e a conta e lance as que estão certas.</p><div class="card imp-lista">${linhas}</div>
+      <div class="botoes rodape-form"><button class="btn sec" type="button" id="rev-descartar">Descartar marcadas</button><button class="btn" type="submit">Lançar marcadas</button></div>`,
+    (fd) => {
+      const ids = []; const novos = [];
+      lista.forEach((l, i) => {
+        if (!fd.get('sel-' + i)) return;
+        const conta = fd.get('conta-' + i); const cartao = F.ehCartao({ conta });
+        novos.push({ id: uid(), tipo: l.tipo, desc: l.desc, valor: l.valor, data: l.data, categoria: fd.get('cat-' + i), conta, boleto: false, pago: !cartao, nota: 'Veio de um aviso do banco', tags: [], ignorar: false });
+        ids.push(l.id);
+      });
+      if (!ids.length) { aviso('Marque ao menos um item.'); return false; }
+      d.lancs.push(...novos); V.rev = V.rev.filter((x) => !ids.includes(x.id)); salvar();
+      api('capturas_resolver', { ids }).catch(() => {}); render(); aviso(`${novos.length} lançamento(s) criado(s).`);
+    }, (f) => {
+      $('#rev-descartar', f).onclick = () => {
+        const ids = lista.filter((l, i) => f['sel-' + i] && f['sel-' + i].checked).map((l) => l.id);
+        if (!ids.length) { aviso('Marque ao menos um item.'); return; }
+        if (!confirm(`Descartar ${ids.length} aviso(s)? Eles não viram lançamento.`)) return;
+        V.rev = V.rev.filter((x) => !ids.includes(x.id)); api('capturas_resolver', { ids }).catch(() => {}); dlg.close(); render(); aviso('Descartado.');
+      };
+    });
+  }
+  function formCaptura() {
+    const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'api/captura.php';
+    abrir('Compras automáticas', `<p class="mut">Seu celular manda o aviso de compra do banco para cá e o app cria um item em <b>Para revisar</b>. Você não precisa dar a senha do banco a ninguém e não paga nada.</p>
+      <section class="card cap-passo"><h3>1. Gere sua chave</h3><p class="mut">É como uma senha só para este recurso. Ela aparece uma vez só; gerar outra desliga a anterior.</p>
+        <button class="btn sec" type="button" id="cap-gerar">Gerar chave</button>
+        <div id="cap-chave" hidden><label class="campo"><span>Sua chave (guarde agora)</span><input id="cap-token" readonly></label><button class="btn sec mini" type="button" data-copiar="#cap-token">Copiar chave</button></div></section>
+      <section class="card cap-passo"><h3>2. Endereço para onde enviar</h3><label class="campo"><span>Endereço</span><input id="cap-url" readonly value="${esc(url)}"></label><button class="btn sec mini" type="button" data-copiar="#cap-url">Copiar endereço</button></section>
+      <section class="card cap-passo"><h3>3. Configure no celular</h3>
+        <details><summary>iPhone (app Atalhos)</summary><ol class="cap-ol"><li>Abra Atalhos → Automação → Nova automação → <b>Mensagem</b> (ou <b>E-mail</b>) e escolha o remetente do banco.</li><li>Ação <b>Obter conteúdo de URL</b>: coloque o endereço acima, método <b>POST</b>.</li><li>Cabeçalho <b>Authorization</b> com o valor <b>Bearer</b>, um espaço e a sua chave.</li><li>Corpo da solicitação em <b>JSON</b>: campo <b>texto</b> = Conteúdo da mensagem.</li><li>Marque <b>Executar imediatamente</b>.</li></ol></details>
+        <details><summary>Android (app MacroDroid, grátis)</summary><ol class="cap-ol"><li>Novo macro → gatilho <b>Notificação recebida</b> e escolha o app do seu banco.</li><li>Ação <b>Requisição HTTP</b>, método <b>POST</b>, o endereço acima.</li><li>Cabeçalho <b>Authorization: Bearer</b> e a sua chave.</li><li>Corpo em JSON com o campo <b>texto</b> recebendo o texto da notificação (use a variável de texto da notificação do app).</li></ol></details>
+        <details><summary>Banco que avisa por e-mail</summary><p class="mut">Se o seu e-mail permite regra de encaminhamento automático para um serviço de webhook, aponte para o endereço acima. Se precisar de ajuda, escreva para lepvi@lepvi.com.br.</p></details></section>
+      <section class="card cap-passo"><h3>4. Teste agora</h3><p class="mut">Cole um aviso real do banco (ou use o exemplo) e veja se o app entende.</p>
+        <label class="campo"><span>Texto do aviso</span><textarea id="cap-texto" maxlength="600">Compra aprovada R$ 89,90 no estabelecimento MERCADO SOL com cartão final 1234.</textarea></label>
+        <button class="btn sec" type="button" id="cap-testar">Testar</button><p id="cap-res" class="mut" role="status"></p></section>`, null, (f) => {
+      $('#cap-gerar', f).onclick = async () => {
+        if (!confirm('Gerar uma chave nova? A anterior (se existir) deixa de funcionar.')) return;
+        try { const r = await api('captura_token', {}); $('#cap-token', f).value = r.token; $('#cap-chave', f).hidden = false; aviso('Chave gerada. Copie e guarde agora: ela não aparece de novo.'); } catch (e) { aviso(e.message); }
+      };
+      f.querySelectorAll('[data-copiar]').forEach((b) => b.addEventListener('click', async () => { const el = $(b.dataset.copiar, f); try { await navigator.clipboard.writeText(el.value); aviso('Copiado.'); } catch (e) { el.select(); aviso('Selecione e copie manualmente.'); } }));
+      $('#cap-testar', f).onclick = async () => {
+        const res = $('#cap-res', f); res.textContent = 'Testando…';
+        try { const r = await api('captura_teste', { texto: $('#cap-texto', f).value }); V.rev = [r.captura].concat(V.rev || []); const c = r.captura; res.textContent = `Entendi: ${c.tipo === 'receita' ? 'receita' : 'compra'} de ${F.brl(c.valor)} em "${c.desc}". Ela já está em Para revisar.`; } catch (e) { res.textContent = e.message; }
+      };
+    });
+  }
+  /* ---------- fotos de comprovante ---------- */
+  async function reduzirFoto(arq) {
+    const bmp = await createImageBitmap(arq, { imageOrientation: 'from-image' });
+    const k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height)); const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.7);
+  }
+  function montarAnexos(f, lancId) {
+    const lista = $('#anexos-lista', f);
+    const pintar = async () => {
+      try {
+        const r = await api('anexos&lanc=' + encodeURIComponent(lancId));
+        lista.innerHTML = r.anexos.length ? r.anexos.map((a) => `<figure class="anexo" data-an="${a.id}"><img alt="Foto do comprovante (toque para ampliar)" tabindex="0"><button class="link" type="button" data-del-an="${a.id}">Remover</button></figure>`).join('') : '<small class="mut">Nenhuma foto ainda.</small>';
+        r.anexos.forEach(async (a) => { try { const x = await api('anexo&id=' + a.id); const im = $(`[data-an="${a.id}"] img`, lista); if (im) im.src = x.dataUrl; } catch (e) { /* miniatura indisponível */ } });
+      } catch (e) { lista.innerHTML = `<small class="mut">${esc(e.message)}</small>`; }
+    };
+    lista.addEventListener('click', async (ev) => {
+      const im = ev.target.closest('img'); if (im) { im.classList.toggle('grande'); return; }
+      const del = ev.target.closest('[data-del-an]'); if (!del) return;
+      if (!confirm('Remover esta foto?')) return;
+      try { await api('anexo_excluir', { id: del.dataset.delAn }); await pintar(); } catch (e) { aviso(e.message); }
+    });
+    $('#anexo-arq', f).addEventListener('change', async (ev) => {
+      const arq = ev.target.files && ev.target.files[0]; ev.target.value = '';
+      if (!arq || !/^image\//.test(arq.type)) { aviso('Escolha uma foto (JPG, PNG ou WebP).'); return; }
+      try { aviso('Enviando a foto…'); await api('anexo_enviar', { lanc: lancId, dataUrl: await reduzirFoto(arq) }); aviso('Foto guardada.'); await pintar(); }
+      catch (e) { aviso(e.message && !/bitmap|decode|source/i.test(e.message) ? e.message : 'Não consegui usar essa foto. Tente um JPG ou PNG.'); }
+    });
+    pintar();
+  }
+  const soltarAnexos = (lancs) => { lancs.forEach((l) => api('anexo_excluir', { lanc: l.id }).catch(() => {})); };
 
   const m = (v) => (S.oculto ? 'R$ •••' : F.brl(v));
   function aviso(t) { const el = $('#aviso'); el.textContent = t; el.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('on'), 6000); }
@@ -441,6 +538,9 @@
     return `<div class="tit"><h1>Mais opções</h1></div>
     <section><div class="card linhas">${linha({ icone: `<span class="mini-av">${avatarHtml('peq')}</span>`, titulo: esc(u.nome), desc: 'Meu perfil, foto e dados da conta', attrs: 'data-acao="perfil"' })}</div></section>
     <section><div class="sec-h"><h2 class="grupo">Bancos e carteiras</h2><button class="link" type="button" data-acao="nova-conta">+ Adicionar</button></div><div class="card linhas">${d.contas.map((c) => linha({ icone: `<span class="bolinha" style="background:${c.cor}"></span>`, cor: c.cor, titulo: esc(c.nome), desc: c.fora ? 'Fora do saldo geral' : 'Soma no saldo geral', fim: `<span class="num">${m(F.saldoConta(d.lancs, c))}</span>`, attrs: `data-acao="editar-conta" data-id="${c.id}"` })).join('')}</div></section>
+    ${grupo('Compras automáticas',
+      linha({ icone: LI.bell, titulo: 'Para revisar', desc: (V.rev && V.rev.length) ? `${V.rev.length} aviso(s) do banco esperando você` : 'Avisos do banco que viram lançamento', attrs: 'data-acao="revisar"' })
+      + linha({ icone: LI.chave, titulo: 'Conectar avisos do banco', desc: 'Chave e passo a passo, sem dar a senha do banco', attrs: 'data-acao="captura-config"' }))}
     ${grupo('Seus dados',
       linha({ tag: 'label', icone: LI.subir, titulo: 'Importar extrato ou fatura', desc: 'Arquivo OFX ou CSV do seu banco', dentro: '<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden>' })
       + linha({ icone: LI.copia, titulo: 'Cópia de segurança', desc: 'Baixar um arquivo com seus lançamentos', attrs: 'data-acao="backup"' })
@@ -470,6 +570,7 @@
       ${campo('E-mail', `<input value="${esc(u.email)}" disabled aria-describedby="email-dica"><small id="email-dica" class="mut">Para trocar o e-mail, escreva para lepvi@lepvi.com.br.</small>`)}<button class="btn" type="submit">Salvar alterações</button></form></section>
     ${grupo('Preferências',
       linha({ tag: 'label', icone: LI.bell, titulo: 'Avisos de vencimento por e-mail', desc: 'Vence em breve, vence hoje e já venceu', fim: '', dentro: `<input id="avisos-sw" type="checkbox" role="switch" ${u.avisos ? 'checked' : ''}>` })
+      + linha({ tag: 'label', icone: LI.bell, titulo: 'Resumo semanal por e-mail', desc: 'Toda segunda: quanto gastou, o que mudou e o que vence', fim: '', dentro: `<input id="resumo-sw" type="checkbox" role="switch" ${u.resumo ? 'checked' : ''}>` })
       + linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' }))}
     ${grupo('Segurança e privacidade',
       linha({ icone: LI.chave, titulo: 'Alterar senha', attrs: 'data-acao="senha"' })
@@ -510,6 +611,7 @@
     $('#menu').innerHTML = nav('inicio', 'Início') + nav('lancs', 'Lançamentos') + '<button class="mais-novo" type="button" data-acao="menu-novo" aria-label="Novo lançamento">+</button>' + nav('cartoes', 'Cartões') + nav('planejar', 'Planejar')
       + `<div class="menu-fim"><button type="button" class="mf-mais" data-acao="mais">Mais opções</button><div class="menu-user"><button type="button" class="mu-perfil" data-acao="perfil">${avatarHtml('peq')}<span><b>${esc(USER.info.nome)}</b><small>Meu perfil</small></span></button><button type="button" class="mu-sair" data-acao="sair">Sair</button></div></div>`;
     $('#tela').innerHTML = VISTAS[V.tela]();
+    if (V.tela === 'inicio' && V.rev && V.rev.length) $('#tela').insertAdjacentHTML('afterbegin', `<section class="card rev-card" role="status"><h2 class="secao">🔔 ${V.rev.length} ${V.rev.length === 1 ? 'compra para revisar' : 'compras para revisar'}</h2><p class="mut">O app leu estes avisos do seu banco. Confira e lance com um toque.</p><button class="btn" type="button" data-acao="revisar">Revisar agora</button></section>`);
     if (V.tela === 'inicio' && S.inicio) document.querySelectorAll('#tela [data-bloco]').forEach((el) => { if (S.inicio[el.dataset.bloco] === false) el.remove(); });
   }
   const ir = (t) => { V.tela = t; render(); window.scrollTo(0, 0); };
@@ -574,6 +676,7 @@
       ${F.ehCartao({ conta: contaSel }) && tipo === 'despesa' ? '' : troca('pago', rotPago, novo ? true : !!base.pago)}
       ${catsHtml}${contaHtml}
       ${extras}
+      ${novo ? '<p class="mut">Depois de salvar, abra o lançamento para anexar a foto da nota ou do recibo.</p>' : '<div class="campo anexos-box"><span>Foto da nota ou do recibo</span><div id="anexos-lista" class="anexos" aria-live="polite"><small class="mut">Carregando…</small></div><label class="btn sec mini">Adicionar foto<input id="anexo-arq" type="file" accept="image/*" hidden></label></div>'}
       <div class="botoes rodape-form">${novo ? '' : '<button class="btn perigo" type="button" id="exc">Excluir</button>'}<button class="btn" type="submit">Salvar lançamento</button></div>`,
     (fd) => {
       const valor = F.arred(F.numeroBR(fd.get('valor')));
@@ -601,7 +704,8 @@
       const lerForm = () => ({ valor: f.valor.value, desc: f.desc ? f.desc.value : '', data: f.data.value, conta: base.conta && base.conta.startsWith('c:') ? base.conta : undefined });
       f.querySelectorAll('[data-aba]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.aba !== tipo) formLanc(lerForm(), b.dataset.aba); }));
       const nc = $('[data-nova-cat]', f); if (nc) nc.addEventListener('click', () => formCategoria(tipo, (nome) => formLanc({ ...lerForm(), categoria: nome }, modo)));
-      const exc = $('#exc', f); if (exc) exc.onclick = () => { if (base.serie) { excluirSerie(base); return; } d.lancs = d.lancs.filter((x) => x.id !== base.id); salvar(); dlg.close(); render(); aviso('Lançamento excluído.'); };
+      if (!novo) montarAnexos(f, base.id);
+      const exc = $('#exc', f); if (exc) exc.onclick = () => { if (base.serie) { excluirSerie(base); return; } soltarAnexos([base]); d.lancs = d.lancs.filter((x) => x.id !== base.id); salvar(); dlg.close(); render(); aviso('Lançamento excluído.'); };
       f.querySelectorAll('[data-data]').forEach((b) => b.addEventListener('click', () => { f.data.value = b.dataset.data; }));
       const resumo = () => {
         if (!f.rep) return; const v = f.rep.value; $('#repn', f).hidden = v === 'nao'; if (v === 'nao') return;
@@ -651,7 +755,7 @@
   function excluirSerie(base) {
     const d = D();
     abrir('Excluir lançamento que se repete', `<p class="mut">Este lançamento faz parte de uma série (${base.n || '?'} de ${base.de || '?'}). O que você quer excluir?</p><div class="card linhas">${linha({ icone: LI.lixo, titulo: 'Só este', attrs: 'data-ex="este"' })}${linha({ icone: LI.lixo, titulo: 'Este e os próximos', attrs: 'data-ex="proximos"' })}${linha({ icone: LI.lixo, titulo: 'Todos da série', perigo: true, attrs: 'data-ex="todos"' })}</div>`, null, (f) => {
-      f.querySelectorAll('[data-ex]').forEach((b) => b.addEventListener('click', () => { const m = b.dataset.ex; d.lancs = d.lancs.filter((x) => !(x.id === base.id || (x.serie === base.serie && (m === 'todos' || (m === 'proximos' && x.data >= base.data))))); salvar(); dlg.close(); render(); aviso('Excluído.'); }));
+      f.querySelectorAll('[data-ex]').forEach((b) => b.addEventListener('click', () => { const m = b.dataset.ex; soltarAnexos(d.lancs.filter((x) => x.id === base.id || (x.serie === base.serie && (m === 'todos' || (m === 'proximos' && x.data >= base.data))))); d.lancs = d.lancs.filter((x) => !(x.id === base.id || (x.serie === base.serie && (m === 'todos' || (m === 'proximos' && x.data >= base.data))))); salvar(); dlg.close(); render(); aviso('Excluído.'); }));
     });
   }
   function formCartao(c = {}) {
@@ -659,16 +763,17 @@
     abrir(novo ? 'Novo cartão' : 'Editar cartão', `${campo('Nome do cartão', `<input name="nome" required maxlength="30" value="${esc(c.nome || '')}" placeholder="Ex.: Nubank, Itaú Empresa">`)}
       ${campo('Limite (R$)', `<input name="limite" required inputmode="decimal" value="${val2(c.limite)}" placeholder="0,00">`)}
       <div class="dupla">${campo('Dia do fechamento', `<input name="fechamento" type="number" min="1" max="31" required value="${c.fechamento || ''}">`)}${campo('Dia do vencimento', `<input name="vencimento" type="number" min="1" max="31" required value="${c.vencimento || ''}">`)}</div>
+      ${campo('Final do cartão (opcional)', `<input name="final" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="${esc(c.final || '')}" placeholder="4 últimos números"><small class="mut">Ajuda o app a achar o cartão certo nos avisos do banco.</small>`)}
       ${campo('Cor', radios('cor', CORES.map((x) => [x, '']), c.cor || CORES[d_cartoes() % CORES.length], 'cores').replace(/<span>/g, '<span>'))}
       <div class="botoes">${novo ? '' : '<button class="btn perigo" type="button" id="exc">Excluir</button>'}<button class="btn" type="submit">Salvar</button></div>`,
     (fd) => {
-      const reg = { nome: fd.get('nome').trim(), limite: F.arred(F.numeroBR(fd.get('limite'))), fechamento: +fd.get('fechamento'), vencimento: +fd.get('vencimento'), cor: fd.get('cor') };
+      const reg = { nome: fd.get('nome').trim(), limite: F.arred(F.numeroBR(fd.get('limite'))), fechamento: +fd.get('fechamento'), vencimento: +fd.get('vencimento'), cor: fd.get('cor'), final: String(fd.get('final') || '').replace(/\D/g, '').slice(0, 4) };
       if (!(reg.limite >= 0)) { aviso('Limite inválido.'); return false; }
       if (novo) { const n = { id: uid(), ...reg }; D().cartoes.push(n); V.cartao = n.id; V.fmes = null; } else Object.assign(D().cartoes.find((x) => x.id === c.id), reg);
       salvar(); render(); aviso('Cartão salvo.');
     }, (f) => {
       f.querySelectorAll('.cores span').forEach((s) => { s.style.background = s.previousElementSibling.value; });
-      const exc = $('#exc', f); if (exc) exc.onclick = () => { if (!confirm('Excluir este cartão e as compras dele?')) return; const d = D(); d.cartoes = d.cartoes.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== 'c:' + c.id); V.cartao = null; salvar(); dlg.close(); render(); aviso('Cartão excluído.'); };
+      const exc = $('#exc', f); if (exc) exc.onclick = () => { if (!confirm('Excluir este cartão e as compras dele?')) return; const d = D(); soltarAnexos(d.lancs.filter((l) => l.conta === 'c:' + c.id)); d.cartoes = d.cartoes.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== 'c:' + c.id); V.cartao = null; salvar(); dlg.close(); render(); aviso('Cartão excluído.'); };
     });
   }
   const d_cartoes = () => D().cartoes.length;
@@ -693,7 +798,7 @@
       salvar(); render(); aviso('Conta salva.');
     }, (f) => {
       f.querySelectorAll('.cores span').forEach((s) => { s.style.background = s.previousElementSibling.value; });
-      const exc = $('#exc', f); if (exc) exc.onclick = () => { if (!confirm('Excluir este banco ou carteira e os lançamentos dele?')) return; const d = D(); d.contas = d.contas.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== c.id && l.destino !== c.id); salvar(); dlg.close(); render(); aviso('Conta excluída.'); };
+      const exc = $('#exc', f); if (exc) exc.onclick = () => { if (!confirm('Excluir este banco ou carteira e os lançamentos dele?')) return; const d = D(); soltarAnexos(d.lancs.filter((l) => l.conta === c.id || l.destino === c.id)); d.contas = d.contas.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== c.id && l.destino !== c.id); salvar(); dlg.close(); render(); aviso('Conta excluída.'); };
     });
   }
 
@@ -854,6 +959,8 @@
     const d = D(); const id = t.dataset.id; const a = t.dataset.acao;
     const acoes = {
       acess: () => formAcess(),
+      revisar: () => formRevisar(),
+      'captura-config': () => formCaptura(),
       sair: () => sair(),
       'conta-menu': () => menuConta(),
       perfil: () => ir('perfil'),
@@ -918,6 +1025,7 @@
     const alvo = ev.target;
     if (alvo.id === 'foto-arq') { processarFoto(alvo.files && alvo.files[0]); alvo.value = ''; return; }
     if (alvo.id === 'avisos-sw') { api('preferencias', { avisos: alvo.checked }).then((r) => { USER.info = r.usuario; aviso(r.usuario.avisos ? 'Avisos por e-mail ligados.' : 'Avisos por e-mail desligados.'); }).catch((e) => { alvo.checked = !alvo.checked; aviso(e.message); }); return; }
+    if (alvo.id === 'resumo-sw') { api('preferencias', { resumo: alvo.checked }).then((r) => { USER.info = r.usuario; aviso(r.usuario.resumo ? 'Resumo semanal ligado.' : 'Resumo semanal desligado.'); }).catch((e) => { alvo.checked = !alvo.checked; aviso(e.message); }); return; }
     if (alvo.matches && alvo.matches('[data-mostrar]')) { alvo.closest('form').querySelectorAll('input[name=senha],input[name=nova],input[name=atual]').forEach((i) => { i.type = alvo.checked ? 'text' : 'password'; }); return; }
     const el = ev.target; if (!el.files || !el.files[0]) return;
     const arq = el.files[0]; const r = new FileReader();

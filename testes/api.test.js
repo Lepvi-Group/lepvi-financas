@@ -129,6 +129,68 @@ test('esqueci senha responde igual para e-mail que não existe', async () => {
   assert.strictEqual(r.status, 200);
   assert.ok(!emails().includes('PARA: ninguem@example.com'));
 });
+test('captura: lê avisos reais de banco (valor, local, cartão e tipo)', () => {
+  const r = JSON.parse(execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_captura.php"; $t = ["Compra aprovada no cartão final 1234 de R$ 45,90 em PADARIA DO ZE", "Nubank: Compra de R$ 1.234,56 APROVADA em UBER *TRIP", "Você recebeu um Pix de R$ 300,00 de MARIA", "Pagamento de R$ 89,90 no estabelecimento MERCADO SOL com cartão final 9876.", "Sem valor nenhum aqui", "Compra de R$ 20,00 em PIZZARIA SOL em 15/11 no cartão final 5555"]; echo json_encode(array_map(fn($x) => captura_interpretar($x, "2026-11-21"), $t));']).toString());
+  assert.deepStrictEqual([r[0].valor, r[0].final, r[0].desc, r[0].tipo], [45.9, '1234', 'PADARIA DO ZE', 'despesa']);
+  assert.deepStrictEqual([r[1].valor, r[1].desc], [1234.56, 'UBER *TRIP']);
+  assert.deepStrictEqual([r[2].valor, r[2].tipo], [300, 'receita']);
+  assert.deepStrictEqual([r[3].valor, r[3].final, r[3].desc], [89.9, '9876', 'MERCADO SOL']);
+  assert.strictEqual(r[4], null);
+  assert.deepStrictEqual([r[5].data, r[5].final], ['2026-11-15', '5555']);
+});
+test('captura pelo endereço público: chave própria, repetido ignorado, revisão e descarte', async () => {
+  const CAP = BASE.replace('/api/', '/api/captura.php');
+  const post = (token, corpo) => fetch(CAP, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: JSON.stringify(corpo) }).then(async (x) => ({ status: x.status, json: await x.json() }));
+  assert.strictEqual((await post('chave-errada-chave-errada-1234', { texto: 'Compra de R$ 10,00 em X' })).status, 401);
+  const { token } = (await chamar('captura_token', {})).json;
+  assert.ok(token.startsWith('lf_'));
+  const ok = await post(token, { texto: 'Compra aprovada no cartão final 1234 de R$ 45,90 em PADARIA DO ZE', origem: 'push' });
+  assert.strictEqual(ok.status, 200);
+  assert.strictEqual((await post(token, { texto: 'Compra aprovada no cartão final 1234 de R$ 45,90 em PADARIA DO ZE' })).json.repetido, true, 'o mesmo aviso duas vezes vira um só');
+  assert.strictEqual((await post(token, { texto: 'sem valor' })).status, 422);
+  const lista = (await chamar('capturas', null, { metodo: 'GET' })).json.capturas;
+  assert.strictEqual(lista.length, 1);
+  assert.deepStrictEqual([lista[0].valor, lista[0].final, lista[0].desc], [45.9, '1234', 'PADARIA DO ZE']);
+  const novoToken = (await chamar('captura_token', {})).json.token;
+  assert.strictEqual((await post(token, { texto: 'Compra de R$ 1,00 em X' })).status, 401, 'gerar nova chave invalida a antiga');
+  assert.strictEqual((await post(novoToken, { texto: 'Compra de R$ 2,00 em Y' })).status, 200);
+  const t = (await chamar('captura_teste', { texto: 'Compra de R$ 7,00 em TESTE' })).json.captura;
+  assert.strictEqual(t.valor, 7);
+  await chamar('capturas_resolver', { ids: [lista[0].id] });
+  assert.strictEqual((await chamar('capturas', null, { metodo: 'GET' })).json.capturas.length, 2);
+});
+test('anexos: guarda foto de recibo cifrada, recusa o que não é imagem e apaga', async () => {
+  const PNG1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const env = await chamar('anexo_enviar', { lanc: 'l1', dataUrl: PNG1 });
+  assert.strictEqual(env.status, 200);
+  assert.strictEqual((await chamar('anexo_enviar', { lanc: 'l1', dataUrl: 'data:text/html;base64,PGgxPg==' })).status, 422);
+  const lista = (await chamar('anexos&lanc=l1', null, { metodo: 'GET' })).json.anexos;
+  assert.strictEqual(lista.length, 1);
+  assert.strictEqual((await chamar('anexo&id=' + lista[0].id, null, { metodo: 'GET' })).json.dataUrl, PNG1);
+  const banco = fs.readFileSync(path.join(DEV, 'financas.sqlite')).toString('latin1');
+  assert.ok(!banco.includes('iVBORw0KGgo'), 'a foto não pode aparecer em texto aberto no banco');
+  await chamar('anexo_excluir', { id: lista[0].id });
+  assert.strictEqual((await chamar('anexos&lanc=l1', null, { metodo: 'GET' })).json.anexos.length, 0);
+});
+test('resumo semanal por e-mail: gastos da semana, comparação e vencimentos, uma vez por semana', async () => {
+  const env = { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV };
+  const rodar = (hoje) => execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), '--semanal', `--hoje=${hoje}`], { env }).toString();
+  const dados = { perfil: 'pessoal', dados: { pessoal: { contas: [], cartoes: [], lancs: [
+    { id: 'a', tipo: 'despesa', desc: 'Supermercado', valor: 300, data: '2027-05-04', categoria: 'Mercado', conta: 'carteira', pago: true },
+    { id: 'b', tipo: 'despesa', desc: 'Restaurante', valor: 120, data: '2027-05-05', categoria: 'Alimentação', conta: 'carteira', pago: true },
+    { id: 'c', tipo: 'despesa', desc: 'Mercado antigo', valor: 100, data: '2027-04-28', categoria: 'Mercado', conta: 'carteira', pago: true },
+    { id: 'd', tipo: 'despesa', desc: 'Conta de luz', valor: 150, data: '2027-05-12', categoria: 'Moradia', conta: 'carteira', pago: false, boleto: true },
+  ] } } };
+  const atual = (await chamar('dados', null, { metodo: 'GET' })).json.versao;
+  await chamar('dados', { versao: atual, conteudo: dados });
+  assert.match(rodar('2027-05-10'), /resumos enviados: 1/);
+  const e = emails();
+  assert.ok(e.includes('Resumo da semana') && e.includes('Supermercado') && e.includes('Onde você mais gastou') && e.includes('Conta de luz'));
+  assert.match(rodar('2027-05-10'), /resumos enviados: 0/);
+  await chamar('preferencias', { resumo: false });
+  assert.match(rodar('2027-05-17'), /resumos enviados: 0/);
+  await chamar('preferencias', { resumo: true });
+});
 test('alerta de orçamento por e-mail: avisa em 80% e de novo em 100%, uma vez cada', async () => {
   const env = { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV };
   const rodar = (hoje) => execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), `--hoje=${hoje}`], { env }).toString();
