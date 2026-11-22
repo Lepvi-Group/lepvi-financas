@@ -324,7 +324,6 @@
   const MES_CURTO = (x) => new Date(x + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
   const DIA_LONGO = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' }).replace('.', '');
   const DATA_CURTA = (iso) => iso.slice(8, 10) + '/' + iso.slice(5, 7);
-  const ontem = () => { const x = new Date(); x.setDate(x.getDate() - 1); return F.hojeISO(x); };
   const fundo = (cor) => `background:linear-gradient(135deg,${cor},#0D0D0F 150%)`;
   const EYE = '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>';
   const EYE_OFF = '<path d="M9.9 4.2A10.6 10.6 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-3.2 4.3M6.6 6.6A17 17 0 0 0 2 12s3.5 8 10 8a10.4 10.4 0 0 0 5.4-1.5"/><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2"/><path d="M2 2l20 20"/>';
@@ -373,7 +372,9 @@
   function icItem(i) {
     if (i.tipo === 'fatura') return '<span class="ic" style="background:#EEF0FF">💳</span>';
     const info = catInfo(i.categoria, 'despesa');
-    return `<span class="ic" style="background:${info.cor}22">${info.icone}</span>`;
+    const d = String(i.titulo || '').toLowerCase();
+    const ic = /internet|wi-?fi|banda larga|fibra/.test(d) ? '🌐' : /luz|energia/.test(d) ? '💡' : /[aá]gua/.test(d) ? '💧' : /telefone|celular|plano/.test(d) ? '📱' : info.icone;
+    return `<span class="ic" style="background:${info.cor}22">${ic}</span>`;
   }
   function itemPagar(i) {
     const selo = i.atrasado ? `<span class="selo atraso">Atrasado ${Math.abs(i.dias)}d</span>` : i.dias === 0 ? '<span class="selo hoje">Vence hoje</span>' : `<span class="selo">Em ${i.dias}d</span>`;
@@ -753,7 +754,7 @@
           ${campo('Aplicar as outras mudanças a', radios('aplicar', [['este', 'Só este'], ['proximos', 'Este e os próximos'], ['todos', 'Todos da série']], 'este'))}</div>`;
       })() : ''}
       ${tipo === 'transf' ? '' : campo('Descrição', `<input name="desc" required maxlength="80" value="${esc(base.desc || '')}" placeholder="Ex.: Mercado, Aluguel, Venda de peças">`)}
-      <div class="campo"><span>Data</span><div class="data-lin"><button class="btn sec mini" type="button" data-data="${F.hojeISO()}">Hoje</button><button class="btn sec mini" type="button" data-data="${ontem()}">Ontem</button><input name="data" type="date" required value="${base.data || F.hojeISO()}"></div></div>
+      <div class="campo"><span>Data</span><div class="data-lin"><input name="data" type="date" required value="${base.data || F.hojeISO()}"></div></div>
       ${F.ehCartao({ conta: contaSel }) && tipo === 'despesa' ? '' : troca('pago', rotPago, novo ? true : !!base.pago)}
       ${catsHtml}${contaHtml}
       ${extras}
@@ -794,7 +795,6 @@
         ['restam', 'data'].forEach((k) => f[k].addEventListener('input', res)); res();
       }
       const exc = $('#exc', f); if (exc) exc.onclick = () => { if (base.serie) { excluirSerie(base); return; } soltarAnexos([base]); d.lancs = d.lancs.filter((x) => x.id !== base.id); salvar(); dlg.close(); render(); aviso('Lançamento excluído.'); };
-      f.querySelectorAll('[data-data]').forEach((b) => b.addEventListener('click', () => { f.data.value = b.dataset.data; }));
       const resumo = () => {
         if (!f.rep) return; const v = f.rep.value; $('#repn', f).hidden = v === 'nao'; if (v === 'nao') return;
         const n = Math.max(2, Math.min(120, parseInt(f.n.value, 10) || 2)); const val = F.numeroBR(f.valor.value) || 0; const fr = v === 'parcelado' ? 'mes' : (f.freq ? f.freq.value : 'mes');
