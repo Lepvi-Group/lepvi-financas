@@ -53,7 +53,7 @@
   }
   function status(estado) {
     const el = document.getElementById('status-salvo'); if (!el) return;
-    const t = { ok: 'Salvo', salvando: 'Salvando…', erro: 'Não salvou', conflito: 'Atualizado de outro aparelho', '': '' }[estado] || '';
+    const t = { erro: 'Não salvou', conflito: 'Atualizado de outro aparelho' }[estado] || ''; // "Salvo" e "Salvando" ficam escondidos: só avisa quando há problema
     el.dataset.estado = estado; el.querySelector('b').textContent = t; el.hidden = !t; el.title = t;
   }
   let versaoServidor = 0; let enviando = false; let precisaEnviar = false; let tmr = null;
