@@ -208,17 +208,19 @@ function consumir_token(string $t, string $tipo): ?string
     return (string) $uid;
 }
 
-/* ---------- dados financeiros cifrados (libsodium) ---------- */
+/* ---------- dados financeiros cifrados (AES-256-GCM, do OpenSSL: existe em qualquer hospedagem PHP) ---------- */
 function cifrar(string $texto): string
 {
-    $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-    return base64_encode($nonce . sodium_crypto_secretbox($texto, $nonce, chave('dados')));
+    $iv = random_bytes(12); $tag = '';
+    $c = openssl_encrypt($texto, 'aes-256-gcm', chave('dados'), OPENSSL_RAW_DATA, $iv, $tag, '', 16);
+    if ($c === false || strlen($tag) !== 16) throw new RuntimeException('Falha ao cifrar os dados.');
+    return base64_encode('G1' . $iv . $tag . $c);
 }
 function decifrar(string $b64): ?string
 {
     $bin = base64_decode($b64, true);
-    if ($bin === false || strlen($bin) <= SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) return null;
-    $r = sodium_crypto_secretbox_open(substr($bin, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES), substr($bin, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES), chave('dados'));
+    if ($bin === false || strlen($bin) < 31 || substr($bin, 0, 2) !== 'G1') return null;
+    $r = openssl_decrypt(substr($bin, 30), 'aes-256-gcm', chave('dados'), OPENSSL_RAW_DATA, substr($bin, 2, 12), substr($bin, 14, 16));
     return $r === false ? null : $r;
 }
 

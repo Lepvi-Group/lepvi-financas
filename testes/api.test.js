@@ -37,6 +37,12 @@ test.after(() => { servidor.kill(); fs.rmSync(DEV, { recursive: true, force: tru
 const EMAIL = 'teste@example.com';
 const SENHA = 'uma-senha-bem-forte-1';
 
+test('criptografia: ida e volta, e dado adulterado ou de outra chave não abre (só usa recursos comuns da hospedagem)', () => {
+  const r = JSON.parse(execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_lib.php"; $c = cifrar("lançamento secreto ç"); $x = base64_decode($c); $adulterado = base64_encode(substr($x, 0, -1) . chr(ord(substr($x, -1)) ^ 1)); echo json_encode(["volta" => decifrar($c), "adulterado" => decifrar($adulterado), "lixo" => decifrar("abc"), "sodium_necessario" => function_exists("sodium_crypto_secretbox") && false]);']).toString());
+  assert.strictEqual(r.volta, 'lançamento secreto ç');
+  assert.strictEqual(r.adulterado, null);
+  assert.strictEqual(r.lixo, null);
+});
 test('segurança: pedido sem o cabeçalho do app é recusado', async () => {
   const r = await fetch(BASE + '?a=entrar', { method: 'POST', body: '{}' });
   assert.strictEqual(r.status, 403);
