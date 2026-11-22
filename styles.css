@@ -689,3 +689,5 @@ html[data-contraste="alto"] dialog.confirma { border: 3px solid #000; }
 .lt-mini { margin: 6px 0 0; } .lt-mini i { width: 12px; height: 12px; border-width: 2px; }
 .lt-leg { display: flex; gap: 16px; font-size: 14px; color: var(--suave); } .lt-leg span { display: inline-flex; align-items: center; gap: 6px; }
 .serie-fim { display: block; color: var(--tinta); font-size: 15px; margin-top: 2px; }
+
+.dia-nome { display: inline-block; } .dia-nome::first-letter { text-transform: uppercase; }

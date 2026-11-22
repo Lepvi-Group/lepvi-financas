@@ -417,11 +417,17 @@
     const q = V.q.trim().toLowerCase();
     if (q) l = l.filter((x) => `${x.desc} ${x.categoria} ${nomeConta(x.conta)} ${(x.tags || []).join(' ')}`.toLowerCase().includes(q));
     if (!l.length) return '<div class="card vazio"><span class="emoji">🗒️</span><p>Nenhum lançamento aqui.</p><button class="btn" type="button" data-acao="novo">Novo lançamento</button></div>';
-    const dias = {}; l.sort((a, b) => b.data.localeCompare(a.data)).forEach((x) => { (dias[x.data] = dias[x.data] || []).push(x); });
-    return Object.entries(dias).map(([dia, itens]) => {
-      const t = F.arred(itens.filter((x) => x.tipo !== 'transf' && !x.ignorar).reduce((s, x) => s + (x.tipo === 'receita' ? x.valor : -x.valor), 0));
-      return `<div class="dia"><span style="text-transform:capitalize">${esc(DIA_LONGO(dia))}</span><span class="num">${m(t)}</span></div><div class="card" style="padding:4px 14px"><ul class="lista">${itens.map(itemLanc).join('')}</ul></div>`;
-    }).join('');
+    const blocoDias = (arr, crescente) => {
+      const dias = {}; arr.sort((a, b) => (crescente ? a.data.localeCompare(b.data) : b.data.localeCompare(a.data))).forEach((x) => { (dias[x.data] = dias[x.data] || []).push(x); });
+      return Object.entries(dias).map(([dia, itens]) => {
+        const t = F.arred(itens.filter((x) => x.tipo !== 'transf' && !x.ignorar).reduce((s, x) => s + (x.tipo === 'receita' ? x.valor : -x.valor), 0));
+        return `<div class="dia"><span class="dia-nome">${esc(DIA_LONGO(dia))}</span><span class="num">${m(t)}</span></div><div class="card" style="padding:4px 14px"><ul class="lista">${itens.map(itemLanc).join('')}</ul></div>`;
+      }).join('');
+    };
+    /* o que ainda falta pagar ou receber vem primeiro, do vencimento mais próximo para o mais distante; o que já foi vem depois, do mais recente para o mais antigo */
+    const pend = l.filter((x) => !x.pago && x.tipo !== 'transf' && !F.ehCartao(x)); const feitos = l.filter((x) => !pend.includes(x));
+    if (!pend.length) return blocoDias(feitos, false);
+    return `<h2 class="secao">Falta pagar ou receber <small class="mut">· o que vence primeiro vem primeiro</small></h2>${blocoDias(pend, true)}${feitos.length ? `<h2 class="secao">Já pagos e recebidos</h2>${blocoDias(feitos, false)}` : ''}`;
   }
   function listaSeries() {
     const d = D(); const hoje = F.hojeISO(); const mapa = {};
