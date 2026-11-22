@@ -320,13 +320,13 @@ body.deslogado main { max-width: 1120px; padding-top: 12px; }
 .vit-lista li:nth-child(1) { animation-delay: .15s; } .vit-lista li:nth-child(2) { animation-delay: .25s; } .vit-lista li:nth-child(3) { animation-delay: .35s; }
 .vit-lista i { flex: none; width: 24px; height: 24px; border-radius: 50%; background: rgba(127, 245, 205, .18); color: #7FF5CD; display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: 14px; }
 .vit-cards { display: grid; gap: 12px; margin-top: 26px; }
-.mini { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); backdrop-filter: blur(10px); border-radius: 18px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; animation: entra .7s cubic-bezier(0.23, 1, 0.32, 1) both, flutuaV 7s ease-in-out infinite; }
-.mini.c1 { flex-direction: column; align-items: flex-start; gap: 4px; animation-delay: .3s, 1s; }
-.mini.c2 { justify-content: space-between; animation-delay: .45s, 2s; margin-left: 24px; }
-.mini.c3 { animation-delay: .6s, 3s; margin-right: 24px; }
-.mini small { color: #D5D4CE; font-size: 14px; display: block; }
-.mini b { font-weight: 600; font-size: 17px; display: block; }
-.mini.c1 b { font-size: 24px; }
+.vit-cards .mini { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); backdrop-filter: blur(10px); border-radius: 18px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; animation: entra .7s cubic-bezier(0.23, 1, 0.32, 1) both, flutuaV 7s ease-in-out infinite; }
+.vit-cards .mini.c1 { flex-direction: column; align-items: flex-start; gap: 4px; animation-delay: .3s, 1s; }
+.vit-cards .mini.c2 { justify-content: space-between; animation-delay: .45s, 2s; margin-left: 24px; }
+.vit-cards .mini.c3 { animation-delay: .6s, 3s; margin-right: 24px; }
+.vit-cards .mini small { color: #D5D4CE; font-size: 14px; display: block; }
+.vit-cards .mini b { font-weight: 600; font-size: 17px; display: block; }
+.vit-cards .mini.c1 b { font-size: 24px; }
 .mini-t { flex: 1; }
 .mini-barra { width: 100%; height: 8px; border-radius: 999px; background: rgba(255,255,255,.2); overflow: hidden; margin-top: 6px; }
 .mini-barra i { display: block; height: 100%; width: 72%; border-radius: 999px; background: linear-gradient(90deg, #3A7BFF, #C04DFF); transform-origin: left; animation: enche 1.4s .8s cubic-bezier(0.23, 1, 0.32, 1) both; }
@@ -360,8 +360,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 @media (prefers-reduced-motion: reduce) { .vitrine, .vit-luz, .mini, .vit-lista li, .auth-c, .selos li, .mini-barra i, .ponto, .mini-rosca { animation: none !important; } }
 html[data-contraste="alto"] .vitrine { background: #000; }
 html[data-contraste="alto"] .vit-luz { display: none; }
-html[data-contraste="alto"] .mini, html[data-contraste="alto"] .selos li { border: 2px solid #000; background: var(--sup); color: #000; }
-html[data-contraste="alto"] .mini { background: #000; color: #fff; border-color: #fff; }
+html[data-contraste="alto"] .vit-cards .mini, html[data-contraste="alto"] .selos li { border: 2px solid #000; background: var(--sup); color: #000; }
+html[data-contraste="alto"] .vit-cards .mini { background: #000; color: #fff; border-color: #fff; }
 /* celular: apresentação enxuta para o formulário aparecer sem rolar */
 @media (max-width: 640px) {
   .vit-cards, .vit-lista { display: none; }

@@ -51,13 +51,12 @@
     if (!r.ok) { const x = new Error(j.erro || 'Algo deu errado. Tente de novo.'); x.status = r.status; x.conflito = !!j.conflito; if (r.status === 401 && USER.logado) sessaoExpirou(); throw x; }
     return j;
   }
-  /* "Salvo" aparece por 2 segundos depois de cada alteração e some; problemas (não salvou, conflito) ficam até resolver */
+  /* Topo só mostra problema (não salvou, conflito). Confirmação de salvo vira aviso rápido embaixo, 2s */
   function status(estado) {
     const el = document.getElementById('status-salvo'); if (!el) return;
     clearTimeout(status.t);
-    const t = { ok: 'Salvo', erro: 'Não salvou', conflito: 'Atualizado de outro aparelho' }[estado] || '';
+    const t = { erro: 'Não salvou', conflito: 'Atualizado de outro aparelho' }[estado] || '';
     el.dataset.estado = estado; el.querySelector('b').textContent = t; el.hidden = !t; el.title = t;
-    if (estado === 'ok') status.t = setTimeout(() => { el.hidden = true; }, 2000);
   }
   let versaoServidor = 0; let enviando = false; let precisaEnviar = false; let tmr = null;
   function limparMemoria() { status(''); const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; }
@@ -72,7 +71,7 @@
     enviando = true;
     while (precisaEnviar && USER.logado) {
       precisaEnviar = false;
-      try { versaoServidor = (await api('dados', { versao: versaoServidor, conteudo: { perfil: S.perfil, guia: !!S.guia, inicio: S.inicio || {}, dados: S.dados } })).versao; if (!precisaEnviar) status('ok'); }
+      try { versaoServidor = (await api('dados', { versao: versaoServidor, conteudo: { perfil: S.perfil, guia: !!S.guia, inicio: S.inicio || {}, dados: S.dados } })).versao; if (!precisaEnviar) { status('ok'); if (!document.getElementById('aviso').classList.contains('on')) aviso('Salvo ✓', 2000); } }
       catch (e) {
         if (e.conflito) { await carregarDados(); render(); status('conflito'); aviso('Seus dados foram alterados em outra janela ou aparelho. Mostramos a versão mais recente: confira se o seu último lançamento está aí.'); break; }
         if (e.rede) { precisaEnviar = true; status('erro'); aviso('Sem conexão. Vamos tentar salvar de novo.'); await new Promise((ok) => setTimeout(ok, 5000)); continue; }
@@ -319,7 +318,7 @@
   const soltarAnexos = (lancs) => { lancs.forEach((l) => api('anexo_excluir', { lanc: l.id }).catch(() => {})); };
 
   const m = (v) => (S.oculto ? 'R$ •••' : F.brl(v));
-  function aviso(t) { const el = $('#aviso'); el.textContent = t; el.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('on'), 6000); }
+  function aviso(t, ms) { const el = $('#aviso'); el.textContent = t; el.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('on'), ms || 6000); }
 
   const NOME_MES = (x) => new Date(x + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'long' }) + ' ' + x.slice(0, 4);
   const MES_CURTO = (x) => new Date(x + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
@@ -370,13 +369,19 @@
     const visto = cartao ? '' : `<button class="visto ${l.pago ? 'on' : ''}" type="button" data-acao="alternar" data-id="${l.id}" aria-label="Pago ou recebido: ${esc(l.desc || l.categoria)}" aria-pressed="${!!l.pago}">${l.pago ? '✓' : ''}</button>`;
     return `<li><div class="item"><button class="item" style="border:0;padding:0;flex:1;min-width:0" type="button" data-acao="editar" data-id="${l.id}"><span class="ic" style="background:${info.cor}22">${info.icone}</span><span class="txt"><strong>${esc(l.desc || (transf ? 'Transferência' : l.categoria))}</strong><span>${sub}${!l.pago && !cartao ? ' · <span class="selo hoje">Pendente</span>' : ''}</span></span><span class="val num ${cor}">${sinal}${m(l.valor)}</span></button>${visto}</div></li>`;
   }
+  /* ícone do item: o da categoria da conta (internet, água, assinatura...); fatura usa o cartão */
+  function icItem(i) {
+    if (i.tipo === 'fatura') return '<span class="ic" style="background:#EEF0FF">💳</span>';
+    const info = catInfo(i.categoria, 'despesa');
+    return `<span class="ic" style="background:${info.cor}22">${info.icone}</span>`;
+  }
   function itemPagar(i) {
     const selo = i.atrasado ? `<span class="selo atraso">Atrasado ${Math.abs(i.dias)}d</span>` : i.dias === 0 ? '<span class="selo hoje">Vence hoje</span>' : `<span class="selo">Em ${i.dias}d</span>`;
-    return `<li><div class="item"><span class="ic" style="background:#EEF0FF">${i.tipo === 'fatura' ? '💳' : i.tipo === 'boleto' ? '🧾' : '📌'}</span><div class="txt"><strong>${esc(i.titulo)}</strong><span>Vence ${DATA_CURTA(i.vencimento)} · ${selo}</span></div><div class="val num">${m(i.valor)}<br><button class="btn mini" type="button" data-acao="pagar" data-tipo="${i.tipo}" data-id="${esc(i.id)}">Paguei</button></div></div></li>`;
+    return `<li><div class="item">${icItem(i)}<div class="txt"><strong>${esc(i.titulo)}</strong><span>Vence ${DATA_CURTA(i.vencimento)} · ${selo}</span></div><div class="val num">${m(i.valor)}<br><button class="btn mini" type="button" data-acao="pagar" data-tipo="${i.tipo}" data-id="${esc(i.id)}">Paguei</button></div></div></li>`;
   }
 
   function itemPago(i) {
-    return `<li><div class="item pago-item"><span class="ic" style="background:#D9F2EA">✓</span><div class="txt"><strong>${esc(i.titulo)}</strong><span>Venceu ${DATA_CURTA(i.vencimento)} · <span class="selo ok">Pago</span></span></div><div class="val num">${m(i.valor)}</div></div></li>`;
+    return `<li><div class="item pago-item">${icItem(i)}<div class="txt"><strong>${esc(i.titulo)}</strong><span>Venceu ${DATA_CURTA(i.vencimento)} · <span class="selo ok">Pago</span></span></div><div class="val num">${m(i.valor)}</div></div></li>`;
   }
 
   /* ---------- telas ---------- */

@@ -90,7 +90,7 @@
   function aPagar(lancs, cartoes, hoje = hojeISO()) {
     const itens = [];
     lancs.filter((l) => l.tipo === 'despesa' && !ehCartao(l) && !l.pago).forEach((l) => {
-      itens.push({ tipo: l.boleto ? 'boleto' : 'conta', id: l.id, titulo: l.desc, valor: l.valor, vencimento: l.data });
+      itens.push({ tipo: l.boleto ? 'boleto' : 'conta', id: l.id, titulo: l.desc, valor: l.valor, vencimento: l.data, categoria: l.categoria });
     });
     faturas(lancs, cartoes).filter((f) => !f.paga).forEach((f) => {
       itens.push({ tipo: 'fatura', id: `${f.cartaoId}|${f.mes}`, titulo: `Fatura ${f.cartao}`, valor: f.total, vencimento: f.vencimento });
@@ -259,7 +259,7 @@
   function contasDoMes(lancs, cartoes, mes, hoje = hojeISO()) {
     const itens = [];
     lancs.filter((l) => l.tipo === 'despesa' && !ehCartao(l) && mesDe(l.data) === mes && (l.boleto || l.serie || !l.pago))
-      .forEach((l) => itens.push({ tipo: l.boleto ? 'boleto' : 'conta', id: l.id, titulo: l.desc, valor: l.valor, vencimento: l.data, pago: !!l.pago }));
+      .forEach((l) => itens.push({ tipo: l.boleto ? 'boleto' : 'conta', id: l.id, titulo: l.desc, valor: l.valor, vencimento: l.data, pago: !!l.pago, categoria: l.categoria }));
     faturas(lancs, cartoes).filter((f) => mesDe(f.vencimento) === mes)
       .forEach((f) => itens.push({ tipo: 'fatura', id: `${f.cartaoId}|${f.mes}`, titulo: `Fatura ${f.cartao}`, valor: f.total, vencimento: f.vencimento, pago: !!f.paga }));
     const lista = itens.map((i) => ({ ...i, atrasado: !i.pago && i.vencimento < hoje, dias: Math.round((new Date(i.vencimento) - new Date(hoje)) / 86400000) })).sort((a, b) => a.vencimento.localeCompare(b.vencimento));
