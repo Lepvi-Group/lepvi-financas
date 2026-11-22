@@ -434,7 +434,7 @@
     if (!series.length) return '<div class="card vazio"><span class="emoji">🔁</span><p>Aqui aparecem as contas que se repetem, como aluguel, internet e assinaturas. Ao lançar, abra "Mais opções" e escolha "Fixo todo mês" ou "Parcelado".</p><button class="btn" type="button" data-acao="novo">Novo lançamento</button></div>';
     return `<p class="mut">Suas contas fixas do dia a dia (internet, água, luz, aluguel) e as compras parceladas. Para ver o que vence em cada mês, use a aba <b>A pagar</b>. Ao encerrar uma conta, só os meses ainda não pagos são removidos.</p><div class="card linhas">${series.map((x) => {
       const info = catInfo(x.prox.categoria, x.prox.tipo); const parc = x.prox.modoSerie === 'parcelado';
-      return `<div class="linha serie-lin"><span class="l-ic" style="background:${info.cor}22">${info.icone}</span><span class="l-t"><b>${esc(x.base)}</b><small>${parc ? `Parcelado · parcela ${x.prox.n || '?'} de ${x.prox.de || '?'}` : 'Conta fixa · ' + (ROT_FREQ[x.prox.freq || 'mes'])} · ${x.futuros.length ? 'próximo vencimento ' + DATA_CURTA(x.prox.data) : 'terminou'}${!parc && x.futuros.length ? ' · lançada até ' + esc(NOME_MES(x.itens[x.itens.length - 1].data.slice(0, 7))) : ''} · <span class="num">${m(x.prox.valor)}</span></small></span><span class="serie-bt"><button class="btn mini sec" type="button" data-acao="editar" data-id="${x.prox.id}">Editar</button>${x.futuros.length ? `<button class="btn mini sec" type="button" data-acao="encerrar-serie" data-id="${x.prox.serie}">Encerrar</button>` : ''}</span></div>`;
+      return `<div class="linha serie-lin"><span class="l-ic" style="background:${info.cor}22">${info.icone}</span><span class="l-t"><b>${esc(x.base)}</b><small>${parc ? 'Parcelado' : 'Conta fixa · ' + ROT_FREQ[x.prox.freq || 'mes']} · <span class="num">${m(x.prox.valor)}</span></small><small class="serie-fim">${x.futuros.length ? `<b>Faltam ${x.futuros.length}</b> · próximo ${DATA_CURTA(x.prox.data)} · <b>termina em ${esc(MES_ANO(x.itens[x.itens.length - 1].data))}</b>` : 'Terminou'}</small><span class="lt-mini" aria-hidden="true">${x.itens.length <= 36 ? x.itens.map((i) => `<i class="${i.data < hoje || i.pago ? 'feito' : 'falta'}"></i>`).join('') : ''}</span></span><span class="serie-bt"><button class="btn mini sec" type="button" data-acao="editar" data-id="${x.prox.id}">Editar</button>${x.futuros.length ? `<button class="btn mini sec" type="button" data-acao="encerrar-serie" data-id="${x.prox.serie}">Encerrar</button>` : ''}</span></div>`;
     }).join('')}</div>`;
   }
   function telaLancs() {
@@ -694,6 +694,20 @@
     const mes = F.somaMes(F.mesDe(iso), freq === 'ano' ? 12 * i : i); const ult = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
     return `${mes}-${String(Math.min(Number(iso.slice(8, 10)), ult)).padStart(2, '0')}`;
   }
+  const MES_ANO = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  /* linha do tempo de uma conta que se repete: bolinhas cheias = já passou, anel azul = esta, vazias = faltam */
+  function linhaTempo(itens, atualId, hoje) {
+    if (itens.length > 36) return '';
+    return `<div class="lt" role="img" aria-label="${itens.filter((x) => x.data >= hoje).length} de ${itens.length} ainda faltam">${itens.map((x) => `<i class="${x.id === atualId ? 'atual' : x.data < hoje || x.pago ? 'feito' : 'falta'}" title="${esc(new Date(x.data + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }))}"></i>`).join('')}</div><div class="lt-leg"><span><i class="feito"></i>já foi</span><span><i class="atual"></i>esta</span><span><i class="falta"></i>faltam</span></div>`;
+  }
+  function ajustarSerie(alvo, restam, semSufixo) {
+    const d = D(); const lista = d.lancs.filter((x) => x.serie === alvo.serie).sort((a, b) => a.data.localeCompare(b.data));
+    const aPartir = lista.slice(lista.findIndex((x) => x.id === alvo.id));
+    if (restam < aPartir.length) { const fora = aPartir.slice(restam); soltarAnexos(fora); d.lancs = d.lancs.filter((x) => !fora.includes(x)); }
+    else if (restam > aPartir.length) { const modelo = aPartir[aPartir.length - 1]; for (let i = aPartir.length; i < restam; i++) d.lancs.push({ ...modelo, id: uid(), data: dataSerie(alvo.data, modelo.freq || 'mes', i), pago: false, divisao: undefined }); }
+    const final = d.lancs.filter((x) => x.serie === alvo.serie).sort((a, b) => a.data.localeCompare(b.data));
+    final.forEach((x, i) => { x.n = i + 1; x.de = final.length; if (x.modoSerie === 'parcelado') x.desc = semSufixo(x.desc) + ` (${i + 1}/${final.length})`; });
+  }
   const ROT_FREQ = { semana: 'toda semana', quinzena: 'a cada 15 dias', mes: 'todo mês', ano: 'todo ano' };
   function formLanc(base = {}, modo) {
     const d = D(); const novo = !base.id;
@@ -718,7 +732,12 @@
     abrir((novo ? 'Novo lançamento' : 'Editar ' + titulo.toLowerCase()), `
       ${abas}
       <div class="valor-box ${tipo}"><label for="v">Valor</label><div class="valor-lin"><span aria-hidden="true">R$</span><input id="v" name="valor" inputmode="decimal" required autocomplete="off" placeholder="0,00" value="${val2(base.valor)}"></div></div>
-      ${base.serie ? `<div class="serie-aviso"><b>Este lançamento se repete (${base.n || '?'} de ${base.de || '?'}).</b>${campo('Aplicar as mudanças a', radios('aplicar', [['este', 'Só este'], ['proximos', 'Este e os próximos'], ['todos', 'Todos da série']], 'este'))}</div>` : ''}
+      ${base.serie ? (() => {
+        const todos = d.lancs.filter((x) => x.serie === base.serie).sort((a, b) => a.data.localeCompare(b.data)); const aPartir = todos.filter((x) => x.data >= base.data);
+        return `<div class="serie-aviso"><b>Este lançamento se repete.</b><p class="serie-res" id="serie-res" aria-live="polite"></p>${linhaTempo(todos, base.id, F.hojeISO())}
+          ${campo('Quantas faltam, contando este', `<input name="restam" type="number" min="1" max="120" inputmode="numeric" value="${aPartir.length}" data-orig="${aPartir.length}"><small class="mut">Mude aqui se a conta termina antes (ou depois) do previsto. As que sobrarem além do número são apagadas.</small>`)}
+          ${campo('Aplicar as outras mudanças a', radios('aplicar', [['este', 'Só este'], ['proximos', 'Este e os próximos'], ['todos', 'Todos da série']], 'este'))}</div>`;
+      })() : ''}
       ${tipo === 'transf' ? '' : campo('Descrição', `<input name="desc" required maxlength="80" value="${esc(base.desc || '')}" placeholder="Ex.: Mercado, Aluguel, Venda de peças">`)}
       <div class="campo"><span>Data</span><div class="data-lin"><button class="btn sec mini" type="button" data-data="${F.hojeISO()}">Hoje</button><button class="btn sec mini" type="button" data-data="${ontem()}">Ontem</button><input name="data" type="date" required value="${base.data || F.hojeISO()}"></div></div>
       ${F.ehCartao({ conta: contaSel }) && tipo === 'despesa' ? '' : troca('pago', rotPago, novo ? true : !!base.pago)}
@@ -746,7 +765,9 @@
         const alvo = d.lancs.find((x) => x.id === base.id); const aplicar = base.serie ? (fd.get('aplicar') || 'este') : 'este';
         const afetados = aplicar === 'este' ? [alvo] : d.lancs.filter((x) => x.serie === base.serie && (aplicar === 'todos' || x.data >= base.data));
         const semSufixo = (t) => String(t).replace(/ \(\d+\/\d+\)$/, '');
+        const restamNovo = base.serie && fd.get('restam') ? Math.max(1, Math.min(120, parseInt(fd.get('restam'), 10) || 1)) : 0;
         afetados.forEach((x) => { const sufixo = (String(x.desc).match(/ \(\d+\/\d+\)$/) || [''])[0]; const eu = x === alvo; Object.assign(x, { ...reg, valor, desc: semSufixo(reg.desc) + sufixo, data: eu ? reg.data : x.data, pago: eu ? reg.pago : x.pago }); x.divisao = F.dividir(nomes, x.valor, x.divisao); });
+        if (restamNovo) ajustarSerie(alvo, restamNovo, semSufixo);
       }
       V.mes = F.mesDe(reg.data); salvar(); render(); aviso('Lançamento salvo.');
     }, (f) => {
@@ -754,6 +775,10 @@
       f.querySelectorAll('[data-aba]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.aba !== tipo) formLanc(lerForm(), b.dataset.aba); }));
       const nc = $('[data-nova-cat]', f); if (nc) nc.addEventListener('click', () => formCategoria(tipo, (nome) => formLanc({ ...lerForm(), categoria: nome }, modo)));
       if (!novo) montarAnexos(f, base.id);
+      if (f.restam) {
+        const res = () => { const n = Math.max(1, Math.min(120, parseInt(f.restam.value, 10) || 1)); const fr = base.freq || 'mes'; const fim = dataSerie(f.data.value || base.data, fr, n - 1); $('#serie-res', f).innerHTML = `Faltam <b>${n}</b> ${n === 1 ? 'vez' : 'vezes'}, contando esta. A última será em <b>${esc(MES_ANO(fim))}</b> (${new Date(fim + 'T12:00:00').toLocaleDateString('pt-BR')}).`; };
+        ['restam', 'data'].forEach((k) => f[k].addEventListener('input', res)); res();
+      }
       const exc = $('#exc', f); if (exc) exc.onclick = () => { if (base.serie) { excluirSerie(base); return; } soltarAnexos([base]); d.lancs = d.lancs.filter((x) => x.id !== base.id); salvar(); dlg.close(); render(); aviso('Lançamento excluído.'); };
       f.querySelectorAll('[data-data]').forEach((b) => b.addEventListener('click', () => { f.data.value = b.dataset.data; }));
       const resumo = () => {

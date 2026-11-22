@@ -680,3 +680,12 @@ html[data-contraste="alto"] dialog.confirma { border: 3px solid #000; }
 .pago-item .txt strong { color: var(--suave); }
 .opcoes.cores span { width: 38px; height: 38px; min-height: 0; min-width: 0; flex: none; aspect-ratio: 1 / 1; border-radius: 50%; }
 .opcoes.cores label { display: grid; place-items: center; width: auto; min-height: 0; }
+
+.serie-res { margin: 6px 0 0; font-size: 17px; line-height: 1.4; }
+.lt, .lt-mini { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+.lt i, .lt-mini i, .lt-leg i { width: 16px; height: 16px; border-radius: 50%; display: inline-block; flex: none; border: 2px solid var(--suave); box-sizing: border-box; }
+.lt i.feito, .lt-mini i.feito, .lt-leg i.feito { background: var(--verde); border-color: var(--verde); }
+.lt i.atual, .lt-leg i.atual { background: var(--azul); border-color: var(--azul); box-shadow: 0 0 0 3px rgba(45,75,255,.3); }
+.lt-mini { margin: 6px 0 0; } .lt-mini i { width: 12px; height: 12px; border-width: 2px; }
+.lt-leg { display: flex; gap: 16px; font-size: 14px; color: var(--suave); } .lt-leg span { display: inline-flex; align-items: center; gap: 6px; }
+.serie-fim { display: block; color: var(--tinta); font-size: 15px; margin-top: 2px; }
