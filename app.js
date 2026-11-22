@@ -260,6 +260,23 @@
       };
     });
   }
+  /* ---------- divisão de despesas e meta mensal ---------- */
+  function formDivisoes() {
+    const d = D(); const s = F.saldosDivisao(d.lancs);
+    abrir('Divisão de despesas', s.length ? `<p class="mut">Quando você paga uma despesa e divide com alguém (em Mais opções do lançamento), a parte dela aparece aqui até ser acertada.</p>${s.map((x, i) => `<section class="card cap-passo"><div class="sec-h"><h3>${esc(x.nome)}</h3><b class="num">${F.brl(x.total)}</b></div><ul class="lista">${x.itens.map((it) => `<li><div class="item"><div class="txt"><strong>${esc(it.desc)}</strong><span>${new Date(it.data + 'T12:00:00').toLocaleDateString('pt-BR')}</span></div><div class="val num">${F.brl(it.valor)}</div></div></li>`).join('')}</ul><button class="btn sec" type="button" data-acerto="${i}">${esc(x.nome)} me pagou tudo</button></section>`).join('')}`
+      : '<p class="mut">Ninguém deve nada agora. Para dividir uma despesa, abra ou crie o lançamento, toque em <b>Mais opções</b> e preencha <b>Dividir com</b>.</p>', null, (f) => {
+      f.querySelectorAll('[data-acerto]').forEach((b) => b.addEventListener('click', () => {
+        const x = s[+b.dataset.acerto]; if (!confirm(`Marcar tudo de ${x.nome} como acertado (${F.brl(x.total)})?`)) return;
+        d.lancs.forEach((l) => (l.divisao || []).forEach((p) => { if (p.nome === x.nome) p.pago = true; }));
+        salvar(); render(); formDivisoes(); aviso('Acertado.');
+      }));
+    });
+  }
+  function metaMes(o) {
+    const r = F.metaObjetivo(o, F.mesDe(F.hojeISO())); if (!r.falta) return '';
+    if (!r.planejado) return '<p class="mut" style="margin:10px 0 0">Defina um prazo ou um valor por mês para acompanhar mês a mês.</p>';
+    return `<div style="margin-top:12px"><p class="mut num" style="margin:0 0 6px">Este mês: ${m(r.noMes)} de ${m(r.planejado)} ${o.mensal > 0 ? 'planejados' : 'sugeridos'}${r.restam ? ` · faltam ${r.restam} ${r.restam === 1 ? 'mês' : 'meses'}` : ''}</p><div class="barra ${r.noAlvo ? 'ok' : ''}" role="img" aria-label="${r.pctMes}% da meta do mês"><i style="width:${r.pctMes}%"></i></div><p class="mut" style="margin:6px 0 0">${r.noAlvo ? 'Meta do mês batida. 🎉' : `Faltam ${m(F.arred(r.planejado - r.noMes))} para a meta deste mês.`}</p></div>`;
+  }
   /* ---------- fotos de comprovante ---------- */
   async function reduzirFoto(arq) {
     const bmp = await createImageBitmap(arq, { imageOrientation: 'from-image' });
@@ -461,7 +478,7 @@
       const tl = o.reduce((s, x) => s + x.limite, 0); const tg = o.reduce((s, x) => s + x.gasto, 0);
       corpo = `${seletorMes()}${o.length ? `<div class="card"><small>Orçamento total do mês</small><b class="num" style="font-size:22px;display:block">${m(tg)} <span class="mut" style="font-weight:400">de ${m(tl)}</span></b><div class="barra ${tg > tl ? 'estourou' : 'ok'}" style="margin-top:8px"><i style="width:${tl ? Math.min(100, (tg / tl) * 100) : 0}%"></i></div><p class="mut" style="margin-top:10px">${tg > tl ? `Você passou ${m(tg - tl)} do limite total.` : `Ainda dá para gastar ${m(tl - tg)} nas categorias com limite.`}${F.resumoMes(d.lancs, V.mes).despesas - tg > 0.009 ? ` Gastos em outras categorias: ${m(F.resumoMes(d.lancs, V.mes).despesas - tg)}.` : ''}</p></div><div class="card" style="padding:4px 14px"><ul class="lista">${o.map(rowOrc).join('')}</ul></div>` : '<div class="card vazio"><span class="emoji">🎯</span><p>Defina quanto você quer gastar por categoria e acompanhe se está dentro do limite.</p></div>'}<button class="btn bloco" type="button" data-acao="novo-orc">Definir limite de categoria</button>`;
     } else if (V.plano === 'obj') {
-      corpo = `${d.objetivos.length ? d.objetivos.map((o) => { const p = o.meta ? Math.min(100, (o.guardado / o.meta) * 100) : 0; return `<section class="card"><div class="sec-h"><h2 class="secao">🎯 ${esc(o.nome)}</h2><b class="num">${Math.round(p)}%</b></div><p class="mut num" style="margin:4px 0 10px">${m(o.guardado)} de ${m(o.meta)}${o.prazo ? ' · até ' + esc(NOME_MES(o.prazo)) : ''}</p><div class="barra"><i style="width:${p}%"></i></div><div class="botoes" style="margin-top:12px"><button class="btn mini" type="button" data-acao="aporte" data-id="${o.id}">Guardar dinheiro</button><button class="btn mini sec" type="button" data-acao="editar-obj" data-id="${o.id}">Editar</button></div></section>`; }).join('') : '<div class="card vazio"><span class="emoji">✈️</span><p>Crie um objetivo (viagem, reserva de emergência, caixa da empresa) e acompanhe quanto já guardou.</p></div>'}<button class="btn bloco" type="button" data-acao="novo-obj">Novo objetivo</button>`;
+      corpo = `${d.objetivos.length ? d.objetivos.map((o) => { const p = o.meta ? Math.min(100, (o.guardado / o.meta) * 100) : 0; return `<section class="card"><div class="sec-h"><h2 class="secao">🎯 ${esc(o.nome)}</h2><b class="num">${Math.round(p)}%</b></div><p class="mut num" style="margin:4px 0 10px">${m(o.guardado)} de ${m(o.meta)}${o.prazo ? ' · até ' + esc(NOME_MES(o.prazo)) : ''}</p><div class="barra"><i style="width:${p}%"></i></div>${metaMes(o)}<div class="botoes" style="margin-top:12px"><button class="btn mini" type="button" data-acao="aporte" data-id="${o.id}">Guardar dinheiro</button><button class="btn mini sec" type="button" data-acao="editar-obj" data-id="${o.id}">Editar</button></div></section>`; }).join('') : '<div class="card vazio"><span class="emoji">✈️</span><p>Crie um objetivo (viagem, reserva de emergência, caixa da empresa) e acompanhe quanto já guardou.</p></div>'}<button class="btn bloco" type="button" data-acao="novo-obj">Novo objetivo</button>`;
     } else if (V.plano === 'fluxo') {
       corpo = telaFluxo();
     } else {
@@ -541,6 +558,8 @@
     ${grupo('Compras automáticas',
       linha({ icone: LI.bell, titulo: 'Para revisar', desc: (V.rev && V.rev.length) ? `${V.rev.length} aviso(s) do banco esperando você` : 'Avisos do banco que viram lançamento', attrs: 'data-acao="revisar"' })
       + linha({ icone: LI.chave, titulo: 'Conectar avisos do banco', desc: 'Chave e passo a passo, sem dar a senha do banco', attrs: 'data-acao="captura-config"' }))}
+    ${grupo('Divisão de despesas',
+      linha({ icone: LI.copia, titulo: 'Quem deve a sua parte', desc: (() => { const s = F.saldosDivisao(d.lancs); return s.length ? `${s.length} pessoa(s) a acertar · ${m(s.reduce((t, x) => t + x.total, 0))}` : 'Despesas divididas com casal ou sócios'; })(), attrs: 'data-acao="divisoes"' }))}
     ${grupo('Seus dados',
       linha({ tag: 'label', icone: LI.subir, titulo: 'Importar extrato ou fatura', desc: 'Arquivo OFX ou CSV do seu banco', dentro: '<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden>' })
       + linha({ icone: LI.copia, titulo: 'Cópia de segurança', desc: 'Baixar um arquivo com seus lançamentos', attrs: 'data-acao="backup"' })
@@ -662,9 +681,10 @@
       : campo(tipo === 'receita' ? 'Receber em' : 'Pagar com', radios('conta', opcContas, contaSel));
     const rotPago = tipo === 'receita' ? 'Já recebi' : tipo === 'transf' ? 'Já foi feita' : 'Já paguei';
     const abas = novo ? `<div class="abas3" role="group" aria-label="Tipo de lançamento">${[['despesa', 'Despesa'], ['receita', 'Receita'], ['transf', 'Transferência']].map(([k, t]) => `<button type="button" data-aba="${k}" aria-pressed="${tipo === k}" class="${k}">${t}</button>`).join('')}</div>` : '';
-    const extras = tipo === 'transf' ? '' : `<details class="mais-campos"${base.tags && base.tags.length || base.nota || base.ignorar ? ' open' : ''}><summary>Mais opções</summary><div class="mais-corpo">
+    const extras = tipo === 'transf' ? '' : `<details class="mais-campos"${base.tags && base.tags.length || base.nota || base.ignorar || base.divisao ? ' open' : ''}><summary>Mais opções</summary><div class="mais-corpo">
         ${novo ? `${campo('Repetir', radios('rep', [['nao', 'Não repete'], ['parcelado', 'Parcelado'], ['fixo', 'Fixo todo mês']], 'nao'))}<div id="repn" class="rep-bloco" hidden><div id="freq-box">${campo('De quanto em quanto tempo', radios('freq', [['semana', 'Toda semana'], ['quinzena', 'A cada 15 dias'], ['mes', 'Todo mês'], ['ano', 'Todo ano']], 'mes'))}</div>${campo('<span id="n-rot">Quantas vezes no total (contando este)</span>', '<input name="n" type="number" min="2" max="120" value="12" inputmode="numeric">')}<p class="rep-resumo" id="rep-resumo" aria-live="polite"></p></div>` : ''}
         ${tipo === 'despesa' ? troca('boleto', 'É um boleto', !!base.boleto) : ''}
+        ${tipo === 'despesa' ? campo('Dividir com (casal, sócios)', `<input name="dividir" maxlength="80" placeholder="Ex.: Ana, Beto" value="${esc((base.divisao || []).map((x) => x.nome).join(', '))}"><small class="mut">Você pagou tudo e eles devolvem a parte deles, em partes iguais. Veja quem deve em Mais opções → Divisão de despesas.</small>`) : ''}
         ${campo('Etiquetas', `<input name="tags" maxlength="80" placeholder="Ex.: viagem, casal, projeto" value="${esc((base.tags || []).join(', '))}">`)}${troca('ignorar', 'Não contar nos relatórios', !!base.ignorar)}
         ${campo('Nota', `<textarea name="nota" maxlength="300">${esc(base.nota || '')}</textarea>`)}</div></details>`;
     abrir((novo ? 'Novo lançamento' : 'Editar ' + titulo.toLowerCase()), `
@@ -686,18 +706,19 @@
       const reg = tipo === 'transf'
         ? { tipo, desc: 'Transferência', data: fd.get('data'), categoria: 'Transferência', conta, destino: fd.get('destino'), pago: !!fd.get('pago'), boleto: false }
         : { tipo, desc: fd.get('desc').trim(), data: fd.get('data'), categoria: fd.get('categoria'), conta, boleto: !!fd.get('boleto') && !cartao, pago: !cartao && !!fd.get('pago'), nota: (fd.get('nota') || '').trim(), tags: [...new Set(String(fd.get('tags') || '').split(',').map((x) => x.trim().toLowerCase().replace(/^#/, '')).filter(Boolean))].slice(0, 5), ignorar: !!fd.get('ignorar') };
+      const nomes = tipo === 'despesa' ? String(fd.get('dividir') || '').split(',') : [];
       if (novo) {
         const rep = fd.get('rep') || 'nao'; const n = rep === 'nao' ? 1 : Math.max(2, Math.min(120, parseInt(fd.get('n'), 10) || 2)); const freq = rep === 'parcelado' ? 'mes' : (fd.get('freq') || 'mes');
         const parte = rep === 'parcelado' ? F.arred(valor / n) : valor; const serie = n > 1 ? uid() : undefined;
         for (let i = 0; i < n; i++) {
           const v = rep === 'parcelado' && i === n - 1 ? F.arred(valor - parte * (n - 1)) : parte;
-          d.lancs.push({ ...reg, ...(serie ? { serie, n: i + 1, de: n, modoSerie: rep, freq } : {}), id: uid(), valor: v, desc: rep === 'parcelado' ? `${reg.desc} (${i + 1}/${n})` : reg.desc, data: dataSerie(reg.data, freq, i), pago: i === 0 ? reg.pago : false });
+          d.lancs.push({ ...reg, ...(serie ? { serie, n: i + 1, de: n, modoSerie: rep, freq } : {}), id: uid(), valor: v, divisao: F.dividir(nomes, v), desc: rep === 'parcelado' ? `${reg.desc} (${i + 1}/${n})` : reg.desc, data: dataSerie(reg.data, freq, i), pago: i === 0 ? reg.pago : false });
         }
       } else {
         const alvo = d.lancs.find((x) => x.id === base.id); const aplicar = base.serie ? (fd.get('aplicar') || 'este') : 'este';
         const afetados = aplicar === 'este' ? [alvo] : d.lancs.filter((x) => x.serie === base.serie && (aplicar === 'todos' || x.data >= base.data));
         const semSufixo = (t) => String(t).replace(/ \(\d+\/\d+\)$/, '');
-        afetados.forEach((x) => { const sufixo = (String(x.desc).match(/ \(\d+\/\d+\)$/) || [''])[0]; const eu = x === alvo; Object.assign(x, { ...reg, valor, desc: semSufixo(reg.desc) + sufixo, data: eu ? reg.data : x.data, pago: eu ? reg.pago : x.pago }); });
+        afetados.forEach((x) => { const sufixo = (String(x.desc).match(/ \(\d+\/\d+\)$/) || [''])[0]; const eu = x === alvo; Object.assign(x, { ...reg, valor, desc: semSufixo(reg.desc) + sufixo, data: eu ? reg.data : x.data, pago: eu ? reg.pago : x.pago }); x.divisao = F.dividir(nomes, x.valor, x.divisao); });
       }
       V.mes = F.mesDe(reg.data); salvar(); render(); aviso('Lançamento salvo.');
     }, (f) => {
@@ -837,9 +858,10 @@
     abrir(novo ? 'Novo objetivo' : 'Editar objetivo', `${campo('Nome', `<input name="nome" required maxlength="40" value="${esc(o.nome || '')}" placeholder="Ex.: Viagem, Reserva de emergência">`)}
       <div class="dupla">${campo('Quanto precisa (R$)', `<input name="meta" required inputmode="decimal" value="${val2(o.meta)}">`)}${campo('Já guardado (R$)', `<input name="guardado" inputmode="decimal" value="${val2(o.guardado || 0)}">`)}</div>
       ${campo('Prazo (opcional)', `<input name="prazo" type="month" value="${esc(o.prazo || '')}">`)}
+      ${campo('Quanto guardar por mês (opcional)', `<input name="mensal" inputmode="decimal" value="${val2(o.mensal)}" placeholder="Em branco: o app sugere pelo prazo"><small class="mut">Você acompanha, mês a mês, se está no caminho.</small>`)}
       <div class="botoes">${novo ? '' : '<button class="btn perigo" type="button" id="exc">Excluir</button>'}<button class="btn" type="submit">Salvar</button></div>`,
     (fd) => {
-      const reg = { nome: fd.get('nome').trim(), meta: F.arred(F.numeroBR(fd.get('meta'))), guardado: F.arred(F.numeroBR(fd.get('guardado') || '0')), prazo: fd.get('prazo') || '' };
+      const reg = { nome: fd.get('nome').trim(), meta: F.arred(F.numeroBR(fd.get('meta'))), guardado: F.arred(F.numeroBR(fd.get('guardado') || '0')), prazo: fd.get('prazo') || '', mensal: F.arred(F.numeroBR(fd.get('mensal') || '0')) || 0 };
       if (!(reg.meta > 0)) { aviso('Informe quanto precisa guardar.'); return false; }
       if (novo) d.objetivos.push({ id: uid(), ...reg }); else Object.assign(d.objetivos.find((x) => x.id === o.id), reg);
       salvar(); render(); aviso('Objetivo salvo.');
@@ -847,7 +869,7 @@
   }
   function formAporte(o) {
     abrir('Guardar dinheiro', `<p class="mut">${esc(o.nome)}: ${F.brl(o.guardado)} de ${F.brl(o.meta)}</p>${campo('Quanto guardar agora (R$)', '<input name="v" inputmode="decimal" required placeholder="0,00">')}<button class="btn" type="submit">Guardar</button>`,
-      (fd) => { const v = F.arred(F.numeroBR(fd.get('v'))); if (!(v > 0)) { aviso('Informe um valor.'); return false; } o.guardado = F.arred(o.guardado + v); salvar(); render(); aviso(o.guardado >= o.meta ? 'Objetivo alcançado! 🎉' : 'Valor guardado.'); });
+      (fd) => { const v = F.arred(F.numeroBR(fd.get('v'))); if (!(v > 0)) { aviso('Informe um valor.'); return false; } o.guardado = F.arred(o.guardado + v); (o.aportes = o.aportes || []).push({ data: F.hojeISO(), valor: v }); salvar(); render(); aviso(o.guardado >= o.meta ? 'Objetivo alcançado! 🎉' : 'Valor guardado.'); });
   }
 
   function formPersonalizar() {
@@ -960,6 +982,7 @@
     const acoes = {
       acess: () => formAcess(),
       revisar: () => formRevisar(),
+      divisoes: () => formDivisoes(),
       'captura-config': () => formCaptura(),
       sair: () => sair(),
       'conta-menu': () => menuConta(),

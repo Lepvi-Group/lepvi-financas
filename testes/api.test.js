@@ -113,6 +113,7 @@ test('LGPD: exportar entrega os dados e os consentimentos', async () => {
   assert.strictEqual(j.conta.email, EMAIL);
   assert.ok(j.consentimentos.length >= 2);
   assert.strictEqual(j.dados_financeiros.dados.pessoal.lancs[0].desc, 'Luz');
+  assert.ok(Array.isArray(j.fotos_de_comprovantes) && Array.isArray(j.avisos_do_banco_para_revisar));
 });
 test('troca e redefinição de senha derrubam as outras sessões', async () => {
   assert.strictEqual((await chamar('mudar_senha', { atual: 'errada-errada', nova: 'nova-senha-forte-22' })).status, 401);

@@ -230,7 +230,32 @@
     return o;
   }
 
-  const api = { CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  /* divisão de despesa: quem ainda deve a sua parte (a despesa fica inteira no lançamento, a parte dos outros é um valor a receber) */
+  function dividir(nomes, valor, antiga) {
+    const vistos = new Set(); const lista = (nomes || []).map((n) => String(n).trim()).filter((n) => n && !vistos.has(n.toLowerCase()) && vistos.add(n.toLowerCase())).slice(0, 6);
+    if (!lista.length) return undefined;
+    const parte = arred(valor / (lista.length + 1));
+    return lista.map((nome) => ({ nome, valor: parte, pago: !!((antiga || []).find((x) => x.nome === nome) || {}).pago }));
+  }
+  function saldosDivisao(lancs) {
+    const m = {};
+    lancs.filter((l) => l.tipo === 'despesa' && l.divisao).forEach((l) => l.divisao.filter((x) => !x.pago).forEach((x) => {
+      const o = (m[x.nome] = m[x.nome] || { nome: x.nome, total: 0, itens: [] });
+      o.total = arred(o.total + x.valor); o.itens.push({ id: l.id, desc: l.desc, data: l.data, valor: x.valor });
+    }));
+    return Object.values(m).sort((a, b) => b.total - a.total);
+  }
+  /* meta de economia: quanto falta, quanto guardar por mês e como está o mês atual (aportes têm data) */
+  function metaObjetivo(o, mes) {
+    const falta = Math.max(0, arred(o.meta - o.guardado));
+    const restam = o.prazo ? Math.max(1, (Number(o.prazo.slice(0, 4)) - Number(mes.slice(0, 4))) * 12 + Number(o.prazo.slice(5, 7)) - Number(mes.slice(5, 7)) + 1) : 0;
+    const sugerido = restam ? arred(falta / restam) : 0;
+    const planejado = o.mensal > 0 ? o.mensal : sugerido;
+    const noMes = arred((o.aportes || []).filter((a) => mesDe(a.data) === mes).reduce((t, a) => t + a.valor, 0));
+    return { falta, restam, sugerido, planejado, noMes, pctMes: planejado ? Math.min(100, Math.round((noMes / planejado) * 100)) : 0, noAlvo: !planejado || noMes >= planejado };
+  }
+
+  const api = { dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

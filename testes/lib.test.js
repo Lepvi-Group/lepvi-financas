@@ -131,3 +131,21 @@ test('lê CSV com data brasileira e valor com vírgula', () => {
   assert.strictEqual(r.length, 2);
   assert.deepStrictEqual([r[0].tipo, r[0].valor, r[0].data], ['despesa', 1234.56, '2026-11-05']);
 });
+
+test('dividir: parte igual para cada pessoa e mantém quem já acertou', () => {
+  const d = F.dividir(['Ana', 'Beto', 'ana '], 90, [{ nome: 'Ana', valor: 30, pago: true }]);
+  assert.deepStrictEqual(d.map((x) => [x.nome, x.valor, x.pago]), [['Ana', 30, true], ['Beto', 30, false]]);
+  assert.strictEqual(F.dividir([], 90), undefined);
+});
+test('saldosDivisao: soma só o que ainda não foi acertado, por pessoa', () => {
+  const l = [{ id: '1', tipo: 'despesa', desc: 'Jantar', data: '2026-11-01', valor: 90, divisao: [{ nome: 'Ana', valor: 45, pago: false }] }, { id: '2', tipo: 'despesa', desc: 'Luz', data: '2026-11-02', valor: 80, divisao: [{ nome: 'Ana', valor: 40, pago: false }, { nome: 'Beto', valor: 40, pago: true }] }];
+  const s = F.saldosDivisao(l);
+  assert.strictEqual(s.length, 1); assert.strictEqual(s[0].nome, 'Ana'); assert.strictEqual(s[0].total, 85);
+});
+test('metaObjetivo: sugere o valor mensal pelo prazo e acompanha o mês', () => {
+  const o = { meta: 6000, guardado: 2400, prazo: '2027-06', aportes: [{ data: '2026-11-05', valor: 200 }, { data: '2026-10-05', valor: 999 }] };
+  const r = F.metaObjetivo(o, '2026-11');
+  assert.strictEqual(r.falta, 3600); assert.strictEqual(r.restam, 8); assert.strictEqual(r.sugerido, 450);
+  assert.strictEqual(r.noMes, 200); assert.strictEqual(r.pctMes, 44); assert.strictEqual(r.noAlvo, false);
+  assert.strictEqual(F.metaObjetivo({ ...o, mensal: 100 }, '2026-11').noAlvo, true);
+});

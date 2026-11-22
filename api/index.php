@@ -45,6 +45,9 @@ try {
         $d = $s->fetch();
         $c = db()->prepare('SELECT tipo, versao, quando FROM consentimentos WHERE usuario_id = ? ORDER BY quando');
         $c->execute([$u['id']]);
+        $an = db()->prepare('SELECT id, lanc_id, conteudo, criado_em FROM anexos WHERE usuario_id = ? ORDER BY criado_em');
+        $an->execute([$u['id']]);
+        $fotos = array_map(fn($x) => ['id' => $x['id'], 'lancamento' => $x['lanc_id'], 'em' => date('c', (int) $x['criado_em']), 'imagem' => decifrar((string) $x['conteudo'])], $an->fetchAll());
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
         header('Content-Disposition: attachment; filename="meus-dados-lepvi-financas.json"');
@@ -53,6 +56,8 @@ try {
             'conta' => ['email' => $u['email'], 'nome' => $u['nome'], 'tem_foto' => !empty($u['foto']), 'criada_em' => date('c', (int) $u['criado_em']), 'avisos_por_email' => (bool) $u['avisos'], 'email_confirmado' => (bool) $u['email_verificado']],
             'consentimentos' => array_map(fn($x) => ['tipo' => $x['tipo'], 'versao' => $x['versao'], 'em' => date('c', (int) $x['quando'])], $c->fetchAll()),
             'dados_financeiros' => $d ? json_decode((string) decifrar($d['conteudo']), true) : null,
+            'avisos_do_banco_para_revisar' => capturas_listar($u['id']),
+            'fotos_de_comprovantes' => $fotos,
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         exit;
     }
