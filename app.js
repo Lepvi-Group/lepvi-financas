@@ -556,7 +556,7 @@
     const titulo = { despesa: 'Despesa', receita: 'Receita', transf: 'Transferência' }[tipo];
     const catsHtml = tipo === 'transf' ? '' : campo('Categoria', radios('categoria', catsDe(tipo).filter((c) => c.nome !== 'Cartão' || base.categoria === 'Cartão').map((c) => [c.nome, c.nome, c.icone]), base.categoria || F.CATEGORIAS[tipo][0].nome, 'cats').replace(/<\/div>$/, '<button type="button" class="nova-cat" data-nova-cat><em>＋</em>Nova categoria</button></div>'));
     const contaHtml = tipo === 'transf'
-      ? `<div class="dupla">${campo('Sai de', sele('conta', contas, base.conta))}${campo('Entra em', sele('destino', contas, base.destino || (contas[1] || contas[0])[0]))}</div>`
+      ? `<p class="rep-resumo"><b>O que é transferência?</b> É mover dinheiro entre os seus bancos ou carteiras (por exemplo, do banco para a carteira). Não é gasto nem ganho: não entra nos relatórios, só muda o saldo de cada um.${contas.length < 2 ? ' <b>Você ainda tem só um banco ou carteira.</b> Cadastre outro em Mais opções → Bancos e carteiras para poder transferir.' : ''}</p><div class="dupla">${campo('Sai de', sele('conta', contas, base.conta))}${campo('Entra em', sele('destino', contas, base.destino || (contas[1] || contas[0])[0]))}</div>`
       : campo(tipo === 'receita' ? 'Receber em' : 'Pagar com', radios('conta', opcContas, contaSel));
     const rotPago = tipo === 'receita' ? 'Já recebi' : tipo === 'transf' ? 'Já foi feita' : 'Já paguei';
     const abas = novo ? `<div class="abas3" role="group" aria-label="Tipo de lançamento">${[['despesa', 'Despesa'], ['receita', 'Receita'], ['transf', 'Transferência']].map(([k, t]) => `<button type="button" data-aba="${k}" aria-pressed="${tipo === k}" class="${k}">${t}</button>`).join('')}</div>` : '';
