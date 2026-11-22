@@ -242,7 +242,7 @@ function email_html(string $titulo, string $corpo, string $botaoTexto = '', stri
         . '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">' . htmlspecialchars($pre !== '' ? $pre : $titulo) . '&#847; &#847; &#847;</div>'
         . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#F2F1EE"><tr><td align="center" style="padding:28px 14px">'
         . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:20px;overflow:hidden">'
-        . '<tr><td bgcolor="#0D0D0F" style="padding:28px 36px"><span style="' . $fonte . ';font-size:24px;font-weight:700;letter-spacing:-.3px;color:#FFFFFF">lepvi <span style="color:#7FA6FF">finanças</span></span><br><span style="' . $fonte . ';font-size:13px;color:#B9B8B2">Suas contas, cartões e boletos em um só lugar</span></td></tr>'
+        . '<tr><td bgcolor="#0D0D0F" style="padding:28px 36px"><span style="' . $fonte . ';font-size:24px;font-weight:700;letter-spacing:-.3px;color:#FFFFFF">Lepvi <span style="color:#7FA6FF">Finanças</span></span><br><span style="' . $fonte . ';font-size:13px;color:#B9B8B2">Suas contas, cartões e boletos em um só lugar</span></td></tr>'
         . '<tr><td>' . $faixa . '</td></tr>'
         . '<tr><td style="padding:36px 36px 30px;' . $fonte . '"><h1 style="margin:0 0 16px;font-size:26px;line-height:1.2;font-weight:700;letter-spacing:-.4px;color:#0D0D0F">' . htmlspecialchars($titulo) . '</h1>'
         . '<div style="font-size:16px;line-height:1.65;color:#2E2D2A">' . $corpo . '</div>' . $botao . '</td></tr>'

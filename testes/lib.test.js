@@ -104,6 +104,28 @@ test('fluxo de caixa: saldo previsto dia a dia, fatura no vencimento e aviso de 
   assert.strictEqual(f.primeiroNegativo.dia, 5);
   assert.strictEqual(f.saldoFinal, -500);
 });
+test('sugere categoria pelo histórico da pessoa e, sem histórico, por regras prontas', () => {
+  const hist = [{ tipo: 'despesa', desc: 'PADARIA DO ZE 123', categoria: 'Alimentação' }, { tipo: 'despesa', desc: 'Padaria do Ze', categoria: 'Alimentação' }, { tipo: 'despesa', desc: 'Padaria do Ze', categoria: 'Outros' }];
+  assert.strictEqual(F.sugerirCategoria('PADARIA DO ZE - SP', 'despesa', hist), 'Alimentação');
+  assert.strictEqual(F.sugerirCategoria('UBER *TRIP', 'despesa', []), 'Transporte');
+  assert.strictEqual(F.sugerirCategoria('NETFLIX.COM', 'despesa', []), 'Assinaturas');
+  assert.strictEqual(F.sugerirCategoria('SUPERMERCADO BH', 'despesa', []), 'Mercado');
+  assert.strictEqual(F.sugerirCategoria('DROGARIA SAO PAULO', 'despesa', []), 'Saúde');
+  assert.strictEqual(F.sugerirCategoria('PIX RECEBIDO JOAO', 'receita', []), 'Vendas');
+  assert.strictEqual(F.sugerirCategoria('XPTO 999', 'despesa', []), 'Outros');
+});
+test('comparativo com o mês anterior, maiores gastos e gastos por etiqueta', () => {
+  const l = [
+    { tipo: 'despesa', valor: 500, data: '2026-10-05', categoria: 'Mercado', conta: 'a' },
+    { tipo: 'despesa', valor: 650, data: '2026-11-05', categoria: 'Mercado', conta: 'a', tags: ['casa'] },
+    { tipo: 'despesa', valor: 80, data: '2026-11-06', categoria: 'Lazer', conta: 'a', tags: ['casa', 'viagem'] },
+    { tipo: 'receita', valor: 3000, data: '2026-11-02', categoria: 'Salário', conta: 'a' },
+  ];
+  const c = F.comparativo(l, '2026-11');
+  assert.deepStrictEqual([c.atual.despesas, c.anterior.despesas, c.categorias[0].categoria, c.categorias[0].diff, c.categorias[0].pct], [730, 500, 'Mercado', 150, 30]);
+  assert.strictEqual(F.maioresGastos(l, '2026-11', 1)[0].valor, 650);
+  assert.deepStrictEqual(F.resumoPorTag(l, '2026-11'), { casa: 730, viagem: 80 });
+});
 test('lê CSV com data brasileira e valor com vírgula', () => {
   const r = F.lerCSV('data;descricao;valor\n05/11/2026;Mercado;-1.234,56\n06/11/2026;Venda;300,00');
   assert.strictEqual(r.length, 2);

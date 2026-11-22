@@ -129,6 +129,20 @@ test('esqueci senha responde igual para e-mail que não existe', async () => {
   assert.strictEqual(r.status, 200);
   assert.ok(!emails().includes('PARA: ninguem@example.com'));
 });
+test('alerta de orçamento por e-mail: avisa em 80% e de novo em 100%, uma vez cada', async () => {
+  const env = { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV };
+  const rodar = (hoje) => execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), `--hoje=${hoje}`], { env }).toString();
+  const dados = (valor) => ({ perfil: 'pessoal', dados: { pessoal: { contas: [], cartoes: [], orcamentos: { Mercado: 100 }, lancs: [{ id: 'm1', tipo: 'despesa', desc: 'Mercado', valor, data: '2027-03-10', categoria: 'Mercado', conta: 'carteira', pago: true }] } } });
+  const atual = (await chamar('dados', null, { metodo: 'GET' })).json.versao;
+  const v1 = (await chamar('dados', { versao: atual, conteudo: dados(85) })).json.versao;
+  assert.match(rodar('2027-03-12'), /enviados: 1/);
+  assert.ok(emails().includes('Mercado: 85% do limite do mês'));
+  assert.match(rodar('2027-03-13'), /enviados: 0/);
+  await chamar('dados', { versao: v1, conteudo: dados(120) });
+  assert.match(rodar('2027-03-14'), /enviados: 1/);
+  assert.ok(emails().includes('Mercado: 120% do limite do mês') && emails().includes('O limite foi ultrapassado'));
+  assert.match(rodar('2027-03-15'), /enviados: 0/);
+});
 test('excluir conta apaga tudo', async () => {
   assert.strictEqual((await chamar('excluir', { senha: 'errada-errada' })).status, 401);
   assert.strictEqual((await chamar('excluir', { senha: 'outra-senha-forte-33' })).status, 200);

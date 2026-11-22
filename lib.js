@@ -189,7 +189,48 @@
     return { saldoInicial: saldo, entradas: arred(ent), saidas: arred(sai), saldoFinal: acum, dias, primeiroNegativo: negativo };
   }
 
-  const api = { CATEGORIAS, catInfo, fluxoMes, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  /* ---------- sugestão de categoria ao importar (histórico da própria pessoa + regras prontas) ---------- */
+  const normalizar = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const REGRAS_DESPESA = [
+    [/super|mercad|atacad|hortifruti|sacolao|assai|carrefour|acougue|feira/, 'Mercado'],
+    [/ifood|restaur|lanchon|padaria|pizza|burger|cafe |cafeteria|sorvet|bar /, 'Alimentacao'],
+    [/uber|99 ?pop|99app|posto|shell|ipiranga|combust|estacion|pedagio|sem parar|metro|onibus|passagem|gasolina/, 'Transporte'],
+    [/netflix|spotify|prime|disney|hbo|youtube|apple com|google one|google play|deezer|globoplay|assinatura/, 'Assinaturas'],
+    [/farmacia|drogaria|drogasil|raia|pacheco|hospital|clinica|laborat|dentista|consulta|unimed|plano de saude/, 'Saude'],
+    [/escola|faculdade|curso|udemy|livraria|mensalidade/, 'Educacao'],
+    [/cinema|teatro|show|ingresso|steam|playstation|xbox|hotel|airbnb|booking|viagem/, 'Lazer'],
+    [/aluguel|condominio|energia|enel|cemig|luz |agua|sabesp|copasa|internet|vivo|claro|tim |oi |gas /, 'Moradia'],
+    [/imposto|iptu|ipva|darf|simples|taxa/, 'Impostos'],
+  ];
+  const REGRAS_RECEITA = [[/salario|pro labore|folha/, 'Salário'], [/venda|pix recebido|recebimento/, 'Vendas'], [/rendimento|juros|dividendo/, 'Rendimentos'], [/reembolso|estorno/, 'Reembolso']];
+  const SEM_ACENTO = { Alimentacao: 'Alimentação', Saude: 'Saúde', Educacao: 'Educação' };
+  function sugerirCategoria(desc, tipo, lancs) {
+    const n = normalizar(desc); if (!n) return 'Outros';
+    const chave = n.split(' ').slice(0, 2).join(' '); const cont = {};
+    (lancs || []).forEach((l) => { if (l.tipo === tipo && l.categoria && l.categoria !== 'Outros' && normalizar(l.desc).split(' ').slice(0, 2).join(' ') === chave) cont[l.categoria] = (cont[l.categoria] || 0) + 1; });
+    const top = Object.entries(cont).sort((a, b) => b[1] - a[1])[0];
+    if (top) return top[0];
+    for (const [re, cat] of (tipo === 'receita' ? REGRAS_RECEITA : REGRAS_DESPESA)) if (re.test(n + ' ')) return SEM_ACENTO[cat] || cat;
+    return 'Outros';
+  }
+
+  /* ---------- relatórios ---------- */
+  function comparativo(lancs, mes) {
+    const at = resumoMes(lancs, mes); const an = resumoMes(lancs, somaMes(mes, -1));
+    const cats = [...new Set([...Object.keys(at.porCategoria), ...Object.keys(an.porCategoria)])].map((c) => {
+      const a = at.porCategoria[c] || 0; const b = an.porCategoria[c] || 0;
+      return { categoria: c, atual: a, anterior: b, diff: arred(a - b), pct: b ? Math.round(((a - b) / b) * 100) : null };
+    }).filter((x) => x.diff !== 0).sort((x, y) => Math.abs(y.diff) - Math.abs(x.diff));
+    return { atual: at, anterior: an, categorias: cats };
+  }
+  const maioresGastos = (lancs, mes, n = 10) => lancs.filter((l) => l.tipo === 'despesa' && !l.ignorar && mesDe(l.data) === mes).sort((a, b) => b.valor - a.valor).slice(0, n);
+  function resumoPorTag(lancs, mes) {
+    const o = {};
+    lancs.filter((l) => l.tipo === 'despesa' && !l.ignorar && mesDe(l.data) === mes).forEach((l) => (l.tags || []).forEach((t) => { o[t] = arred((o[t] || 0) + l.valor); }));
+    return o;
+  }
+
+  const api = { CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

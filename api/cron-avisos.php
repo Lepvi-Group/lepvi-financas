@@ -59,8 +59,23 @@ foreach ($usuarios as $u) {
     $S = $bruto ? json_decode((string) decifrar($bruto), true) : null;
     if (!is_array($S)) continue;
 
-    $secoes = ['hoje' => [], 'breve' => [], 'atrasado' => []]; $marcar = [];
-    foreach (['pessoal' => 'Pessoal', 'empresa' => 'Empresa'] as $perfil => $rotulo) {
+    $secoes = ['hoje' => [], 'breve' => [], 'atrasado' => [], 'orc' => []]; $marcar = [];
+    foreach (['pessoal' => '', 'empresa' => ''] as $perfil => $rotulo) {
+        // Limite por categoria: avisa quando passa de 80% e de 100% do mês
+        $mesAtual = substr($hoje, 0, 7); $gastos = [];
+        foreach (($S['dados'][$perfil]['lancs'] ?? []) as $l) {
+            if (($l['tipo'] ?? '') === 'despesa' && empty($l['ignorar']) && substr((string) $l['data'], 0, 7) === $mesAtual) $gastos[$l['categoria']] = ($gastos[$l['categoria']] ?? 0) + (float) $l['valor'];
+        }
+        foreach (($S['dados'][$perfil]['orcamentos'] ?? []) as $cat => $limite) {
+            $limite = (float) $limite; if ($limite <= 0) continue;
+            $pct = (int) floor((($gastos[$cat] ?? 0) / $limite) * 100);
+            $nivel = $pct >= 100 ? '100' : ($pct >= 80 ? '80' : null); if (!$nivel) continue;
+            $chave = "orc|$cat|$mesAtual|$nivel";
+            $j = db()->prepare('SELECT 1 FROM avisos WHERE usuario_id = ? AND chave = ?'); $j->execute([$u['id'], $chave]);
+            if ($j->fetchColumn()) continue;
+            $secoes['orc'][] = ['titulo' => $cat . ': ' . $pct . '% do limite do mês', 'valor' => (float) ($gastos[$cat] ?? 0), 'limite' => $limite, 'nivel' => $nivel];
+            $marcar[] = $chave;
+        }
         foreach (itens_a_pagar($S['dados'][$perfil] ?? []) as $i) {
             $dias = (int) round((strtotime($i['venc']) - strtotime($hoje)) / 86400);
             $tipo = null; $chave = null;
@@ -75,17 +90,23 @@ foreach ($usuarios as $u) {
             $marcar[] = $chave;
         }
     }
-    $total = count($secoes['hoje']) + count($secoes['breve']) + count($secoes['atrasado']);
+    $total = count($secoes['hoje']) + count($secoes['breve']) + count($secoes['atrasado']) + count($secoes['orc']);
     if ($total === 0) continue;
 
     $bloco = function (string $tit, string $cor, array $lista) {
         if (!$lista) return '';
         $h = '<h2 style="font-size:17px;margin:22px 0 8px;color:' . $cor . '">' . $tit . '</h2><table style="width:100%;border-collapse:collapse">';
         foreach ($lista as $i) {
-            $h .= '<tr><td style="padding:10px 0;border-top:1px solid #E6E5E0"><b>' . htmlspecialchars($i['titulo']) . '</b><br><span style="color:#4A4944;font-size:14px">' . $i['perfil'] . ' · vence ' . data_br($i['venc'])
+            $h .= '<tr><td style="padding:10px 0;border-top:1px solid #E6E5E0"><b>' . htmlspecialchars($i['titulo']) . '</b><br><span style="color:#4A4944;font-size:14px">' . ($i['perfil'] !== '' ? $i['perfil'] . ' · ' : '') . 'vence ' . data_br($i['venc'])
                 . ($i['dias'] < 0 ? ' · atrasado há ' . (-$i['dias']) . ($i['dias'] === -1 ? ' dia' : ' dias') : ($i['dias'] === 0 ? ' · é hoje' : ' · em ' . $i['dias'] . ($i['dias'] === 1 ? ' dia' : ' dias')))
                 . '</span></td><td style="padding:10px 0;border-top:1px solid #E6E5E0;text-align:right;white-space:nowrap"><b>' . brl($i['valor']) . '</b></td></tr>';
         }
+        return $h . '</table>';
+    };
+    $blocoOrc = function (array $lista) {
+        if (!$lista) return '';
+        $h = '<h2 style="font-size:17px;margin:22px 0 8px;color:#8A3DFF">Orçamento do mês</h2><table style="width:100%;border-collapse:collapse">';
+        foreach ($lista as $i) $h .= '<tr><td style="padding:10px 0;border-top:1px solid #E6E5E0"><b>' . htmlspecialchars($i['titulo']) . '</b><br><span style="color:#4A4944;font-size:14px">' . ($i['nivel'] === '100' ? 'O limite foi ultrapassado.' : 'Está chegando no limite.') . '</span></td><td style="padding:10px 0;border-top:1px solid #E6E5E0;text-align:right;white-space:nowrap"><b>' . brl($i['valor']) . '</b><br><span style="color:#4A4944;font-size:14px">de ' . brl($i['limite']) . '</span></td></tr>';
         return $h . '</table>';
     };
     $nome = explode(' ', trim($u['nome']))[0];
@@ -93,8 +114,9 @@ foreach ($usuarios as $u) {
         . $bloco('Vencem hoje', '#B54708', $secoes['hoje'])
         . $bloco('Já venceram', '#B42318', $secoes['atrasado'])
         . $bloco('Vencem em breve', '#2D4BFF', $secoes['breve'])
+        . $blocoOrc($secoes['orc'])
         . '<p style="font-size:14px;color:#4A4944;margin-top:22px">Depois de pagar, marque como pago no app para o aviso parar. Para desligar estes e-mails: Mais opções → Minha conta.</p>';
-    $assunto = ($secoes['hoje'] ? '⏰ Vence hoje' : ($secoes['atrasado'] ? '⚠️ Vencimento atrasado' : '🔔 Vence em breve')) . ' · ' . $total . ($total === 1 ? ' item' : ' itens') . ' no Lepvi Finanças';
+    $assunto = ($secoes['hoje'] ? '⏰ Vence hoje' : ($secoes['atrasado'] ? '⚠️ Vencimento atrasado' : ($secoes['breve'] ? '🔔 Vence em breve' : '📊 Orçamento do mês'))) . ' · ' . $total . ($total === 1 ? ' item' : ' itens') . ' no Lepvi Finanças';
     if (enviar_email($u['email'], $assunto, email_html('Seus vencimentos', $corpo, 'Abrir o Lepvi Finanças', rtrim(cfg()['site_url'], '/') . '/'))) {
         foreach ($marcar as $ch) db()->prepare('INSERT INTO avisos (usuario_id, chave, enviado_em) VALUES (?,?,?)')->execute([$u['id'], $ch, agora()]);
         $enviados++;
