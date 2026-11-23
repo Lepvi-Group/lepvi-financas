@@ -207,7 +207,7 @@
   }
   async function iniciar() {
     abertura();
-    $('#tela').innerHTML = '<p class="mut" role="status">Carregando…</p>';
+    $('#tela').innerHTML = '<div class="carrega" role="status"><svg class="car-logo" viewBox="0 0 100 100" aria-hidden="true" fill="currentColor"><path d="M10 24L34 0V64L46 76H90L66 100H10Z"/><path d="M60 26H84V50H60Z"/></svg><p class="car-nome">Lepvi <b>Finanças</b></p><span class="car-barra" aria-hidden="true"></span><p class="mut">Carregando suas contas…</p></div>';
     const q = new URLSearchParams(location.search); const tv = q.get('verificar'); const tr = q.get('redefinir');
     if (tv || tr) history.replaceState(null, '', location.pathname);
     const oa = q.get('oauth'); const op = q.get('p');
@@ -731,6 +731,7 @@
 
   const VISTAS = { inicio: telaInicio, lancs: telaLancs, cartoes: telaCartoes, planejar: telaPlanejar, mais: telaMais, perfil: telaPerfil };
   function render() {
+    document.body.classList.remove('carregando');
     document.body.classList.toggle('deslogado', !USER.logado);
     if (!USER.logado) { $('#menu').innerHTML = ''; $('#tela').innerHTML = telaAuth(); montarTurnstile(); entradaDaTela(); return; }
     document.querySelectorAll('[data-perfil]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.perfil === S.perfil)));
