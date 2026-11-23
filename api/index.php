@@ -10,7 +10,7 @@ $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $link = fn(string $q) => rtrim(cfg()['site_url'], '/') . '/?' . $q;
 
 try {
-    if ($metodo === 'GET' && $acao === 'config') resp(['turnstile' => turnstile_config()['site_key'] ?? null]);
+    if ($metodo === 'GET' && $acao === 'config') resp(['turnstile' => turnstile_config()['site_key'] ?? null, 'cadastro' => cadastro_aberto()]);
     // Entrada com Google/Microsoft: dados da pessoa que ainda precisa aceitar a Política e os Termos
     if ($metodo === 'GET' && $acao === 'oauth_pendente') {
         $pend = ler_assinado((string) ($_COOKIE['lf_novo'] ?? ''));
@@ -77,6 +77,7 @@ try {
 
     switch ($acao) {
         case 'oauth_concluir': {
+            if (!cadastro_aberto()) erro('Novas contas estão fechadas no momento.', 403);
             $pend = ler_assinado((string) ($_COOKIE['lf_novo'] ?? ''));
             if (!$pend) erro('Pedido expirado. Entre de novo.', 410);
             if (($b['aceite'] ?? false) !== true) erro('É preciso aceitar a Política de Privacidade e os Termos de Uso.', 422);
@@ -92,6 +93,7 @@ try {
             resp(['usuario' => usuario_publico($novo)]);
         }
         case 'cadastro': {
+            if (!cadastro_aberto()) erro('Novas contas estão fechadas no momento. Quem já tem conta continua entrando normalmente.', 403);
             exigir_turnstile($b);
             $ip = 'cad:' . ip_hash();
             if (limite_estourou($ip, 10, 3600)) erro('Muitas tentativas. Tente de novo em alguns minutos.', 429);

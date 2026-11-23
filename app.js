@@ -104,7 +104,7 @@
   /* ---------- entrar, criar conta, esqueci a senha ---------- */
   let tsId = null;
   async function carregarTurnstile() {
-    try { V.ts = (await api('config')).turnstile || null; } catch (e) { V.ts = null; }
+    try { const cf = await api('config'); V.ts = cf.turnstile || null; V.cadastro = cf.cadastro !== false; } catch (e) { V.ts = null; }
     if (V.ts && !window.turnstile && !document.getElementById('ts-script')) {
       const sc = document.createElement('script'); sc.id = 'ts-script'; sc.async = true; sc.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'; sc.onload = montarTurnstile; document.head.appendChild(sc);
     }
@@ -147,7 +147,7 @@
     } else {
       titulo = 'Entrar';
       corpo = `${msg}${social('Entrar')}<form id="auth" class="auth-f" novalidate>${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campoSenha('Senha', 'name="senha" type="password" required autocomplete="current-password"')}${mostrar}${erro}<button class="btn bloco" type="submit">Entrar</button></form>
-        <p class="mut">${link('auth-esqueci', 'Esqueci minha senha')}</p><p class="mut">Ainda não tem conta? ${link('auth-cadastro', 'Criar conta grátis')}</p>`;
+        <p class="mut">${link('auth-esqueci', 'Esqueci minha senha')}</p>${V.cadastro === false ? '' : `<p class="mut">Ainda não tem conta? ${link('auth-cadastro', 'Criar conta grátis')}</p>`}`;
     }
     const ic = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
     const selos = [
@@ -217,7 +217,7 @@
     const oa = q.get('oauth'); const op = q.get('p');
     if (oa) history.replaceState(null, '', location.pathname);
     const NOME_P = op === 'google' ? 'Google' : 'Microsoft';
-    const MENS = { 'nao-configurado': `Entrar com ${NOME_P} ainda não está ativo. Use seu e-mail e senha por enquanto.`, erro: 'Não foi possível entrar. Tente de novo.', cancelado: 'Você cancelou a entrada.', muitas: 'Muitas tentativas. Espere alguns minutos.', 'erro-2fa': 'Sua conta tem verificação em dois passos. Entre com e-mail, senha e o código do app autenticador.', 'erro-conta-existente': 'Já existe uma conta com este e-mail. Entre com a senha e tente de novo.', 'erro-confirme-email': 'Confirme seu e-mail pelo link que enviamos antes de entrar.', 'erro-sem-email': 'O provedor não informou seu e-mail. Use e-mail e senha.', 'erro-dados': 'Não foi possível entrar. Tente de novo.' };
+    const MENS = { 'nao-configurado': `Entrar com ${NOME_P} ainda não está ativo. Use seu e-mail e senha por enquanto.`, erro: 'Não foi possível entrar. Tente de novo.', cancelado: 'Você cancelou a entrada.', muitas: 'Muitas tentativas. Espere alguns minutos.', 'erro-2fa': 'Sua conta tem verificação em dois passos. Entre com e-mail, senha e o código do app autenticador.', 'erro-cadastro-fechado': 'Novas contas estão fechadas no momento. Quem já tem conta entra normalmente.', 'erro-conta-existente': 'Já existe uma conta com este e-mail. Entre com a senha e tente de novo.', 'erro-confirme-email': 'Confirme seu e-mail pelo link que enviamos antes de entrar.', 'erro-sem-email': 'O provedor não informou seu e-mail. Use e-mail e senha.', 'erro-dados': 'Não foi possível entrar. Tente de novo.' };
     if (oa === 'aceite') { try { V.pend = await api('oauth_pendente'); V.auth = 'oauth-aceite'; } catch (e) { V.msg = e.message; V.msgErro = true; } }
     else if (oa && oa !== 'ok') { V.msg = MENS[oa] || MENS.erro; V.msgErro = true; }
     if (tv) { try { await api('verificar', { token: tv }); V.msg = 'E-mail confirmado! Agora é só entrar.'; } catch (e) { V.msg = e.message; } }

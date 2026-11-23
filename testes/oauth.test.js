@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 
-const r = JSON.parse(execFileSync('php', [path.join(__dirname, 'oauth-cenarios.php')]).toString());
+const r = JSON.parse(execFileSync('php', [path.join(__dirname, 'oauth-cenarios.php')], { env: { ...process.env, LEPVI_FINANCAS_CADASTRO: 'aberto' } }).toString());
 
 test('dados assinados não podem ser forjados nem usados depois de vencer', () => {
   assert.strictEqual(r.assina_ok, 1);

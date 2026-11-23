@@ -108,6 +108,7 @@ function oauth_resolver(string $p, array $c): array
         $u['email_verificado'] = 1;
         return ['acao' => 'login', 'usuario' => $u];
     }
+    if (!cadastro_aberto()) return ['erro' => 'cadastro-fechado'];
     return ['acao' => 'aceite', 'pendente' => ['p' => $p, 'sub' => $sub, 'email' => $email, 'nome' => mb_substr(trim((string) ($c['name'] ?? '')) ?: explode('@', $email)[0], 0, 120), 'v' => $verificado]];
 }
 

@@ -50,7 +50,7 @@ const ultimoToken = (param) => { const m = [...emails().matchAll(new RegExp(para
 test.before(async () => {
   await new Promise((r) => pluggyMock.listen(PORTA_PLUGGY, '127.0.0.1', r));
   fs.rmSync(DEV, { recursive: true, force: true });
-  servidor = spawn('php', ['-S', `127.0.0.1:${PORTA}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV, LEPVI_FINANCAS_OF_SEGREDO: 'segredo-de-teste-open-finance-1234', LEPVI_FINANCAS_PLUGGY_URL: `http://127.0.0.1:${PORTA_PLUGGY}` } });
+  servidor = spawn('php', ['-S', `127.0.0.1:${PORTA}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV, LEPVI_FINANCAS_CADASTRO: 'aberto', LEPVI_FINANCAS_OF_SEGREDO: 'segredo-de-teste-open-finance-1234', LEPVI_FINANCAS_PLUGGY_URL: `http://127.0.0.1:${PORTA_PLUGGY}` } });
   for (let i = 0; i < 40; i++) { try { await fetch(BASE + '?a=eu'); break; } catch (e) { await new Promise((r) => setTimeout(r, 150)); } }
 });
 test.after(() => { pluggyMock.close(); servidor.kill(); fs.rmSync(DEV, { recursive: true, force: true }); });
@@ -271,6 +271,25 @@ test('dois passos (TOTP): vetores da RFC 6238, ativar, exigir código no login, 
   const off = await chamar('totp_gerenciar', { acao: 'desativar', senha: SENHA_ATUAL, codigo: novos.json.reservas[0] });
   assert.strictEqual(off.status, 200); assert.strictEqual(off.json.usuario.dois_passos, false);
   assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: SENHA_ATUAL }, { semCookie: true })).json.usuario.email, EMAIL, 'sem dois passos volta a entrar direto');
+});
+
+test('cadastro fechado por padrão: sem a chave de abrir, ninguém cria conta (e-mail nem Google/Microsoft) e a tela esconde o convite', async () => {
+  const php = (env, cod) => execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_oauth.php"; ' + cod], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'fechado.sqlite'), LEPVI_FINANCAS_ESTADO: path.join(DEV, 'estado-fechado'), LEPVI_FINANCAS_CADASTRO: env } }).toString().trim();
+  assert.strictEqual(php('', 'echo json_encode(cadastro_aberto());'), 'false');
+  assert.strictEqual(php('aberto', 'echo json_encode(cadastro_aberto());'), 'true');
+  fs.mkdirSync(path.join(DEV, 'estado-fechado'), { recursive: true });
+  fs.writeFileSync(path.join(DEV, 'estado-fechado', 'cadastro-aberto'), '');
+  assert.strictEqual(php('', 'echo json_encode(cadastro_aberto());'), 'true', 'o arquivo cadastro-aberto reabre sem subir versão');
+  fs.rmSync(path.join(DEV, 'estado-fechado', 'cadastro-aberto'));
+  assert.strictEqual(php('', 'echo json_encode(oauth_resolver("google", ["sub" => "g-novo", "email" => "novo@example.com", "email_verified" => true]));'), '{"erro":"cadastro-fechado"}');
+  const porta = 4191; const fechado = spawn('php', ['-S', `127.0.0.1:${porta}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'fechado.sqlite'), LEPVI_FINANCAS_ESTADO: path.join(DEV, 'estado-fechado') } });
+  try {
+    for (let i = 0; i < 40; i++) { try { await fetch(`http://127.0.0.1:${porta}/api/?a=config`); break; } catch (e) { await new Promise((r) => setTimeout(r, 150)); } }
+    const h = { 'Content-Type': 'application/json', 'X-Lepvi': 'financas' };
+    assert.strictEqual((await (await fetch(`http://127.0.0.1:${porta}/api/?a=config`, { headers: h })).json()).cadastro, false);
+    const r = await fetch(`http://127.0.0.1:${porta}/api/?a=cadastro`, { method: 'POST', headers: h, body: JSON.stringify({ nome: 'Intruso', email: 'intruso@example.com', senha: 'uma-senha-bem-forte-1', aceite: true }) });
+    assert.strictEqual(r.status, 403); assert.match((await r.json()).erro, /fechadas/);
+  } finally { fechado.kill(); }
 });
 
 test('anexos: guarda foto de recibo cifrada, recusa o que não é imagem e apaga', async () => {
