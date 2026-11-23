@@ -186,7 +186,7 @@
       else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: !!v.aceite }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
       else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'redefinir') { await api('redefinir', { token: V.token, senha: v.senha }); V.auth = 'entrar'; V.token = ''; V.msg = 'Senha alterada. Entre com a nova senha.'; render(); }
-    } catch (e) { er.textContent = e.message; er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; if (window.turnstile && tsId !== null) { window.turnstile.reset(tsId); V.tsTok = ''; } }
+    } catch (e) { er.textContent = e.message + (V.auth === 'entrar' && /incorretos/.test(e.message) ? ' O navegador pode ter preenchido uma senha antiga: apague o campo, marque "Mostrar senha" e digite de novo.' : ''); er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; if (window.turnstile && tsId !== null) { window.turnstile.reset(tsId); V.tsTok = ''; } }
   }
   document.addEventListener('submit', (ev) => {
     if (ev.target.id === 'auth') { ev.preventDefault(); enviarAuth(ev.target); }
