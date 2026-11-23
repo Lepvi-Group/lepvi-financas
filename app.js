@@ -760,9 +760,9 @@
   function menuConta() {
     const u = USER.info;
     abrir('Meu perfil', `<div class="conta-card" style="margin:0">${avatarHtml('grande')}<div class="conta-info"><h2>${esc(u.nome)}</h2><p>${esc(u.email)}</p></div></div>
-      <div class="card linhas">${linha({ icone: LI.user, titulo: 'Meu perfil', desc: 'Foto, nome e dados da conta', attrs: 'data-sheet="perfil"' })}${linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', attrs: 'data-sheet="acess"' })}${linha({ icone: LI.mais, titulo: 'Mais opções', desc: 'Contas, importar, cópia de segurança', attrs: 'data-sheet="mais"' })}</div>
+      <div class="card linhas">${linha({ icone: LI.user, titulo: 'Meu perfil', desc: 'Foto, nome e dados da conta', attrs: 'data-sheet="perfil"' })}${linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', attrs: 'data-sheet="acess"' })}${linha({ icone: LI.brilho, titulo: 'Atalhos e inteligências', desc: 'Ache qualquer função do app', attrs: 'data-sheet="busca"' })}${linha({ icone: LI.chave, titulo: 'Alterar senha', attrs: 'data-sheet="senha"' })}${linha({ icone: LI.escudo, titulo: 'Verificação em dois passos', desc: u.dois_passos ? 'Ativada' : 'Recomendado: proteja sua conta', attrs: 'data-sheet="dois"' })}${linha({ icone: LI.mais, titulo: 'Mais opções', desc: 'Contas, importar, cópia de segurança', attrs: 'data-sheet="mais"' })}</div>
       <button class="btn bloco" type="button" data-sheet="sair">${svg(LI.sair)}&nbsp; Sair</button>`, null, (f) => {
-      f.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => { const a = b.dataset.sheet; dlg.close(); if (a === 'perfil' || a === 'mais') ir(a); else if (a === 'acess') formAcess(); else sair(); }));
+      f.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => { const a = b.dataset.sheet; dlg.close(); if (a === 'perfil' || a === 'mais') ir(a); else if (a === 'acess') formAcess(); else if (a === 'busca') formBusca(); else if (a === 'senha') formSenha(); else if (a === 'dois') formDoisPassos(); else sair(); }));
     });
   }
   async function sair() { try { await api('sair', {}); } catch (e) { /* já saiu */ } PIN.remover(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Você saiu. Até logo!'; await carregarTurnstile(); render(); window.scrollTo(0, 0); }
@@ -1352,14 +1352,18 @@
     });
   }
   function d2Chave(r) {
-    abrir('Adicionar no app autenticador', `<ol class="cap-ol"><li>No celular, abra o app autenticador e escolha <b>Adicionar conta</b> (ou <b>+</b>) → <b>Inserir chave de configuração</b>.</li><li>Digite o nome <b>Lepvi Finanças</b> e a chave abaixo (tipo: baseada em tempo).</li><li>Digite aqui o código de 6 dígitos que o app mostrar.</li></ol>
+    abrir('Adicionar no app autenticador', `<ol class="cap-ol"><li>No celular, abra o app autenticador e toque em <b>+</b> (Adicionar conta) → <b>Ler QR code</b>.</li><li>Aponte a câmera para o QR code abaixo. Sem câmera à mão? Use a chave escrita (tipo: baseada em tempo).</li><li>Digite aqui o código de 6 dígitos que o app mostrar.</li></ol>
+      <div class="d2-qr" id="d2-qr" role="img" aria-label="QR code para adicionar no app autenticador"></div>
       <section class="card cap-passo"><h3>Sua chave</h3><p class="d2-chave" id="d2-seg">${esc(r.segredo.match(/.{1,4}/g).join(' '))}</p><div class="botoes"><button class="btn sec mini" type="button" id="d2-cp">Copiar chave</button><a class="btn sec mini" href="${esc(r.uri)}">Abrir no app autenticador (celular)</a></div></section>
       <label class="campo"><span>Código de 6 dígitos</span><input name="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>
       <div class="botoes rodape-form"><button class="btn" type="submit">Ativar</button></div>`, (fd) => {
       const bt = dlg.querySelector('button[type="submit"]'); bt.disabled = true;
       api('totp_ativar', { codigo: fd.get('codigo') }).then((r2) => { USER.info = r2.usuario; d2Reservas(r2.reservas); }).catch((e) => { aviso(e.message); bt.disabled = false; });
       return false;
-    }, (f) => { $('#d2-cp', f).onclick = () => copiarTexto(r.segredo); });
+    }, (f) => {
+      $('#d2-cp', f).onclick = () => copiarTexto(r.segredo);
+      try { const qr = qrcode(0, 'M'); qr.addData(r.uri); qr.make(); $('#d2-qr', f).innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); } catch (e) { $('#d2-qr', f).remove(); }
+    });
   }
   function formDoisPassos() {
     const u = USER.info;
@@ -1385,6 +1389,55 @@
       };
     });
   }
+  /* ---------- atalhos e inteligências: busca de funções (botão da lupa ou Ctrl/Cmd + K) ---------- */
+  const ATALHOS = [
+    ['Inteligências', 'Para revisar', 'Compras do banco viram lançamento depois do seu OK', 'data-acao="revisar"', 'compras automaticas aviso banco pix cartao revisar'],
+    ['Inteligências', 'Bancos conectados (Open Finance)', 'Importa as movimentações do banco sozinho', 'data-acao="openfinance"', 'open finance pluggy banco conectar extrato automatico'],
+    ['Inteligências', 'Projeção de saldo', 'Como ficam os próximos 6 meses', 'data-acao="projecao"', 'previsao futuro saldo negativo meses'],
+    ['Inteligências', 'Assinaturas', 'Cobranças que se repetem todo mês', 'data-acao="assinaturas"', 'recorrente mensal streaming'],
+    ['Inteligências', 'Reserva de emergência', 'Quantos meses você aguenta sem renda', 'data-acao="reserva"', 'poupanca emergencia'],
+    ['Inteligências', 'Simulador de dívidas', 'Qual dívida pagar primeiro', 'data-acao="dividas"', 'divida juros quitar'],
+    ['Inteligências', 'Simulador de juros e metas', 'Quanto vira se guardar todo mês', 'data-acao="simulador"', 'investir guardar juros compostos meta'],
+    ['Inteligências', 'MEI: limite e DAS', 'Faturamento do ano e lembrete do imposto', 'data-acao="mei"', 'mei das imposto faturamento limite'],
+    ['Inteligências', 'Contas a receber', 'Clientes que ainda vão pagar', 'data-acao="receber"', 'cliente receber cobranca'],
+    ['Atalhos', 'Novo gasto', 'Lançar uma despesa', 'data-acao="rap-despesa"', 'despesa gasto lancar adicionar'],
+    ['Atalhos', 'Nova entrada', 'Lançar uma receita', 'data-acao="rap-receita"', 'receita entrada salario ganho'],
+    ['Atalhos', 'Transferência', 'Entre suas contas', 'data-acao="rap-transf"', 'transferir mover dinheiro'],
+    ['Atalhos', 'Pagar fatura do cartão', '', 'data-acao="rap-fatura"', 'fatura cartao pagar'],
+    ['Atalhos', 'Novo boleto', '', 'data-acao="novo-boleto"', 'boleto conta a pagar'],
+    ['Atalhos', 'Início', '', 'data-tela="inicio"', 'resumo painel home'],
+    ['Atalhos', 'Lançamentos', '', 'data-tela="lancs"', 'extrato lista movimentos'],
+    ['Atalhos', 'Cartões', 'Faturas mês a mês', 'data-tela="cartoes"', 'cartao credito fatura'],
+    ['Atalhos', 'Planejar: orçamento, objetivos e relatórios', '', 'data-tela="planejar"', 'orcamento objetivo meta relatorio'],
+    ['Atalhos', 'Categorias', 'Crie as suas, com ícone e cor', 'data-acao="categorias"', 'categoria etiqueta cor'],
+    ['Atalhos', 'Modelos de lançamento', '', 'data-acao="modelos"', 'modelo repetir salvo'],
+    ['Atalhos', 'Compartilhar com outra pessoa', 'Cônjuge ou sócio', 'data-acao="compartilhar"', 'conjuge socio convite espaco'],
+    ['Atalhos', 'Cópia de segurança', 'Baixar seus lançamentos', 'data-acao="backup"', 'backup exportar baixar'],
+    ['Atalhos', 'Bloqueio com PIN', '', 'data-acao="pin"', 'pin senha bloqueio travar'],
+    ['Atalhos', 'Tamanho do texto e contraste', '', 'data-acao="acess"', 'acessibilidade fonte letra escuro'],
+    ['Conta e segurança', 'Alterar senha', '', 'data-acao="senha"', 'trocar senha seguranca'],
+    ['Conta e segurança', 'Verificação em dois passos', 'Código do celular ao entrar', 'data-acao="dois-passos"', '2fa autenticador qr codigo seguranca'],
+    ['Conta e segurança', 'Meu perfil', 'Foto, nome e dados', 'data-acao="perfil"', 'foto nome conta'],
+    ['Conta e segurança', 'Central de ajuda e contato', '', 'data-acao="ajuda"', 'ajuda suporte whatsapp duvida'],
+    ['Conta e segurança', 'Indicar a um amigo', '', 'data-acao="indicar"', 'indicar convidar amigo'],
+    ['Conta e segurança', 'Sair', '', 'data-acao="sair"', 'logout encerrar']
+  ];
+  const semAcento = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  function formBusca() {
+    abrir('Atalhos e inteligências', `<label class="campo"><span>O que você procura?</span><input id="bq" type="search" autocomplete="off" placeholder="Ex.: senha, fatura, projeção, MEI"></label><div id="bl"></div>`, null, (f) => {
+      const caixa = $('#bq', f); const lista = $('#bl', f);
+      const desenhar = () => {
+        const q = semAcento(caixa.value).split(/\s+/).filter(Boolean);
+        const ach = ATALHOS.filter((x) => q.every((p) => semAcento(x[1] + ' ' + x[2] + ' ' + x[4]).includes(p)));
+        const grupos = ['Inteligências', 'Atalhos', 'Conta e segurança'].map((g) => [g, ach.filter((x) => x[0] === g)]).filter((x) => x[1].length);
+        lista.innerHTML = grupos.length ? grupos.map(([g, it]) => grupoHtml(g, it.map((x) => linha({ icone: g === 'Inteligências' ? LI.brilho : g === 'Atalhos' ? LI.mais : LI.escudo, titulo: esc(x[1]), desc: esc(x[2]), attrs: x[3] })).join(''))).join('') : '<p class="mut" role="status">Nada encontrado. Tente outra palavra.</p>';
+      };
+      caixa.addEventListener('input', desenhar);
+      lista.addEventListener('click', (ev) => { if (ev.target.closest('[data-acao],[data-tela]')) dlg.close(); });
+      desenhar(); caixa.focus();
+    });
+  }
+  document.addEventListener('keydown', (ev) => { if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k' && USER.logado) { ev.preventDefault(); if (!dlg.open) formBusca(); } });
   function formSenha() {
     abrir('Alterar senha', `${campoSenha('Senha atual', 'name="atual" type="password" required autocomplete="current-password"')}${campoSenha('Nova senha (mínimo 10 caracteres)', 'name="nova" type="password" required minlength="10" autocomplete="new-password"')}<div class="botoes"><button class="btn" type="submit">Salvar nova senha</button></div>`, null, (f) => {
       f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('mudar_senha', { atual: f.atual.value, nova: f.nova.value }); dlg.close(); aviso('Senha alterada. Enviamos um e-mail de confirmação.'); } catch (e) { aviso(e.message); } });
@@ -1487,6 +1540,7 @@
     const d = D(); const id = t.dataset.id; const a = t.dataset.acao;
     const acoes = {
       acess: () => formAcess(),
+      busca: () => formBusca(),
       compartilhar: () => formCompartilhar(),
       notif: () => formNotif(),
       config: () => formConfig(),
