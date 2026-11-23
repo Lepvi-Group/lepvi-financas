@@ -39,7 +39,7 @@
   const CONVITE = 'lepvi-financas-convite';
   const S = norm({ perfil: 'pessoal', dados: {} }); // dados financeiros: só em memória e no servidor (nunca no aparelho)
   const USER = { logado: false, info: null };
-  try { const p = JSON.parse(localStorage.getItem(PREFS)); if (p) { S.texto = p.texto; S.escala = p.escala; S.tema = p.tema; S.semMovimento = p.semMovimento; S.destacar = p.destacar; S.contraste = p.contraste; S.oculto = p.oculto; } } catch (e) { /* sem preferências guardadas */ }
+  try { const p = JSON.parse(localStorage.getItem(PREFS)); if (p) { S.texto = p.texto; S.escala = p.escala; S.tema = p.tema; S.semMovimento = p.semMovimento; S.destacar = p.destacar; S.contraste = p.contraste; S.oculto = p.oculto; S.ordem = p.ordem; S.saldoDiario = p.saldoDiario; S.sugestoes = p.sugestoes; } } catch (e) { /* sem preferências guardadas */ }
   const V = { tela: 'inicio', mes: F.mesDe(F.hojeISO()), filtro: 'todos', sub: 'todos', q: '', plano: 'orc', reltipo: 'despesa', cartao: null, fmes: null, auth: 'entrar', token: '', msg: '' };
   const D = () => S.dados[S.perfil];
 
@@ -63,7 +63,7 @@
   function limparMemoria() { status(''); const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; V.esp = null; baseDados = null; }
   function sessaoExpirou() { USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua sessão terminou. Entre de novo.'; render(); }
   function salvar() {
-    try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, escala: S.escala, tema: S.tema, semMovimento: S.semMovimento, destacar: S.destacar, contraste: S.contraste, oculto: S.oculto })); } catch (e) { /* sem armazenamento */ }
+    try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, escala: S.escala, tema: S.tema, semMovimento: S.semMovimento, destacar: S.destacar, contraste: S.contraste, oculto: S.oculto, ordem: S.ordem, saldoDiario: S.saldoDiario, sugestoes: S.sugestoes })); } catch (e) { /* sem armazenamento */ }
     if (!USER.logado) return;
     precisaEnviar = true; status('salvando'); clearTimeout(tmr); tmr = setTimeout(enviarDados, 600);
   }
@@ -188,7 +188,25 @@
     if (ev.target.id === 'auth') { ev.preventDefault(); enviarAuth(ev.target); }
     if (ev.target.id === 'perfil-f') { ev.preventDefault(); const nome = ev.target.nome.value.trim(); api('preferencias', { nome }).then((r) => { USER.info = r.usuario; render(); aviso('Perfil salvo.'); }).catch((e) => aviso(e.message)); }
   });
+  const semMov = () => !!S.semMovimento || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function abertura() { // animação de abertura (uma vez por sessão do navegador); quem reduz animações não vê
+    const sp = $('#splash'); if (!sp) return;
+    let visto = false; try { visto = !!sessionStorage.getItem('lf-splash'); sessionStorage.setItem('lf-splash', '1'); } catch (e) { /* sem armazenamento */ }
+    if (semMov() || visto) { sp.remove(); return; }
+    sp.addEventListener('animationend', (ev) => { if (ev.animationName === 'spFora') sp.remove(); });
+    setTimeout(() => { if (sp.isConnected) sp.remove(); }, 2600);
+  }
+  function entradaDaTela() { // anima a chegada de uma tela (não a cada atualização dos dados)
+    const chave = USER.logado ? 'app-' + V.tela : 'auth-' + V.auth;
+    if (V.vista === chave) return; V.vista = chave;
+    if (semMov()) return;
+    const t = $('#tela'); t.classList.remove('anima'); void t.offsetWidth; t.classList.add('anima');
+    setTimeout(() => t.classList.remove('anima'), 1400);
+    const g = USER.logado && !S.oculto ? $('#tela .hero .grande[data-v]') : null;
+    if (g) { const alvo = Number(g.dataset.v); const t0 = performance.now(); const passo = (agora) => { const k = Math.min(1, (agora - t0) / 900); const e = 1 - Math.pow(1 - k, 4); g.textContent = F.brl(alvo * e); if (k < 1 && g.isConnected) requestAnimationFrame(passo); else g.textContent = F.brl(alvo); }; requestAnimationFrame(passo); }
+  }
   async function iniciar() {
+    abertura();
     $('#tela').innerHTML = '<p class="mut" role="status">Carregando…</p>';
     const q = new URLSearchParams(location.search); const tv = q.get('verificar'); const tr = q.get('redefinir');
     if (tv || tr) history.replaceState(null, '', location.pathname);
@@ -354,7 +372,8 @@
 
   /* ---------- peças ---------- */
   function seletorMes() {
-    return `<div class="mes"><button type="button" data-acao="mes" data-d="-1" aria-label="Mês anterior">‹</button><strong>${esc(NOME_MES(V.mes))}</strong><button type="button" data-acao="mes" data-d="1" aria-label="Próximo mês">›</button></div>`;
+    const viz = (d) => { const x = F.somaMes(V.mes, d); return `<button type="button" class="viz" data-acao="mes" data-d="${d}" aria-label="Ir para ${esc(NOME_MES(x))}">${esc(new Date(x + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''))}</button>`; };
+    return `<div class="mes"><button type="button" data-acao="mes" data-d="-1" aria-label="Mês anterior">‹</button>${viz(-1)}<strong>${esc(NOME_MES(V.mes))}</strong>${viz(1)}<button type="button" data-acao="mes" data-d="1" aria-label="Próximo mês">›</button></div>`;
   }
   function rosca(entradas, centro) {
     const total = entradas.reduce((s, e) => s + e[1], 0) || 1;
@@ -372,7 +391,7 @@
     const transf = l.tipo === 'transf';
     const info = transf ? { icone: '🔁', cor: '#2D4BFF' } : catInfo(l.categoria, l.tipo);
     const cartao = F.ehCartao(l);
-    const sub = transf ? `${esc(nomeConta(l.conta))} → ${esc(nomeConta(l.destino))}` : `${esc(l.categoria)} · ${cartao ? '💳 ' : ''}${esc(nomeConta(l.conta))}${(l.tags || []).map((t) => ` <span class="tag">#${esc(t)}</span>`).join('')}${l.por && V.esp && V.esp.papel !== 'sozinho' ? ` · ${esc(l.por)}` : ''}`;
+    const sub = transf ? `${esc(nomeConta(l.conta))} → ${esc(nomeConta(l.destino))}` : `${esc(l.categoria)} · ${cartao ? '💳 ' : ''}${esc(nomeConta(l.conta))}${(l.tags || []).map((t) => ` <span class="tag">#${esc(t)}</span>`).join('')}${l.por && V.esp && V.esp.papel !== 'sozinho' ? ` · ${esc(l.por)}` : ''}${(l.coment || []).length ? ` · 💬 ${l.coment.length}` : ''}`;
     const sinal = l.tipo === 'receita' ? '+ ' : transf ? '' : '− ';
     const cor = l.tipo === 'receita' ? 'pos' : transf ? '' : 'neg';
     const visto = cartao ? '' : `<button class="visto ${l.pago ? 'on' : ''}" type="button" data-acao="alternar" data-id="${l.id}" aria-label="Pago ou recebido: ${esc(l.desc || l.categoria)}" aria-pressed="${!!l.pago}">${l.pago ? '✓' : ''}</button>`;
@@ -410,7 +429,10 @@
     const orc = F.orcamentoMes(d.lancs, d.orcamentos, V.mes).filter((o) => o.pct >= 80).slice(0, 2);
     const fats = F.faturas(d.lancs, d.cartoes).filter((f) => !f.paga);
     const ult = d.lancs.filter((l) => F.mesDe(l.data) === V.mes).sort((a, b) => b.data.localeCompare(a.data)).slice(0, 5);
-    return `<div class="hero"><small>Saldo geral</small><span class="grande num">${m(saldo)}</span>${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
+    const hora = new Date().getHours(); const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+    const vazio = (ic, tit, txt, acao, bt, bloco) => `<section class="card vazio"${bloco ? ` data-bloco="${bloco}"` : ''}><span class="vazio-ic" aria-hidden="true">${ic}</span><h2 class="secao">${tit}</h2><p class="mut">${txt}</p><button class="btn sec" type="button" data-acao="${acao}">${bt}</button></section>`;
+    const contasVazio = d.contas.length === 1 && d.contas[0].saldoInicial === 0 && !d.lancs.length;
+    return `<p class="saudacao">${saud},<br><b>${esc(String((USER.info && USER.info.nome) || '').split(' ')[0])}</b> 👋</p><div class="hero"><small>Saldo geral</small><span class="grande num" data-v="${saldo}">${m(saldo)}</span>${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
       <div class="duo"><div><small>Receitas do mês</small><b class="verde num">${m(r.receitas)}</b></div><div><small>Despesas do mês</small><b class="verm num">${m(r.despesas)}</b></div></div></div>
     <div class="contas" aria-label="Seus bancos e carteiras">${d.contas.map((c) => `<button class="conta" type="button" data-acao="editar-conta" data-id="${c.id}"><span class="mut"><i style="background:${c.cor}"></i>${esc(c.nome)}</span><b class="num">${m(F.saldoConta(d.lancs, c))}</b></button>`).join('')}<button class="conta nova" type="button" data-acao="nova-conta">+ Banco ou carteira</button></div>
     <div class="rapidas" role="group" aria-label="Ações rápidas">${[['rap-despesa', '🔻', 'Despesa'], ['rap-receita', '🔺', 'Receita'], ['rap-transf', '🔁', 'Transferir'], ['rap-fatura', '💳', 'Pagar fatura']].map(([a, i, t]) => `<button type="button" class="rap" data-acao="${a}"><span aria-hidden="true">${i}</span><b>${t}</b></button>`).join('')}</div>
@@ -420,14 +442,26 @@
       <div class="card kpi"><span class="kpi-t">Despesas do mês</span><b class="neg num">${m(r.despesas)}</b><div class="barra estourou" role="img" aria-label="Pago"><i style="width:${r.despesas ? Math.min(100, (r.pago / r.despesas) * 100) : 0}%"></i></div><span class="kpi-s">Já pago: <b class="num">${m(r.pago)}</b></span></div></div>
     <div class="card" style="display:flex;justify-content:space-between;align-items:center"><span class="mut">Balanço previsto do mês</span><b class="num ${r.saldo >= 0 ? 'pos' : 'neg'}" style="font-size:20px">${m(r.saldo)}</b></div>
     ${(() => { const sd = F.sobraPorDia(r, V.mes); return sd ? `<section class="card" data-bloco="diario"><span class="mut">Pode gastar por dia até o fim do mês</span><b class="num ${sd.negativo ? 'neg' : 'pos'}" style="font-size:22px;display:block;margin-top:4px">${sd.negativo ? 'Nada: o mês está no vermelho' : m(sd.porDia)}</b><small class="mut">${sd.negativo ? `Faltam ${m(Math.abs(r.saldo))} para fechar o mês.` : `Sobram ${m(r.saldo)} para ${sd.restam} ${sd.restam === 1 ? 'dia' : 'dias'}, já descontando o que ainda vence.`}</small></section>` : ''; })()}
+    ${(() => {
+      const al = []; const hojeI = F.hojeISO();
+      F.gastosAnormais(d.lancs, V.mes).slice(0, 2).forEach((x) => al.push(`📈 <b>${esc(x.categoria)}</b> está em ${m(x.gasto)}, ${String(x.vezes).replace('.', ',')}x a sua média de ${m(x.media)}.`));
+      const neg = F.mesDe(hojeI) === V.mes ? F.projecaoSaldo(d.lancs, d.contas, d.cartoes, hojeI, 3).find((x) => x.saldoFim < 0) : null;
+      if (neg) al.push(`⚠️ Pela sua agenda, o saldo fica negativo em <b>${esc(nomeMes(neg.mes))}</b>. Veja em Mais opções → Projeção de saldo.`);
+      if (d.mei && d.mei.ativo) { const r = F.limiteMei(d.lancs, new Date().getFullYear(), d.mei.limite || 81000); if (r.pct >= 80) al.push(`🧾 MEI: você já faturou <b>${r.pct}%</b> do limite do ano.${r.estourou ? ' Passou do limite.' : ''}`); }
+      const rc = F.aReceber(d.lancs); if (rc.atrasado > 0) al.push(`💰 Você tem <b>${m(rc.atrasado)}</b> a receber em atraso. Veja em Mais opções → Contas a receber.`);
+      return al.length ? `<section class="card" data-bloco="alertas"><h2 class="secao">Fique de olho</h2><ul class="lista">${al.map((t) => `<li style="padding:8px 0">${t}</li>`).join('')}</ul></section>` : '';
+    })()}
     <section class="card" data-bloco="pagar"><div class="sec-h"><h2 class="secao">Vencimentos</h2><button class="link" type="button" data-acao="ir-pagar">Ver todas</button></div>
       ${pagar.length ? `<ul class="lista">${pagar.slice(0, 3).map(itemPagar).join('')}</ul>` : '<p class="mut" style="padding:8px 0">Tudo em dia. Nenhum boleto ou fatura pendente. 🎉</p>'}</section>
     ${orc.length ? `<section class="card" data-bloco="orcamento"><h2 class="secao">Atenção no orçamento</h2><ul class="lista">${orc.map(rowOrc).join('')}</ul></section>` : ''}
     <section class="card" data-bloco="categorias"><div class="sec-h"><h2 class="secao">Despesas por categoria</h2><button class="link" type="button" data-acao="ir-rel">Relatórios</button></div>
       ${cats.length ? rosca(cats, 'Despesas') : '<p class="mut" style="padding:8px 0">Sem despesas neste mês.</p>'}</section>
-    ${d.cartoes.length ? `<section class="card" data-bloco="cartoes"><div class="sec-h"><h2 class="secao">Cartões</h2><button class="link" type="button" data-acao="ir-cartoes">Abrir</button></div><ul class="lista">${d.cartoes.map((c) => { const f = fats.find((x) => x.cartaoId === c.id); const u = F.limiteUsado(d.lancs, c.id); return `<li><div class="item"><span class="ic" style="${fundo(c.cor)};color:#fff">💳</span><div class="txt"><strong>${esc(c.nome)}</strong><span>${f ? `Fatura vence ${DATA_CURTA(f.vencimento)}` : 'Sem fatura aberta'} · limite livre ${m(c.limite - u)}</span></div><div class="val num">${f ? m(f.total) : m(0)}</div></div></li>`; }).join('')}</ul></section>` : ''}
+    ${d.cartoes.length ? `<section class="card" data-bloco="cartoes"><div class="sec-h"><h2 class="secao">Cartões</h2><button class="link" type="button" data-acao="ir-cartoes">Abrir</button></div><ul class="lista">${d.cartoes.map((c) => { const f = fats.find((x) => x.cartaoId === c.id); const u = F.limiteUsado(d.lancs, c.id); return `<li><div class="item"><span class="ic" style="${fundo(c.cor)};color:#fff">💳</span><div class="txt"><strong>${esc(c.nome)}</strong><span>${f ? `Fatura vence ${DATA_CURTA(f.vencimento)}` : 'Sem fatura aberta'} · limite livre ${m(c.limite - u)}</span></div><div class="val num">${f ? m(f.total) : m(0)}</div></div></li>`; }).join('')}</ul></section>` : vazio('💳', 'Acompanhe suas faturas', 'Cadastre seus cartões e veja o limite livre, a fatura aberta e o vencimento de cada um.', 'novo-cartao', 'Adicionar cartão', 'cartoes')}
     <section class="card" data-bloco="ultimos"><div class="sec-h"><h2 class="secao">Últimos lançamentos</h2><button class="link" type="button" data-acao="ir-lancs">Ver todos</button></div>
-      ${ult.length ? `<ul class="lista">${ult.map(itemLanc).join('')}</ul>` : '<p class="mut" style="padding:8px 0">Nenhum lançamento neste mês.</p>'}</section>`;
+      ${ult.length ? `<ul class="lista">${ult.map(itemLanc).join('')}</ul>` : '<p class="mut" style="padding:8px 0">Nenhum lançamento neste mês.</p>'}</section>
+    ${contasVazio ? vazio('🏦', 'Acompanhe suas contas', 'Cadastre o seu banco e o saldo de hoje para o app mostrar o quanto você tem de verdade.', 'nova-conta', 'Adicionar conta') : ''}
+    <div class="card linhas">${linha({ icone: LI.mais, titulo: 'Personalizar categorias', desc: 'Toque para criar e editar as suas categorias', attrs: 'data-acao="categorias"' })}</div>
+    <p class="centro"><button class="link" type="button" data-acao="personalizar">Personalizar os cards da tela inicial</button></p>`;
   }
 
   function listaLancs() {
@@ -437,17 +471,19 @@
     const q = V.q.trim().toLowerCase();
     if (q) l = l.filter((x) => `${x.desc} ${x.categoria} ${nomeConta(x.conta)} ${(x.tags || []).join(' ')}`.toLowerCase().includes(q));
     if (!l.length) return '<div class="card vazio"><span class="emoji">🗒️</span><p>Nenhum lançamento aqui.</p><button class="btn" type="button" data-acao="novo">Novo lançamento</button></div>';
+    const ord = S.ordem === 'asc';
     const blocoDias = (arr, crescente) => {
       const dias = {}; arr.sort((a, b) => (crescente ? a.data.localeCompare(b.data) : b.data.localeCompare(a.data))).forEach((x) => { (dias[x.data] = dias[x.data] || []).push(x); });
       return Object.entries(dias).map(([dia, itens]) => {
         const t = F.arred(itens.filter((x) => x.tipo !== 'transf' && !x.ignorar).reduce((s, x) => s + (x.tipo === 'receita' ? x.valor : -x.valor), 0));
-        return `<div class="dia"><span class="dia-nome">${esc(DIA_LONGO(dia))}</span><span class="num">${m(t)}</span></div><div class="card" style="padding:4px 14px"><ul class="lista">${itens.map(itemLanc).join('')}</ul></div>`;
+        const saldoDia = S.saldoDiario ? ` <small class="mut">· saldo ${m(F.saldoAteDia(d.lancs, d.contas, dia))}</small>` : '';
+        return `<div class="dia"><span class="dia-nome">${esc(DIA_LONGO(dia))}${saldoDia}</span><span class="num">${m(t)}</span></div><div class="card" style="padding:4px 14px"><ul class="lista">${itens.map(itemLanc).join('')}</ul></div>`;
       }).join('');
     };
     /* o que ainda falta pagar ou receber vem primeiro, do vencimento mais próximo para o mais distante; o que já foi vem depois, do mais recente para o mais antigo */
     const pend = l.filter((x) => !x.pago && x.tipo !== 'transf' && !F.ehCartao(x)); const feitos = l.filter((x) => !pend.includes(x));
-    if (!pend.length) return blocoDias(feitos, false);
-    return `<h2 class="secao">Falta pagar ou receber <small class="mut">· o que vence primeiro vem primeiro</small></h2>${blocoDias(pend, true)}${feitos.length ? `<h2 class="secao">Já pagos e recebidos</h2>${blocoDias(feitos, false)}` : ''}`;
+    if (!pend.length) return blocoDias(feitos, ord);
+    return `<h2 class="secao">Falta pagar ou receber <small class="mut">· o que vence primeiro vem primeiro</small></h2>${blocoDias(pend, true)}${feitos.length ? `<h2 class="secao">Já pagos e recebidos</h2>${blocoDias(feitos, ord)}` : ''}`;
   }
   function listaSeries() {
     const d = D(); const hoje = F.hojeISO(); const mapa = {};
@@ -529,6 +565,8 @@
       <section class="card"><h2 class="secao" style="margin-bottom:10px">Por categoria</h2>${ent.length ? rosca(ent, V.reltipo === 'despesa' ? 'Despesas' : 'Receitas') : '<p class="mut">Sem lançamentos neste mês.</p>'}</section>
       <section class="card"><h2 class="secao">Receitas x despesas</h2><div class="evol">${ev.map((e) => `<div class="col"><div class="par"><i style="height:${(e.receitas / max) * 100}%;background:var(--verde)" title="Receitas ${F.brl(e.receitas)}"></i><i style="height:${(e.despesas / max) * 100}%;background:var(--vermelho)" title="Despesas ${F.brl(e.despesas)}"></i></div><small>${esc(MES_CURTO(e.mes))}</small></div>`).join('')}</div><table class="tab"><caption class="so-leitor">Receitas e despesas dos últimos 6 meses</caption><thead><tr><th scope="col">Mês</th><th scope="col">Receitas</th><th scope="col">Despesas</th></tr></thead><tbody>${ev.map((e) => `<tr><th scope="row">${esc(MES_CURTO(e.mes))}</th><td class="num pos">${m(e.receitas)}</td><td class="num neg">${m(e.despesas)}</td></tr>`).join('')}</tbody></table></section>
       ${blocoComparativo(d)}
+      ${blocoDre(d)}
+      <p class="mut" style="text-align:center">ℹ️ Compras no cartão entram pela <b>data da compra</b>, e não pela data da fatura.</p>
       <div class="botoes sem-imprimir"><button class="btn sec" type="button" data-acao="exportar">Exportar em CSV</button><button class="btn sec" type="button" data-acao="imprimir">Salvar em PDF / imprimir</button></div>`;
     }
     return `<div class="tit"><h1>Planejar</h1></div>${abas}${corpo}`;
@@ -551,6 +589,11 @@
     <section class="card"><h2 class="secao">Calendário</h2><div class="cal" role="group" aria-label="Calendário de ${esc(NOME_MES(V.mes))}">${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((x) => `<span class="cal-s">${x}</span>`).join('')}${celulas.join('')}</div>
       <p class="mut" style="margin-top:10px"><i class="p-ent"></i> entra dinheiro &nbsp; <i class="p-sai"></i> sai dinheiro</p></section>
     <section class="card"><h2 class="secao">${dsel ? `Dia ${dsel.dia}` : 'Dia'}</h2>${dsel && dsel.itens.length ? `<ul class="lista">${dsel.itens.map((i) => `<li><div class="item"><span class="ic" style="background:${i.tipo === 'receita' ? '#D9F2EA' : '#FDE7E4'}">${i.tipo === 'receita' ? '↗' : '↘'}</span><div class="txt"><strong>${esc(i.titulo)}</strong><span>${i.pago ? 'Pago' : 'Pendente'}</span></div><div class="val num ${i.tipo === 'receita' ? 'pos' : 'neg'}">${i.tipo === 'receita' ? '+ ' : '− '}${m(i.valor)}</div></div></li>`).join('')}</ul><p class="mut" style="margin-top:8px">Saldo previsto ao fim do dia: <b class="num">${m(dsel.saldo)}</b></p>` : '<p class="mut" style="padding:8px 0">Nada lançado neste dia.</p>'}</section>`;
+  }
+  function blocoDre(d) {
+    const r = F.dreMes(d.lancs, V.mes); if (!r.receitas && !r.despesas) return '';
+    const lin = (a) => a.map((x) => `<tr><td>${esc(x.categoria)}</td><td class="num">${m(x.valor)}</td></tr>`).join('');
+    return `<section class="card"><h2 class="secao">Resultado do mês (DRE)</h2><div class="tabela-rolagem"><table class="tab"><tbody><tr><th scope="row">Receitas</th><td class="num pos"><b>${m(r.receitas)}</b></td></tr>${lin(r.linhasReceita)}<tr><th scope="row">Despesas</th><td class="num neg"><b>${m(r.despesas)}</b></td></tr>${lin(r.linhasDespesa)}<tr><th scope="row">Resultado</th><td class="num ${r.resultado >= 0 ? 'pos' : 'neg'}"><b>${m(r.resultado)}</b></td></tr>${r.margem !== null ? `<tr><th scope="row">Margem</th><td class="num">${String(r.margem).replace('.', ',')}%</td></tr>` : ''}</tbody></table></div><p class="mut sem-imprimir">Use "Salvar em PDF / imprimir" abaixo para mandar ao contador.</p></section>`;
   }
   function blocoComparativo(d) {
     const c = F.comparativo(d.lancs, V.mes); const ant = NOME_MES(F.somaMes(V.mes, -1));
@@ -603,10 +646,18 @@
       + linha({ icone: LI.chave, titulo: 'Conectar avisos do banco', desc: 'Chave e passo a passo, sem dar a senha do banco', attrs: 'data-acao="captura-config"' }))}
     ${grupo('Divisão de despesas',
       linha({ icone: LI.copia, titulo: 'Quem deve a sua parte', desc: (() => { const s = F.saldosDivisao(d.lancs); return s.length ? `${s.length} pessoa(s) a acertar · ${m(s.reduce((t, x) => t + x.total, 0))}` : 'Despesas divididas com casal ou sócios'; })(), attrs: 'data-acao="divisoes"' }))}
+    ${grupo('Configurações',
+      linha({ icone: LI.texto, titulo: 'Configurações do app', desc: 'Ordem dos lançamentos, saldo diário, sugestões', attrs: 'data-acao="config"' }))}
     ${grupo('Compartilhar',
       linha({ icone: LI.user, titulo: 'Compartilhar com outra pessoa', desc: !V.esp || V.esp.papel === 'sozinho' ? 'Cônjuge ou sócio vê e edita com você' : V.esp.papel === 'membro' ? `Você está no espaço de ${esc(V.esp.dono.nome)}` : `Compartilhando com ${esc(V.esp.membros[0].nome)}`, attrs: 'data-acao="compartilhar"' }))}
     ${grupo('Ferramentas',
-      linha({ icone: LI.bell, titulo: 'Assinaturas', desc: 'Cobranças que se repetem todo mês', attrs: 'data-acao="assinaturas"' })
+      linha({ icone: LI.user, titulo: 'Contas a receber', desc: (() => { const r = F.aReceber(d.lancs); return r.itens.length ? `${r.itens.length} a receber · ${m(r.total)}` : 'Clientes que ainda vão pagar'; })(), attrs: 'data-acao="receber"' })
+      + linha({ icone: LI.brilho, titulo: 'Projeção de saldo', desc: 'Como ficam os próximos 6 meses', attrs: 'data-acao="projecao"' })
+      + linha({ icone: LI.escudo, titulo: 'Reserva de emergência', desc: 'Quantos meses você aguenta sem renda', attrs: 'data-acao="reserva"' })
+      + linha({ icone: LI.lixo, titulo: 'Simulador de dívidas', desc: 'Qual dívida pagar primeiro', attrs: 'data-acao="dividas"' })
+      + linha({ icone: LI.arquivo, titulo: 'MEI: limite e DAS', desc: 'Faturamento do ano e lembrete do imposto', attrs: 'data-acao="mei"' })
+      + linha({ icone: LI.copia, titulo: 'Modelos de lançamento', desc: `${(d.modelos || []).length} salvo(s)`, attrs: 'data-acao="modelos"' })
+      + linha({ icone: LI.bell, titulo: 'Assinaturas', desc: 'Cobranças que se repetem todo mês', attrs: 'data-acao="assinaturas"' })
       + linha({ icone: LI.brilho, titulo: 'Simulador de juros e metas', desc: 'Quanto vira se guardar todo mês', attrs: 'data-acao="simulador"' })
       + linha({ icone: LI.copia, titulo: 'Desafio das 52 semanas', desc: 'Guarde um pouco mais a cada semana', attrs: 'data-acao="desafio"' })
       + linha({ icone: LI.chave, titulo: 'Bloqueio com PIN', desc: PIN.ativo() ? 'Ligado neste aparelho' : 'Peça um PIN ao abrir o app', attrs: 'data-acao="pin"' }))}
@@ -637,8 +688,17 @@
     <div class="estatisticas">${est(soma('lancs'), 'Lançamentos')}${est(soma('cartoes'), 'Cartões')}${est(soma('contas'), 'Contas')}${est(desde ? esc(desde) : '—', 'Membro desde')}</div>
     <section class="card"><h2 class="secao">Dados pessoais</h2><form id="perfil-f" class="auth-f" style="margin-top:16px">${campo('Nome completo', `<input name="nome" required maxlength="120" autocomplete="name" value="${esc(u.nome)}">`)}
       ${campo('E-mail', `<input value="${esc(u.email)}" disabled aria-describedby="email-dica"><small id="email-dica" class="mut">Para trocar o e-mail, escreva para lepvi@lepvi.com.br.</small>`)}<button class="btn" type="submit">Salvar alterações</button></form></section>
+    ${grupo('Configure',
+      linha({ icone: LI.escudo, titulo: 'Contas e bancos', desc: 'Em Mais opções', attrs: 'data-acao="ir-contas"' })
+      + linha({ icone: LI.copia, titulo: 'Cartões de crédito', attrs: 'data-acao="ir-cartoes"' })
+      + linha({ icone: LI.mais, titulo: 'Categorias', attrs: 'data-acao="categorias"' })
+      + linha({ icone: LI.texto, titulo: 'Etiquetas (tags)', desc: 'Renomear ou apagar', attrs: 'data-acao="tags"' })
+      + linha({ icone: LI.brilho, titulo: 'Ver guia de passos iniciais', attrs: 'data-acao="ver-guia"' })
+      + linha({ icone: LI.user, titulo: 'Indicar o Lepvi Finanças a um amigo', attrs: 'data-acao="indicar"' })
+      + linha({ icone: LI.bell, titulo: 'Central de ajuda e contato', desc: 'Perguntas e respostas, e-mail e WhatsApp', attrs: 'data-acao="ajuda"' }))}
     ${grupo('Preferências',
       linha({ tag: 'label', icone: LI.bell, titulo: 'Avisos de vencimento por e-mail', desc: 'Vence em breve, vence hoje e já venceu', fim: '', dentro: `<input id="avisos-sw" type="checkbox" role="switch" ${u.avisos ? 'checked' : ''}>` })
+      + linha({ tag: 'label', icone: LI.bell, titulo: 'Lembrete se esquecer de lançar', desc: 'E-mail de manhã se ontem ficou sem nenhum lançamento', fim: '', dentro: `<input id="lembrete-sw" type="checkbox" role="switch" ${u.lembrete ? 'checked' : ''}>` })
       + linha({ tag: 'label', icone: LI.bell, titulo: 'Resumo semanal por e-mail', desc: 'Toda segunda: quanto gastou, o que mudou e o que vence', fim: '', dentro: `<input id="resumo-sw" type="checkbox" role="switch" ${u.resumo ? 'checked' : ''}>` })
       + linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' }))}
     ${grupo('Segurança e privacidade',
@@ -672,7 +732,7 @@
   const VISTAS = { inicio: telaInicio, lancs: telaLancs, cartoes: telaCartoes, planejar: telaPlanejar, mais: telaMais, perfil: telaPerfil };
   function render() {
     document.body.classList.toggle('deslogado', !USER.logado);
-    if (!USER.logado) { $('#menu').innerHTML = ''; $('#tela').innerHTML = telaAuth(); montarTurnstile(); return; }
+    if (!USER.logado) { $('#menu').innerHTML = ''; $('#tela').innerHTML = telaAuth(); montarTurnstile(); entradaDaTela(); return; }
     document.querySelectorAll('[data-perfil]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.perfil === S.perfil)));
     const olho = $('[data-acao=olho]'); olho.innerHTML = svg(S.oculto ? EYE_OFF : EYE); olho.setAttribute('aria-pressed', String(!!S.oculto)); olho.setAttribute('aria-label', S.oculto ? 'Mostrar valores' : 'Ocultar valores');
     const nav = (id, t) => `<button type="button" data-tela="${id}" ${V.tela === id ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICONES[id]}</svg>${t}</button>`;
@@ -682,6 +742,7 @@
     $('#tela').innerHTML = VISTAS[V.tela]();
     if (V.tela === 'inicio' && V.rev && V.rev.length) $('#tela').insertAdjacentHTML('afterbegin', `<section class="card rev-card" role="status"><h2 class="secao">🔔 ${V.rev.length} ${V.rev.length === 1 ? 'compra para revisar' : 'compras para revisar'}</h2><p class="mut">O app leu estes avisos do seu banco. Confira e lance com um toque.</p><button class="btn" type="button" data-acao="revisar">Revisar agora</button></section>`);
     if (V.tela === 'inicio' && S.inicio) document.querySelectorAll('#tela [data-bloco]').forEach((el) => { if (S.inicio[el.dataset.bloco] === false) el.remove(); });
+    entradaDaTela(); atualizarSino();
   }
   const ir = (t) => { V.tela = t; render(); window.scrollTo(0, 0); };
 
@@ -716,8 +777,31 @@
   const val2 = (v) => (v != null ? String(v).replace('.', ',') : '');
 
   function menuNovo() {
-    abrir('O que você quer lançar?', `<div class="duas" style="gap:10px">${[['despesa', '🔻', 'Despesa'], ['receita', '🔺', 'Receita'], ['transf', '🔁', 'Transferência'], ['cartao', '💳', 'Compra no cartão']].map(([k, i, t]) => `<button class="card" type="button" data-novo="${k}" style="border:0;text-align:center;padding:20px 10px"><span style="font-size:30px;display:block">${i}</span><b style="font-weight:600">${t}</b></button>`).join('')}</div>`, null, (f) => {
+    const d = D(); const mods = d.modelos || [];
+    const temVoz = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    abrir('O que você quer lançar?', `<div class="campo"><span>Escreva ou fale</span><div class="valor-lin" style="gap:8px"><input id="txt-rap" maxlength="160" autocomplete="off" placeholder="Ex.: gastei 45 no mercado ontem" aria-label="Escreva o lançamento em uma frase" style="flex:1;min-width:0">${temVoz ? '<button class="btn sec mini" type="button" data-voz aria-label="Falar o lançamento">🎤 Falar</button>' : ''}</div><button class="btn" type="button" data-txt-ok>Preencher o lançamento</button><small class="mut">O app lê o valor, o dia e a categoria e deixa você conferir antes de salvar.</small></div>
+      <div class="duas" style="gap:10px">${[['despesa', '🔻', 'Despesa'], ['receita', '🔺', 'Receita'], ['transf', '🔁', 'Transferência'], ['cartao', '💳', 'Compra no cartão']].map(([k, i, t]) => `<button class="card" type="button" data-novo="${k}" style="border:0;text-align:center;padding:20px 10px"><span style="font-size:30px;display:block">${i}</span><b style="font-weight:600">${t}</b></button>`).join('')}</div>
+      ${mods.length ? `<h3 class="grupo">Modelos</h3><div class="chips" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">${mods.map((x) => `<button type="button" class="chip" data-modelo="${esc(x.id)}">${esc(catInfo(x.categoria, x.tipo).icone)} ${esc(x.desc)}<br><b class="num">${m(x.valor)}</b></button>`).join('')}</div>` : ''}`, null, (f) => {
       f.querySelectorAll('[data-novo]').forEach((b) => b.addEventListener('click', () => formLanc({}, b.dataset.novo)));
+      f.querySelectorAll('[data-modelo]').forEach((b) => b.addEventListener('click', () => { const x = mods.find((y) => y.id === b.dataset.modelo); if (x) formLanc({ tipo: x.tipo, desc: x.desc, valor: x.valor, categoria: x.categoria, conta: x.conta, boleto: x.boleto, data: F.hojeISO(), pago: false }, x.tipo); }));
+      const campoTxt = f.querySelector('#txt-rap');
+      const usar = () => {
+        const r = F.interpretarTexto(campoTxt.value, F.hojeISO(), D().lancs);
+        if (!r) { aviso('Não achei o valor. Escreva assim: gastei 45 no mercado.'); campoTxt.focus(); return; }
+        formLanc({ tipo: r.tipo, desc: r.desc, valor: r.valor, data: r.data, categoria: r.categoria, pago: r.pago, boleto: r.boleto }, r.tipo);
+      };
+      f.querySelector('[data-txt-ok]').addEventListener('click', usar);
+      campoTxt.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); usar(); } });
+      const v = f.querySelector('[data-voz]');
+      if (v) v.addEventListener('click', () => {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition; const rec = new SR(); rec.lang = 'pt-BR'; rec.interimResults = false;
+        v.textContent = '🎤 Ouvindo…'; v.disabled = true;
+        const fim = () => { v.textContent = '🎤 Falar'; v.disabled = false; };
+        rec.onresult = (ev) => { campoTxt.value = ev.results[0][0].transcript; fim(); usar(); };
+        rec.onerror = () => { fim(); aviso('Não consegui ouvir. Tente de novo ou escreva a frase.'); };
+        rec.onend = fim;
+        try { rec.start(); } catch (e) { fim(); }
+      });
     });
   }
 
@@ -756,12 +840,13 @@
       : campo(tipo === 'receita' ? 'Receber em' : 'Pagar com', radios('conta', opcContas, contaSel));
     const rotPago = tipo === 'receita' ? 'Já recebi' : tipo === 'transf' ? 'Já foi feita' : 'Já paguei';
     const abas = novo ? `<div class="abas3" role="group" aria-label="Tipo de lançamento">${[['despesa', 'Despesa'], ['receita', 'Receita'], ['transf', 'Transferência']].map(([k, t]) => `<button type="button" data-aba="${k}" aria-pressed="${tipo === k}" class="${k}">${t}</button>`).join('')}</div>` : '';
-    const extras = tipo === 'transf' ? '' : `<details class="mais-campos"${base.tags && base.tags.length || base.nota || base.ignorar || base.divisao ? ' open' : ''}><summary>Mais opções</summary><div class="mais-corpo">
+    const extras = tipo === 'transf' ? '' : `<details class="mais-campos"${base.tags && base.tags.length || base.nota || base.ignorar || base.divisao || (base.coment && base.coment.length) ? ' open' : ''}><summary>Mais opções</summary><div class="mais-corpo">
         ${novo ? `${campo('Repetir', radios('rep', [['nao', 'Não repete'], ['parcelado', 'Parcelado'], ['fixo', 'Fixo todo mês']], 'nao'))}<div id="repn" class="rep-bloco" hidden><div id="freq-box">${campo('De quanto em quanto tempo', radios('freq', [['semana', 'Toda semana'], ['quinzena', 'A cada 15 dias'], ['mes', 'Todo mês'], ['ano', 'Todo ano']], 'mes'))}</div>${campo('<span id="n-rot">Quantas vezes no total (contando este)</span>', '<input name="n" type="number" min="2" max="120" value="12" inputmode="numeric">')}<p class="rep-resumo" id="rep-resumo" aria-live="polite"></p></div>` : ''}
         ${tipo === 'despesa' ? troca('boleto', 'É um boleto', !!base.boleto) : ''}
-        ${tipo === 'despesa' ? campo('Dividir com (casal, sócios)', `<input name="dividir" maxlength="80" placeholder="Ex.: Ana, Beto" value="${esc((base.divisao || []).map((x) => x.nome).join(', '))}"><small class="mut">Você pagou tudo e eles devolvem a parte deles, em partes iguais. Veja quem deve em Mais opções → Divisão de despesas.</small>`) : ''}
+        ${tipo === 'despesa' ? campo('Dividir com (casal, sócios)', `<input name="dividir" maxlength="80" placeholder="Ex.: Ana, Beto ou Ana:40" value="${esc((base.divisao || []).map((x) => (x.pct !== undefined ? `${x.nome}:${x.pct}` : x.nome)).join(', '))}"><small class="mut">Você pagou tudo e eles devolvem a parte deles. Só o nome divide em partes iguais; <b>Ana:40</b> faz a Ana pagar 40%. Veja quem deve em Mais opções → Divisão de despesas.</small>`) : ''}
         ${campo('Etiquetas', `<input name="tags" maxlength="80" placeholder="Ex.: viagem, casal, projeto" value="${esc((base.tags || []).join(', '))}">`)}${troca('ignorar', 'Não contar nos relatórios', !!base.ignorar)}
-        ${campo('Nota', `<textarea name="nota" maxlength="300">${esc(base.nota || '')}</textarea>`)}</div></details>`;
+        ${campo('Nota', `<textarea name="nota" maxlength="300">${esc(base.nota || '')}</textarea>`)}
+        ${novo ? troca('modelo', 'Salvar como modelo (lançar de novo com um toque)', false) : `<div class="conversa"><b>Conversa</b>${(base.coment || []).map((c) => `<p class="coment"><b>${esc(c.por || '')}</b> <small class="mut">${esc(c.em || '')}</small><br>${esc(c.texto)}</p>`).join('') || '<p class="mut">Nenhum comentário ainda.</p>'}${campo('Novo comentário', '<input name="coment" maxlength="200" placeholder="Ex.: esse foi o presente da mamãe" autocomplete="off">')}</div>`}</div></details>`;
     abrir((novo ? 'Novo lançamento' : 'Editar ' + titulo.toLowerCase()), `
       ${abas}
       <div class="valor-box ${tipo}"><label for="v">Valor</label><div class="valor-lin"><span aria-hidden="true">R$</span><input id="v" name="valor" inputmode="decimal" required autocomplete="off" placeholder="0,00" value="${val2(base.valor)}"></div></div>
@@ -771,7 +856,7 @@
           ${campo('Quantas faltam, contando este', `<input name="restam" type="number" min="1" max="120" inputmode="numeric" value="${aPartir.length}" data-orig="${aPartir.length}"><small class="mut">Mude aqui se a conta termina antes (ou depois) do previsto. As que sobrarem além do número são apagadas.</small>`)}
           ${campo('Aplicar as outras mudanças a', radios('aplicar', [['este', 'Só este'], ['proximos', 'Este e os próximos'], ['todos', 'Todos da série']], 'este'))}</div>`;
       })() : ''}
-      ${tipo === 'transf' ? '' : campo('Descrição', `<input name="desc" required maxlength="80" value="${esc(base.desc || '')}" placeholder="Ex.: Mercado, Aluguel, Venda de peças">`)}
+      ${tipo === 'transf' ? '' : campo('Descrição', `<input name="desc" required maxlength="80" value="${esc(base.desc || '')}" placeholder="Ex.: Mercado, Aluguel, Venda de peças"${S.sugestoes !== false ? ' list="sug-desc" autocomplete="off"' : ''}>${S.sugestoes !== false ? `<datalist id="sug-desc">${[...new Set(d.lancs.filter((x) => x.tipo === tipo && x.desc).sort((a, b) => b.data.localeCompare(a.data)).map((x) => x.desc.replace(/ \(\d+\/\d+\)$/, '')))].slice(0, 40).map((x) => `<option value="${esc(x)}">`).join('')}</datalist>` : ''}`)}
       <div class="campo"><span>Data</span><div class="data-lin"><input name="data" type="date" required value="${base.data || F.hojeISO()}"></div></div>
       ${F.ehCartao({ conta: contaSel }) && tipo === 'despesa' ? '' : troca('pago', rotPago, novo ? true : !!base.pago)}
       ${catsHtml}${contaHtml}
@@ -787,6 +872,7 @@
         ? { tipo, desc: 'Transferência', data: fd.get('data'), categoria: 'Transferência', conta, destino: fd.get('destino'), pago: !!fd.get('pago'), boleto: false }
         : { tipo, desc: fd.get('desc').trim(), data: fd.get('data'), categoria: fd.get('categoria'), conta, boleto: !!fd.get('boleto') && !cartao, pago: !cartao && !!fd.get('pago'), nota: (fd.get('nota') || '').trim(), tags: [...new Set(String(fd.get('tags') || '').split(',').map((x) => x.trim().toLowerCase().replace(/^#/, '')).filter(Boolean))].slice(0, 5), ignorar: !!fd.get('ignorar') };
       const nomes = tipo === 'despesa' ? String(fd.get('dividir') || '').split(',') : [];
+      if (novo && fd.get('modelo') && tipo !== 'transf') (d.modelos = d.modelos || []).push({ id: uid(), tipo, desc: reg.desc, valor, categoria: reg.categoria, conta: reg.conta, boleto: reg.boleto });
       if (novo) {
         const rep = fd.get('rep') || 'nao'; const n = rep === 'nao' ? 1 : Math.max(2, Math.min(120, parseInt(fd.get('n'), 10) || 2)); const freq = rep === 'parcelado' ? 'mes' : (fd.get('freq') || 'mes');
         const parte = rep === 'parcelado' ? F.arred(valor / n) : valor; const serie = n > 1 ? uid() : undefined;
@@ -795,7 +881,9 @@
           d.lancs.push({ ...reg, ...(serie ? { serie, n: i + 1, de: n, modoSerie: rep, freq } : {}), id: uid(), por: String((USER.info && USER.info.nome) || '').split(' ')[0] || undefined, valor: v, divisao: F.dividir(nomes, v), desc: rep === 'parcelado' ? `${reg.desc} (${i + 1}/${n})` : reg.desc, data: dataSerie(reg.data, freq, i), pago: i === 0 ? reg.pago : false });
         }
       } else {
-        const alvo = d.lancs.find((x) => x.id === base.id); const aplicar = base.serie ? (fd.get('aplicar') || 'este') : 'este';
+        const alvo = d.lancs.find((x) => x.id === base.id); const cmt = String(fd.get('coment') || '').trim();
+        if (cmt && alvo) (alvo.coment = alvo.coment || []).push({ por: String((USER.info && USER.info.nome) || '').split(' ')[0], texto: cmt.slice(0, 200), em: F.hojeISO() });
+        const aplicar = base.serie ? (fd.get('aplicar') || 'este') : 'este';
         const afetados = aplicar === 'este' ? [alvo] : d.lancs.filter((x) => x.serie === base.serie && (aplicar === 'todos' || x.data >= base.data));
         const semSufixo = (t) => String(t).replace(/ \(\d+\/\d+\)$/, '');
         const restamNovo = base.serie && fd.get('restam') ? Math.max(1, Math.min(120, parseInt(fd.get('restam'), 10) || 1)) : 0;
@@ -958,6 +1046,74 @@
       (fd) => { const v = F.arred(F.numeroBR(fd.get('v'))); if (!(v > 0)) { aviso('Informe um valor.'); return false; } o.guardado = F.arred(o.guardado + v); (o.aportes = o.aportes || []).push({ data: F.hojeISO(), valor: v }); salvar(); render(); aviso(o.guardado >= o.meta ? 'Objetivo alcançado! 🎉' : 'Valor guardado.'); });
   }
 
+  /* ---------- notificações dentro do app e configurações ---------- */
+  function alertasApp() {
+    const d = D(); const hoje = F.hojeISO(); const lista = [];
+    F.aPagar(d.lancs, d.cartoes).filter((i) => i.atrasado || i.dias <= 3).slice(0, 8).forEach((i) => lista.push({ ic: i.atrasado ? '⚠️' : i.dias === 0 ? '⏰' : '🔔', t: `${esc(i.titulo)}: ${m(i.valor)} ${i.atrasado ? `venceu há ${-i.dias} ${i.dias === -1 ? 'dia' : 'dias'}` : i.dias === 0 ? 'vence hoje' : `vence em ${i.dias} ${i.dias === 1 ? 'dia' : 'dias'}`}`, a: 'ir-pagar' }));
+    F.orcamentoMes(d.lancs, d.orcamentos, F.mesDe(hoje)).filter((o) => o.pct >= 80).forEach((o) => lista.push({ ic: '🎯', t: `Orçamento de ${esc(o.categoria)}: ${Math.round(o.pct)}% do limite do mês`, a: 'plano-orc' }));
+    F.gastosAnormais(d.lancs, F.mesDe(hoje)).slice(0, 2).forEach((x) => lista.push({ ic: '📈', t: `${esc(x.categoria)} está ${String(x.vezes).replace('.', ',')}x acima da sua média`, a: 'ir-rel' }));
+    const neg = F.projecaoSaldo(d.lancs, d.contas, d.cartoes, hoje, 3).find((x) => x.saldoFim < 0); if (neg) lista.push({ ic: '⚠️', t: `O saldo previsto fica negativo em ${esc(nomeMes(neg.mes))}`, a: 'projecao' });
+    const rc = F.aReceber(d.lancs, hoje); if (rc.atrasado > 0) lista.push({ ic: '💰', t: `${m(rc.atrasado)} a receber em atraso`, a: 'receber' });
+    if (V.rev && V.rev.length) lista.push({ ic: '🧾', t: `${V.rev.length} compra(s) do banco para revisar`, a: 'revisar' });
+    return lista;
+  }
+  function formNotif() {
+    const l = alertasApp(); const u = USER.info;
+    abrir('Notificações', `${u.avisos ? '' : '<div class="card"><b>Os avisos por e-mail estão desligados.</b><p class="mut">Ligue para receber de manhã o que vence hoje, em breve ou já venceu.</p><button class="btn" type="button" data-liga>Ligar avisos por e-mail</button></div>'}
+      ${l.length ? `<ul class="lista">${l.map((x, i) => `<li><button class="item" type="button" data-n="${i}"><span class="ic" aria-hidden="true">${x.ic}</span><span class="txt"><strong>${x.t}</strong></span><span aria-hidden="true">›</span></button></li>`).join('')}</ul>` : '<div class="card vazio"><span class="vazio-ic" aria-hidden="true">🔔</span><h2 class="secao">Nenhum aviso por enquanto :)</h2><p class="mut">Quando uma conta estiver perto de vencer ou um limite estourar, ele aparece aqui.</p></div>'}`, null, (f) => {
+      f.querySelectorAll('[data-n]').forEach((b) => b.addEventListener('click', () => { const a = l[+b.dataset.n].a; dlg.close(); ({ 'ir-pagar': () => { V.sub = 'apagar'; ir('lancs'); }, 'plano-orc': () => { V.plano = 'orc'; ir('planejar'); }, 'ir-rel': () => { V.plano = 'rel'; ir('planejar'); }, projecao: () => formProjecao(), receber: () => formReceber(), revisar: () => formRevisar() })[a](); }));
+      const lg = f.querySelector('[data-liga]'); if (lg) lg.addEventListener('click', async () => { try { const r = await api('preferencias', { avisos: true }); USER.info = r.usuario; dlg.close(); render(); aviso('Avisos por e-mail ligados.'); } catch (e) { aviso(e.message); } });
+    });
+  }
+  function atualizarSino() { const b = $('.sino-n'); if (!b) return; const n = USER.logado ? alertasApp().length : 0; b.hidden = !n; b.textContent = n > 9 ? '9+' : String(n); }
+  function formConfig() {
+    abrir('Configurações', `<section><h3 class="grupo">Ordem dos lançamentos</h3>${radios('ordem', [['desc', 'Do mais recente para o mais antigo'], ['asc', 'Do mais antigo para o mais recente']], S.ordem === 'asc' ? 'asc' : 'desc')}</section>
+      ${troca('saldoDiario', 'Mostrar o saldo de cada dia na lista de lançamentos', !!S.saldoDiario)}${troca('sugestoes', 'Sugestões ao digitar a descrição', S.sugestoes !== false)}
+      <div class="card linhas">${linha({ icone: LI.texto, titulo: 'Cores, tamanho do texto e contraste', attrs: 'data-cf="acess"' })}${linha({ icone: LI.chave, titulo: 'Bloqueio com PIN', desc: PIN.ativo() ? 'Ligado neste aparelho' : 'Desligado', attrs: 'data-cf="pin"' })}${linha({ icone: LI.bell, titulo: 'Avisos por e-mail', desc: 'Em Meu perfil → Preferências', attrs: 'data-cf="perfil"' })}</div>`, null, (f) => {
+      f.addEventListener('change', () => { S.ordem = f.ordem.value; S.saldoDiario = f.saldoDiario.checked; S.sugestoes = f.sugestoes.checked; salvar(); render(); });
+      f.querySelectorAll('[data-cf]').forEach((b) => b.addEventListener('click', () => { const a = b.dataset.cf; dlg.close(); if (a === 'acess') formAcess(); else if (a === 'pin') formPin(); else ir('perfil'); }));
+    });
+  }
+
+  /* ---------- etiquetas (tags), indicar, ajuda ---------- */
+  function formTags() {
+    const desenha = (f) => {
+      const d = D(); const o = {};
+      d.lancs.forEach((l) => (l.tags || []).forEach((t) => { const x = (o[t] = o[t] || { n: 0, total: 0 }); x.n += 1; if (l.tipo === 'despesa' && !l.ignorar) x.total = F.arred(x.total + l.valor); }));
+      const nomes = Object.keys(o).sort((a, b) => o[b].n - o[a].n);
+      f.querySelector('#tag-c').innerHTML = nomes.length ? `<ul class="lista">${nomes.map((t) => `<li><div class="item"><span class="txt"><strong>#${esc(t)}</strong><span>${o[t].n} ${o[t].n === 1 ? 'lançamento' : 'lançamentos'} · ${m(o[t].total)} em despesas</span></span><button class="btn sec mini" type="button" data-ren="${esc(t)}">Renomear</button><button class="btn sec mini" type="button" data-del="${esc(t)}" aria-label="Apagar a etiqueta ${esc(t)}">Apagar</button></div></li>`).join('')}</ul>` : '<p class="mut">Nenhuma etiqueta ainda. Ao lançar, abra <b>Mais opções</b> e escreva etiquetas como <i>viagem</i> ou <i>casal</i>. Depois veja quanto cada uma custou em Planejar → Relatórios.</p>';
+      f.querySelectorAll('[data-ren]').forEach((b) => b.addEventListener('click', () => {
+        const velho = b.dataset.ren; const novoNome = (window.prompt ? '' : '');
+        const li = b.closest('.item'); const campoNovo = document.createElement('div');
+        campoNovo.className = 'campo'; campoNovo.innerHTML = `<span>Novo nome de #${esc(velho)}</span><input maxlength="30" value="${esc(velho)}" aria-label="Novo nome da etiqueta"><button class="btn mini" type="button">Salvar</button>`;
+        li.replaceWith(campoNovo); const inp = campoNovo.querySelector('input'); inp.focus(); inp.select();
+        const ok = () => { const n = inp.value.trim().toLowerCase().replace(/^#/, ''); if (!n) { aviso('Digite um nome.'); return; } d_aplicar(velho, n); salvar(); desenha(f); aviso('Etiqueta renomeada.'); };
+        campoNovo.querySelector('button').addEventListener('click', ok); inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); ok(); } });
+      }));
+      f.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => { if (!(await confirmar('Apagar a etiqueta?', `A etiqueta #${b.dataset.del} sai de todos os lançamentos. Os lançamentos continuam.`, 'Apagar'))) return; d_aplicar(b.dataset.del, null); salvar(); desenha(f); }));
+    };
+    const d_aplicar = (velho, novo) => D().lancs.forEach((l) => { if (!(l.tags || []).includes(velho)) return; l.tags = [...new Set(l.tags.map((t) => (t === velho ? novo : t)).filter(Boolean))]; });
+    abrir('Etiquetas (tags)', '<div id="tag-c"></div>', null, desenha);
+  }
+  function formAjuda() {
+    const fq = [
+      ['Como lanço uma despesa rápido?', 'Toque em + e escreva uma frase, como "gastei 45 no mercado ontem". Você também pode tocar em Falar. O app preenche e você confere antes de salvar.'],
+      ['Como funciona o cartão de crédito?', 'Cadastre o cartão com o dia de fechamento e de vencimento. Cada compra entra na fatura certa sozinha, e você paga a fatura quando ela vencer.'],
+      ['Como o app avisa dos vencimentos?', 'Por e-mail, de manhã: vence hoje, vence em breve e atrasado. Você liga e desliga em Meu perfil.'],
+      ['Posso usar com outra pessoa?', 'Sim. Em Mais opções → Compartilhar, convide uma pessoa por link. Vocês dois veem e editam os mesmos dados, cada um com a própria senha.'],
+      ['Como o app lê os avisos do banco?', 'Em Mais opções → Conectar avisos do banco você pega uma chave e segue o passo a passo no celular. As compras viram lançamentos "para revisar", sem você dar a senha do banco.'],
+      ['Meus dados estão seguros?', 'Os dados ficam cifrados no servidor, a senha é guardada de forma irreversível e você pode baixar ou apagar tudo quando quiser, em Meu perfil. Dá para ligar um PIN neste aparelho.'],
+      ['Como importo o extrato do banco?', 'Em Mais opções → Importar extrato ou fatura, envie o arquivo OFX ou CSV do banco. Você revisa e escolhe o que entra.'],
+    ];
+    abrir('Central de ajuda', `${fq.map(([q, r]) => `<details class="mais-campos"><summary>${esc(q)}</summary><div class="mais-corpo"><p>${esc(r)}</p></div></details>`).join('')}
+      <p class="mut">Não achou? Fale com a gente:</p><div class="botoes"><a class="btn sec" href="mailto:lepvi@lepvi.com.br">Enviar e-mail</a><a class="btn sec" target="_blank" rel="noopener" href="https://wa.me/5535910024730?text=${encodeURIComponent('Olá! Preciso de ajuda com o Lepvi Finanças.')}">Falar no WhatsApp</a></div>`, null);
+  }
+  async function indicarAmigo() {
+    const dados = { title: 'Lepvi Finanças', text: 'Estou usando o Lepvi Finanças para controlar contas, cartões e vencimentos. Dá uma olhada:', url: location.origin + location.pathname };
+    try { if (navigator.share) { await navigator.share(dados); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    window.open('https://wa.me/?text=' + encodeURIComponent(dados.text + ' ' + dados.url), '_blank', 'noopener');
+  }
+
   /* ---------- espaço compartilhado (duas pessoas, mesmos dados) ---------- */
   async function carregarEspaco() {
     try { V.esp = await api('espaco'); } catch (e) { V.esp = V.esp || { papel: 'sozinho', membros: [], dono: null, max: 1 }; }
@@ -993,6 +1149,72 @@
       if (q('[data-sair]')) q('[data-sair]').addEventListener('click', async () => { if (!(await confirmar('Sair do espaço?', 'Você volta aos seus dados de antes e deixa de ver os da outra pessoa.', 'Sair'))) return; try { await api('espaco_sair', {}); dlg.close(); await carregarDados(); await carregarEspaco(); render(); aviso('Você saiu do espaço.'); } catch (er) { aviso(er.message); } });
     };
     abrir('Compartilhar com outra pessoa', '<div id="comp-c"></div>', null, desenha);
+  }
+
+  /* ---------- mais ferramentas: a receber, projeção, reserva, dívidas, MEI, modelos ---------- */
+  const nomeMes = (mes) => new Date(+mes.slice(0, 4), +mes.slice(5, 7) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  function formReceber() {
+    const desenha = (f) => {
+      const r = F.aReceber(D().lancs);
+      f.querySelector('#rec-c').innerHTML = r.itens.length ? `<p>Falta receber <b class="num">${m(r.total)}</b>${r.atrasado ? `, sendo <b class="num neg">${m(r.atrasado)}</b> em atraso` : ''}.</p><ul class="lista">${r.itens.map((i) => `<li><div class="item"><span class="txt"><strong>${esc(i.titulo)}</strong><span>${i.atrasado ? `<span class="selo atraso">Atrasado ${-i.dias} ${i.dias === -1 ? 'dia' : 'dias'}</span> · ` : ''}${DIA_LONGO(i.vencimento)}</span></span><b class="val num">${m(i.valor)}</b><button class="btn sec mini" type="button" data-rec="${esc(i.id)}">Recebi</button></div></li>`).join('')}</ul>` : '<p class="mut">Nada a receber. Para controlar o que clientes ainda vão pagar, lance uma <b>receita</b> sem marcar "Já recebi".</p>';
+      f.querySelectorAll('[data-rec]').forEach((b) => b.addEventListener('click', () => { const l = D().lancs.find((x) => x.id === b.dataset.rec); if (l) { l.pago = true; salvar(); render(); desenha(f); aviso('Marcado como recebido.'); } }));
+    };
+    abrir('Contas a receber', '<div id="rec-c"></div>', null, desenha);
+  }
+  function formProjecao() {
+    const d = D(); const p = F.projecaoSaldo(d.lancs, d.contas, d.cartoes, F.hojeISO(), 6); const neg = p.find((x) => x.saldoFim < 0);
+    abrir('Projeção de saldo', `<p class="mut">Com o que já está cadastrado (contas a pagar e receber, parcelas e faturas). Lançamentos que você ainda não fez não entram.</p>
+      ${neg ? `<p class="rep-resumo" role="alert"><b>Atenção:</b> o saldo fica negativo em <b>${esc(nomeMes(neg.mes))}</b>. Dá tempo de ajustar.</p>` : '<p class="rep-resumo"><b>Tudo certo:</b> o saldo não fica negativo nos próximos 6 meses.</p>'}
+      <div class="tabela-rolagem"><table class="tab"><thead><tr><th scope="col">Mês</th><th scope="col">Entra</th><th scope="col">Sai</th><th scope="col">Saldo no fim</th></tr></thead><tbody>${p.map((x) => `<tr><th scope="row">${esc(nomeMes(x.mes))}</th><td class="num pos">${m(x.entradas)}</td><td class="num neg">${m(x.saidas)}</td><td class="num ${x.saldoFim < 0 ? 'neg' : ''}"><b>${m(x.saldoFim)}</b></td></tr>`).join('')}</tbody></table></div>`, null);
+  }
+  function formReserva() {
+    const d = D(); const r = F.reservaEmergencia(d.lancs, d.contas);
+    abrir('Reserva de emergência', r.meses === null ? '<p class="mut">Ainda não há três meses de despesas para calcular a sua média. Continue lançando e volte aqui.</p>'
+      : `<p>Você gasta em média <b class="num">${m(r.media)}</b> por mês. O que você tem hoje nos bancos e carteiras (${m(r.disponivel)}) cobre <b>${String(r.meses).replace('.', ',')} ${r.meses === 1 ? 'mês' : 'meses'}</b> sem nenhuma renda.</p>
+        <div class="barra ${r.meses >= 6 ? 'ok' : r.meses >= 3 ? 'alerta' : 'estourou'}" role="img" aria-label="${r.meses} de 6 meses"><i style="width:${Math.min(100, (r.meses / 6) * 100)}%"></i></div>
+        <p class="mut">${r.meses >= 6 ? 'Você já tem uma reserva de 6 meses, a meta mais comum. 🎉' : `A meta mais comum é 6 meses: ${m(r.meta)}. Faltam <b class="num">${m(r.falta)}</b>. Crie um objetivo em Planejar para guardar aos poucos.`}</p>`, null);
+  }
+  function formDividas() {
+    abrir('Simulador de dívidas', `<p class="mut">Um por linha: <b>nome; quanto deve; juros ao mês (%); pagamento mínimo</b>. Mostra em quanto tempo você quita e quanto paga de juros em cada jeito de pagar.</p>
+      ${campo('Suas dívidas', '<textarea name="lista" rows="5" placeholder="Cartão; 2000; 12; 100&#10;Loja; 500; 4; 50"></textarea>')}${campo('Quanto pode pagar a mais por mês (R$)', '<input name="extra" inputmode="decimal" placeholder="0,00" value="200">')}<div id="div-res" role="status" aria-live="polite"></div>`, null, (f) => {
+      const calc = () => {
+        const ds = f.lista.value.split('\n').map((l) => l.split(';').map((x) => x.trim())).filter((x) => x.length >= 3 && x[0]).map((x) => ({ nome: x[0], saldo: F.numeroBR(x[1]), juros: F.numeroBR(x[2]), minimo: x[3] ? F.numeroBR(x[3]) : 0 })).filter((x) => x.saldo > 0);
+        const extra = F.numeroBR(f.extra.value || '0') || 0; const alvo = $('#div-res', f);
+        if (!ds.length) { alvo.innerHTML = ''; return; }
+        const cartao = (tit, r) => r.semSolucao ? `<div class="card"><b>${tit}</b><p class="neg">Com esse pagamento a dívida não diminui: os juros são maiores que o que você paga. Aumente o valor.</p></div>` : `<div class="card"><b>${tit}</b><p>Quita tudo em <b>${r.meses} ${r.meses === 1 ? 'mês' : 'meses'}</b>, pagando <b class="num">${m(r.jurosTotal)}</b> de juros.</p><small class="mut">Ordem: ${r.ordem.map((o) => `${esc(o.nome)} (mês ${o.mes})`).join(' → ')}</small></div>`;
+        const av = F.simularDividas(ds, extra, 'avalanche'); const bo = F.simularDividas(ds, extra, 'bola');
+        alvo.innerHTML = cartao('Maior juro primeiro (paga menos juros)', av) + cartao('Menor dívida primeiro (vitórias rápidas)', bo);
+      };
+      f.addEventListener('input', calc); calc();
+    });
+  }
+  function formMei() {
+    const d = D(); const cfg = d.mei = d.mei || { ativo: false, limite: 81000, das: 0 }; const ano = new Date().getFullYear();
+    const desenha = (f) => {
+      const r = F.limiteMei(d.lancs, ano, cfg.limite || 81000);
+      f.querySelector('#mei-c').innerHTML = `<div class="card"><small class="mut">Faturamento de ${ano} (categorias Vendas e Serviços)</small><b class="num" style="font-size:22px;display:block">${m(r.faturamento)}</b><div class="barra ${r.pct >= 100 ? 'estourou' : r.pct >= 80 ? 'alerta' : 'ok'}" role="img" aria-label="${r.pct}% do limite"><i style="width:${Math.min(100, r.pct)}%"></i></div><small class="mut">${r.pct}% do limite de ${m(cfg.limite || 81000)}. ${r.estourou ? '<b class="neg">Você passou do limite.</b>' : `Restam ${m(r.restante)}.`}${r.vaiEstourar && !r.estourou ? ` <b class="neg">No ritmo de hoje você chega a ${m(r.projecao)} no ano.</b>` : ''}</small></div>`;
+    };
+    abrir('MEI: limite e imposto (DAS)', `<p class="mut">Para quem é Microempreendedor Individual. O app soma o que você recebeu em <b>Vendas</b> e <b>Serviços</b> no ano e avisa quando chega perto do limite. Confira o limite e o valor do DAS no portal do governo (Portal do Empreendedor).</p>
+      ${troca('mei-ativo', 'Sou MEI: mostrar avisos no Início', !!cfg.ativo)}${campo('Limite anual de faturamento (R$)', `<input name="limite" inputmode="decimal" value="${val2(cfg.limite || 81000)}">`)}<div id="mei-c"></div>
+      ${campo('Valor do DAS do mês (R$)', `<input name="das" inputmode="decimal" placeholder="0,00" value="${cfg.das ? val2(cfg.das) : ''}">`)}<button class="btn" type="button" data-das>Lembrar do DAS todo dia 20 (12 meses)</button><small class="mut">Cria 12 boletos de "DAS MEI" na categoria Impostos, que aparecem nos vencimentos e nos avisos por e-mail.</small>`, null, (f) => {
+      desenha(f);
+      f.addEventListener('input', () => { cfg.ativo = f['mei-ativo'].checked; const l = F.numeroBR(f.limite.value || '0'); if (l > 0) cfg.limite = l; cfg.das = F.numeroBR(f.das.value || '0') || 0; salvar(); desenha(f); });
+      f.querySelector('[data-das]').addEventListener('click', () => {
+        const v = F.numeroBR(f.das.value || '0'); if (!(v > 0)) { aviso('Digite o valor do DAS.'); return; }
+        if (d.lancs.some((x) => x.desc === 'DAS MEI' && !x.pago && x.data >= F.hojeISO())) { aviso('Você já tem DAS futuros cadastrados.'); return; }
+        const hoje = new Date(); const ini = hoje.getDate() <= 20 ? F.hojeISO(new Date(hoje.getFullYear(), hoje.getMonth(), 20)) : F.hojeISO(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 20)); const serie = uid();
+        for (let i = 0; i < 12; i++) d.lancs.push({ id: uid(), tipo: 'despesa', desc: 'DAS MEI', valor: v, data: dataSerie(ini, 'mes', i), categoria: 'Impostos', conta: d.contas[0].id, pago: false, boleto: true, serie, n: i + 1, de: 12, modoSerie: 'fixo', freq: 'mes', por: String((USER.info && USER.info.nome) || '').split(' ')[0] || undefined });
+        cfg.ativo = true; cfg.das = v; salvar(); render(); aviso('Pronto! 12 lembretes do DAS criados.');
+      });
+    });
+  }
+  function formModelos() {
+    const desenha = (f) => {
+      const mods = D().modelos || [];
+      f.querySelector('#mod-c').innerHTML = mods.length ? `<ul class="lista">${mods.map((x) => `<li><div class="item"><span class="ic" style="background:${catInfo(x.categoria, x.tipo).cor}22" aria-hidden="true">${catInfo(x.categoria, x.tipo).icone}</span><span class="txt"><strong>${esc(x.desc)}</strong><span>${esc(x.categoria)}</span></span><b class="val num">${m(x.valor)}</b><button class="btn sec mini" type="button" data-del="${esc(x.id)}" aria-label="Apagar o modelo ${esc(x.desc)}">Apagar</button></div></li>`).join('')}</ul>` : '<p class="mut">Nenhum modelo ainda. Ao criar um lançamento, abra <b>Mais opções</b> e ligue <b>Salvar como modelo</b>. Depois é só tocar no modelo em <b>+</b> para lançar de novo.</p>';
+      f.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { D().modelos = (D().modelos || []).filter((x) => x.id !== b.dataset.del); salvar(); desenha(f); }));
+    };
+    abrir('Modelos de lançamento', '<div id="mod-c"></div>', null, desenha);
   }
 
   /* ---------- ferramentas (como Mobills e Organizze) ---------- */
@@ -1065,7 +1287,7 @@
   }
 
   function formPersonalizar() {
-    const blocos = [['diario', 'Quanto posso gastar por dia'], ['pagar', 'Vencimentos'], ['orcamento', 'Atenção no orçamento'], ['categorias', 'Despesas por categoria'], ['cartoes', 'Cartões'], ['ultimos', 'Últimos lançamentos']];
+    const blocos = [['alertas', 'Fique de olho (avisos)'], ['diario', 'Quanto posso gastar por dia'], ['pagar', 'Vencimentos'], ['orcamento', 'Atenção no orçamento'], ['categorias', 'Despesas por categoria'], ['cartoes', 'Cartões'], ['ultimos', 'Últimos lançamentos']];
     S.inicio = S.inicio || {};
     abrir('Personalizar tela inicial', `<p class="mut">Escolha o que você quer ver no Início. O saldo e o resumo do mês sempre aparecem.</p>${blocos.map(([k, t]) => troca('b-' + k, t, S.inicio[k] !== false)).join('')}`, null, (f) => {
       f.addEventListener('change', () => { blocos.forEach(([k]) => { S.inicio[k] = f['b-' + k].checked; }); salvar(); render(); });
@@ -1174,6 +1396,19 @@
     const acoes = {
       acess: () => formAcess(),
       compartilhar: () => formCompartilhar(),
+      notif: () => formNotif(),
+      config: () => formConfig(),
+      tags: () => formTags(),
+      ajuda: () => formAjuda(),
+      indicar: () => indicarAmigo(),
+      'ver-guia': () => { S.guia = false; salvar(); ir('inicio'); },
+      'ir-contas': () => ir('mais'),
+      receber: () => formReceber(),
+      projecao: () => formProjecao(),
+      reserva: () => formReserva(),
+      dividas: () => formDividas(),
+      mei: () => formMei(),
+      modelos: () => formModelos(),
       assinaturas: () => formAssinaturas(),
       simulador: () => formSimulador(),
       desafio: () => formDesafio(),
@@ -1245,6 +1480,7 @@
     const alvo = ev.target;
     if (alvo.id === 'foto-arq') { processarFoto(alvo.files && alvo.files[0]); alvo.value = ''; return; }
     if (alvo.id === 'avisos-sw') { api('preferencias', { avisos: alvo.checked }).then((r) => { USER.info = r.usuario; aviso(r.usuario.avisos ? 'Avisos por e-mail ligados.' : 'Avisos por e-mail desligados.'); }).catch((e) => { alvo.checked = !alvo.checked; aviso(e.message); }); return; }
+    if (alvo.id === 'lembrete-sw') { api('preferencias', { lembrete: alvo.checked }).then((r) => { USER.info = r.usuario; aviso(r.usuario.lembrete ? 'Lembrete ligado.' : 'Lembrete desligado.'); }).catch((e) => { alvo.checked = !alvo.checked; aviso(e.message); }); return; }
     if (alvo.id === 'resumo-sw') { api('preferencias', { resumo: alvo.checked }).then((r) => { USER.info = r.usuario; aviso(r.usuario.resumo ? 'Resumo semanal ligado.' : 'Resumo semanal desligado.'); }).catch((e) => { alvo.checked = !alvo.checked; aviso(e.message); }); return; }
     if (alvo.matches && alvo.matches('[data-mostrar]')) { alvo.closest('form').querySelectorAll('input[name=senha],input[name=nova],input[name=atual]').forEach((i) => { i.type = alvo.checked ? 'text' : 'password'; }); return; }
     const el = ev.target; if (!el.files || !el.files[0]) return;

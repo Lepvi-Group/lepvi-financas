@@ -702,3 +702,40 @@ html[data-contraste="alto"] dialog.confirma { border: 3px solid #000; }
 .chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; padding-bottom: 12px; }
 .chips .chip { min-height: 56px; border-radius: 14px; background: var(--sup); box-shadow: inset 0 0 0 1.5px var(--linha); text-align: center; font-size: 13px; padding: 6px; }
 .chips .chip.on { background: var(--verde); color: #fff; box-shadow: none; }
+
+.tabela-rolagem { overflow-x: auto; }
+.conversa { display: grid; gap: 8px; }
+.coment { background: var(--sup); border-radius: 12px; padding: 8px 12px; margin: 0; }
+
+/* abertura do app e entrada das telas */
+#splash { position: fixed; inset: 0; z-index: 2000; display: grid; place-content: center; justify-items: center; gap: 18px; background: #0D0D0F; color: #fff; overflow: hidden; animation: spFora .55s ease 1.3s forwards; }
+.sp-glow { position: absolute; width: 360px; height: 360px; border-radius: 50%; background: radial-gradient(circle, rgba(138,61,255,.55), rgba(45,75,255,.25) 45%, transparent 70%); animation: spGlow 1.4s ease-out both; }
+.sp-logo { position: relative; width: 84px; height: 84px; filter: drop-shadow(0 8px 28px rgba(138,61,255,.6)); animation: spLogo .9s cubic-bezier(.2,.9,.25,1.2) both; }
+.sp-nome { position: relative; font-size: 28px; font-weight: 600; letter-spacing: -.02em; margin: 0; animation: entra .7s cubic-bezier(.23,1,.32,1) .35s both; }
+.sp-nome b { background: linear-gradient(90deg, #7FA6FF, #C890FF); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 700; }
+.sp-barra { position: relative; display: block; width: 120px; height: 3px; border-radius: 3px; background: rgba(255,255,255,.16); overflow: hidden; animation: entra .5s ease .5s both; }
+.sp-barra::after { content: ""; position: absolute; inset: 0; border-radius: 3px; background: linear-gradient(90deg, #3A7BFF, #C04DFF); transform-origin: left; animation: enche 1s cubic-bezier(.4,0,.2,1) .5s both; }
+@keyframes spFora { to { opacity: 0; visibility: hidden; transform: scale(1.04); } }
+@keyframes spLogo { from { transform: scale(.4) rotate(-14deg); opacity: 0; } }
+@keyframes spGlow { from { transform: scale(.4); opacity: 0; } }
+@keyframes entraZoom { from { opacity: 0; transform: translateY(12px) scale(.97); } }
+#tela.anima > * { animation: entra .55s cubic-bezier(.23,1,.32,1) both; }
+#tela.anima > .hero { animation-name: entraZoom; animation-duration: .65s; }
+#tela.anima > *:nth-child(2) { animation-delay: .05s; } #tela.anima > *:nth-child(3) { animation-delay: .1s; } #tela.anima > *:nth-child(4) { animation-delay: .15s; }
+#tela.anima > *:nth-child(5) { animation-delay: .2s; } #tela.anima > *:nth-child(6) { animation-delay: .25s; } #tela.anima > *:nth-child(7) { animation-delay: .3s; }
+#tela.anima > *:nth-child(n+8) { animation-delay: .35s; }
+@media (prefers-reduced-motion: reduce) { #splash { display: none; } }
+html[data-movimento="reduzido"] #splash { display: none; }
+
+.saudacao { font-size: 18px; color: var(--suave); line-height: 1.25; margin: 4px 2px 0; } .saudacao b { color: var(--tinta); font-size: 24px; font-weight: 600; }
+.vazio { display: grid; justify-items: center; text-align: center; gap: 10px; padding: 24px 20px; }
+.vazio .btn { margin-top: 6px; }
+.vazio-ic { width: 68px; height: 68px; border-radius: 50%; background: var(--sup); display: grid; place-items: center; font-size: 30px; }
+
+.mes .viz { width: auto; min-width: 46px; padding: 0 8px; height: 40px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--suave); text-transform: capitalize; }
+.mes .viz:hover { background: var(--sup); }
+@media (max-width: 360px) { .mes .viz { display: none; } }
+
+.sino { position: relative; }
+.sino-n { position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--vermelho); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; line-height: 1; }
+.sino-n[hidden] { display: none; }

@@ -204,3 +204,69 @@ test('juntar edições: sem mudança local vale o servidor; sem mudança no serv
   assert.deepStrictEqual(F.juntarDados({ n: 1 }, { n: 3 }, { n: 1 }), { n: 3 });
   assert.deepStrictEqual(F.juntarDados({ n: 1 }, { n: 3 }, { n: 2 }), { n: 3 });
 });
+
+test('texto livre: valor, tipo, data, descrição e categoria', () => {
+  const a = F.interpretarTexto('gastei 45,90 no mercado ontem', '2026-11-23', []);
+  assert.deepStrictEqual([a.tipo, a.valor, a.data, a.desc, a.categoria, a.pago], ['despesa', 45.9, '2026-11-22', 'Mercado', 'Mercado', true]);
+  const b = F.interpretarTexto('recebi 1.200 de salário dia 5', '2026-11-23', []);
+  assert.deepStrictEqual([b.tipo, b.valor, b.data, b.categoria], ['receita', 1200, '2026-11-05', 'Salário']);
+  const c = F.interpretarTexto('boleto da luz 150 vence 28/11', '2026-11-23', []);
+  assert.deepStrictEqual([c.valor, c.data, c.boleto, c.pago], [150, '2026-11-28', true, false]);
+  assert.strictEqual(F.interpretarTexto('sem número nenhum', '2026-11-23', []), null);
+  assert.strictEqual(F.interpretarTexto('paguei 12.50 de uber', '2026-11-23', []).valor, 12.5);
+});
+test('projeção de saldo: parte do saldo de hoje e soma só o que ainda não foi pago', () => {
+  const contas = [{ id: 'c', nome: 'Banco', saldoInicial: 1000 }];
+  const l = [
+    { id: '1', tipo: 'receita', valor: 500, data: '2026-11-25', categoria: 'Vendas', conta: 'c', pago: false },
+    { id: '2', tipo: 'despesa', valor: 200, data: '2026-11-26', categoria: 'Moradia', conta: 'c', pago: false },
+    { id: '3', tipo: 'despesa', valor: 300, data: '2026-12-10', categoria: 'Moradia', conta: 'c', pago: false },
+    { id: '4', tipo: 'despesa', valor: 99, data: '2026-11-01', categoria: 'Moradia', conta: 'c', pago: true },
+  ];
+  const p = F.projecaoSaldo(l, contas, [], '2026-11-23', 3);
+  assert.deepStrictEqual(p.map((x) => x.saldoFim), [1201, 901, 901]);
+  assert.strictEqual(p[0].entradas, 500); assert.strictEqual(p[1].saidas, 300);
+});
+test('gasto fora do normal e reserva de emergência', () => {
+  const mk = (mes, v, cat = 'Lazer') => ({ id: mes + cat, tipo: 'despesa', valor: v, data: `${mes}-10`, categoria: cat, conta: 'c', pago: true });
+  const l = [mk('2026-08', 100), mk('2026-09', 100), mk('2026-10', 100), mk('2026-11', 400), mk('2026-08', 500, 'Moradia'), mk('2026-09', 500, 'Moradia'), mk('2026-10', 500, 'Moradia'), mk('2026-11', 520, 'Moradia')];
+  const a = F.gastosAnormais(l, '2026-11');
+  assert.deepStrictEqual(a.map((x) => x.categoria), ['Lazer']); assert.strictEqual(a[0].vezes, 4);
+  const r = F.reservaEmergencia(l, [{ id: 'c', nome: 'B', saldoInicial: 3600 }], '2026-11-23');
+  assert.strictEqual(r.media, 600); assert.strictEqual(r.meta, 3600);
+  assert.ok(r.meses !== null);
+});
+test('dívidas: bola de neve e avalanche quitam; avalanche paga menos juros; mínimo que não cobre juros não tem solução', () => {
+  const ds = [{ nome: 'Cartão', saldo: 2000, juros: 12, minimo: 100 }, { nome: 'Loja', saldo: 500, juros: 4, minimo: 50 }, { nome: 'Carro', saldo: 5000, juros: 2, minimo: 200 }];
+  const av = F.simularDividas(ds, 300, 'avalanche'); const bola = F.simularDividas(ds, 300, 'bola');
+  assert.ok(av.meses > 0 && bola.meses > 0);
+  assert.ok(av.jurosTotal <= bola.jurosTotal);
+  assert.strictEqual(av.ordem.length, 3);
+  assert.strictEqual(F.simularDividas([{ nome: 'x', saldo: 10000, juros: 10, minimo: 50 }], 0, 'bola').semSolucao, true);
+});
+test('a receber, resultado do mês (DRE) e limite do MEI', () => {
+  const l = [
+    { id: 'r1', tipo: 'receita', desc: 'Cliente A', valor: 800, data: '2026-11-10', categoria: 'Serviços', conta: 'c', pago: false },
+    { id: 'r2', tipo: 'receita', desc: 'Cliente B', valor: 400, data: '2026-11-30', categoria: 'Vendas', conta: 'c', pago: false },
+    { id: 'r3', tipo: 'receita', desc: 'Cliente C', valor: 1000, data: '2026-11-02', categoria: 'Vendas', conta: 'c', pago: true },
+    { id: 'd1', tipo: 'despesa', desc: 'Material', valor: 300, data: '2026-11-03', categoria: 'Fornecedores', conta: 'c', pago: true },
+  ];
+  const r = F.aReceber(l, '2026-11-23');
+  assert.deepStrictEqual([r.itens.length, r.total, r.atrasado, r.itens[0].atrasado], [2, 1200, 800, true]);
+  const d = F.dreMes(l, '2026-11');
+  assert.deepStrictEqual([d.receitas, d.despesas, d.resultado, d.margem], [2200, 300, 1900, 86.4]);
+  const m = F.limiteMei(l, 2026, 81000, '2026-11-23');
+  assert.strictEqual(m.faturamento, 2200); assert.strictEqual(m.vaiEstourar, false);
+  assert.strictEqual(F.limiteMei(l, 2026, 2000, '2026-11-23').estourou, true);
+});
+test('divisão: partes iguais continuam e porcentagem por pessoa funciona', () => {
+  assert.deepStrictEqual(F.dividir(['Ana', 'Beto'], 90).map((x) => x.valor), [30, 30]);
+  const p = F.dividir(['Ana:60'], 100); assert.deepStrictEqual([p[0].nome, p[0].valor, p[0].pct], ['Ana', 60, 60]);
+  const q = F.dividir(['Ana:50', 'Beto'], 100); assert.deepStrictEqual(q.map((x) => x.valor), [50, 25]);
+});
+
+test('saldo ao fim do dia soma só o que já foi pago até aquele dia', () => {
+  const contas = [{ id: 'c', nome: 'B', saldoInicial: 100 }];
+  const l = [{ id: '1', tipo: 'receita', valor: 50, data: '2026-11-02', conta: 'c', pago: true, categoria: 'x' }, { id: '2', tipo: 'despesa', valor: 30, data: '2026-11-05', conta: 'c', pago: true, categoria: 'x' }, { id: '3', tipo: 'despesa', valor: 999, data: '2026-11-03', conta: 'c', pago: false, categoria: 'x' }];
+  assert.deepStrictEqual(['2026-11-01', '2026-11-04', '2026-11-05'].map((d) => F.saldoAteDia(l, contas, d)), [100, 150, 120]);
+});

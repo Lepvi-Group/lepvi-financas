@@ -50,6 +50,33 @@ function itens_a_pagar(array $d): array
     return $itens;
 }
 
+/* Lembrete de manhã para quem ligou: ontem ficou sem nenhum lançamento (só para quem usa de verdade: 5 lançamentos ou mais e algum nos últimos 14 dias). */
+function lembrete_lancar_rodar(string $hoje): int
+{
+    $enviados = 0; $ontem = date('Y-m-d', strtotime("$hoje -1 day")); $limite = date('Y-m-d', strtotime("$hoje -14 days"));
+    foreach (db()->query('SELECT * FROM usuarios WHERE lembrete = 1 AND email_verificado = 1')->fetchAll() as $u) {
+        $chave = 'lembrete|' . $hoje;
+        $j = db()->prepare('SELECT 1 FROM avisos WHERE usuario_id = ? AND chave = ?'); $j->execute([$u['id'], $chave]);
+        if ($j->fetchColumn()) continue;
+        $s = db()->prepare('SELECT conteudo FROM dados WHERE usuario_id = ?'); $s->execute([espaco_dono($u['id'])]);
+        $bruto = $s->fetchColumn(); $S = $bruto ? json_decode((string) decifrar($bruto), true) : null;
+        if (!is_array($S)) continue;
+        $total = 0; $teveOntem = false; $recente = false;
+        foreach (($S['dados'] ?? []) as $perfil) foreach (($perfil['lancs'] ?? []) as $l) {
+            $d = (string) ($l['data'] ?? ''); $total++;
+            if ($d === $ontem) $teveOntem = true;
+            if ($d >= $limite && $d <= $hoje) $recente = true;
+        }
+        if ($teveOntem || !$recente || $total < 5) continue;
+        $nome = explode(' ', trim($u['nome']))[0];
+        $corpo = '<p>Olá, ' . htmlspecialchars($nome) . '! Ontem ficou sem nenhum lançamento no Lepvi Finanças.</p><p>Gastou ou recebeu alguma coisa? Leva menos de um minuto: toque em <b>+</b> e escreva, por exemplo, <i>gastei 45 no mercado</i>.</p><p style="font-size:14px;color:#4A4944;margin-top:22px">Para desligar este lembrete: Meu perfil → Lembrete se esquecer de lançar.</p>';
+        if (enviar_email($u['email'], '📝 Ontem ficou sem lançamentos', email_html('Você lançou ontem?', $corpo, 'Abrir o Lepvi Finanças', rtrim(cfg()['site_url'], '/') . '/'))) {
+            db()->prepare('INSERT INTO avisos (usuario_id, chave, enviado_em) VALUES (?,?,?)')->execute([$u['id'], $chave, agora()]); $enviados++;
+        }
+    }
+    return $enviados;
+}
+
 /* Resumo da semana (rodado às segundas): quanto gastou, o que mudou, onde mais gastou e o que vence nos próximos 7 dias. */
 function resumo_semanal_rodar(string $hoje): int
 {
@@ -91,6 +118,7 @@ function resumo_semanal_rodar(string $hoje): int
     }
     return $enviados;
 }
+if (in_array('--lembrete', $argv, true)) { echo date('c') . ' lembretes enviados: ' . lembrete_lancar_rodar($hoje) . "\n"; exit; }
 if (in_array('--semanal', $argv, true)) { echo date('c') . ' resumos enviados: ' . resumo_semanal_rodar($hoje) . "\n"; exit; }
 
 $usuarios = db()->query('SELECT * FROM usuarios WHERE avisos = 1 AND email_verificado = 1')->fetchAll();
@@ -165,4 +193,5 @@ foreach ($usuarios as $u) {
         $enviados++;
     }
 }
-echo date('c') . " avisos enviados: $enviados\n";
+$lembretes = lembrete_lancar_rodar($hoje);
+echo date('c') . " avisos enviados: $enviados, lembretes: $lembretes\n";

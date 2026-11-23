@@ -245,8 +245,9 @@ try {
             $foto = $u['foto'] ?? null;
             if (array_key_exists('foto', $b)) $foto = ($b['foto'] === null || $b['foto'] === '') ? null : validar_foto((string) $b['foto']);
             $resumo = isset($b['resumo']) ? (int) (bool) $b['resumo'] : (int) ($u['resumo'] ?? 1);
-            db()->prepare('UPDATE usuarios SET nome = ?, avisos = ?, foto = ?, resumo = ? WHERE id = ?')->execute([$nome, $avisos, $foto, $resumo, $u['id']]);
-            $u['nome'] = $nome; $u['avisos'] = $avisos; $u['foto'] = $foto; $u['resumo'] = $resumo;
+            $lembrete = isset($b['lembrete']) ? (int) (bool) $b['lembrete'] : (int) ($u['lembrete'] ?? 0);
+            db()->prepare('UPDATE usuarios SET nome = ?, avisos = ?, foto = ?, resumo = ?, lembrete = ? WHERE id = ?')->execute([$nome, $avisos, $foto, $resumo, $lembrete, $u['id']]);
+            $u['nome'] = $nome; $u['avisos'] = $avisos; $u['foto'] = $foto; $u['resumo'] = $resumo; $u['lembrete'] = $lembrete;
             resp(['usuario' => usuario_publico($u)]);
         }
         case 'mudar_senha': {

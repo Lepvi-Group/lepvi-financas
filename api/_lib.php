@@ -76,6 +76,7 @@ function db(): PDO
     }
     try { $pdo->query('SELECT 1 FROM membros LIMIT 1'); } catch (Throwable $e) { foreach (['CREATE TABLE IF NOT EXISTS membros (usuario_id VARCHAR(32) NOT NULL PRIMARY KEY, dono_id VARCHAR(32) NOT NULL, entrou_em INTEGER NOT NULL)', 'CREATE INDEX idx_membros_dono ON membros (dono_id)'] as $sql) { try { $pdo->exec($sql); } catch (Throwable $e2) { /* já existe */ } } }
     try { $pdo->query('SELECT resumo FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN resumo INTEGER NOT NULL DEFAULT 1'); } catch (Throwable $e2) { /* já existe */ } }
+    try { $pdo->query('SELECT lembrete FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN lembrete INTEGER NOT NULL DEFAULT 0'); } catch (Throwable $e2) { /* já existe */ } }
     try { $pdo->query('SELECT foto FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN foto LONGTEXT NULL'); } catch (Throwable $e2) { /* já existe */ } }
     return $pdo;
 }
@@ -193,7 +194,7 @@ function validar_foto(string $d): string
 function exigir_usuario(): array { return usuario_atual() ?? erro('Entre para continuar.', 401); }
 function usuario_publico(array $u): array
 {
-    return ['email' => $u['email'], 'nome' => $u['nome'], 'foto' => $u['foto'] ?? null, 'avisos' => (bool) $u['avisos'], 'resumo' => (bool) ($u['resumo'] ?? 1), 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao'], 'criado_em' => (int) $u['criado_em']];
+    return ['email' => $u['email'], 'nome' => $u['nome'], 'foto' => $u['foto'] ?? null, 'avisos' => (bool) $u['avisos'], 'resumo' => (bool) ($u['resumo'] ?? 1), 'lembrete' => (bool) ($u['lembrete'] ?? 0), 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao'], 'criado_em' => (int) $u['criado_em']];
 }
 /* Espaço compartilhado: quem entrou no espaço de outra pessoa lê e grava os dados dela (a conta de quem convidou é a "dona" dos dados). */
 function espaco_dono(string $uid): string

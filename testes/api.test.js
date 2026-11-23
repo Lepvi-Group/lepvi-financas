@@ -208,6 +208,22 @@ test('alerta de orçamento por e-mail: avisa em 80% e de novo em 100%, uma vez c
   assert.ok(emails().includes('Mercado: 120% do limite do mês') && emails().includes('O limite foi ultrapassado'));
   assert.match(rodar('2027-03-15'), /enviados: 0/);
 });
+test('lembrete de lançar: só para quem ligou, usa o app de verdade e ontem ficou vazio; uma vez por dia', async () => {
+  const env = { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV };
+  const rodar = (hoje) => execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), '--lembrete', `--hoje=${hoje}`], { env }).toString();
+  const lanc = (i) => ({ id: 'l' + i, tipo: 'despesa', desc: 'Item ' + i, valor: 10, data: `2027-06-0${i}`, categoria: 'Outros', conta: 'carteira', pago: true });
+  const atual = (await chamar('dados', null, { metodo: 'GET' })).json.versao;
+  await chamar('dados', { versao: atual, conteudo: { perfil: 'pessoal', dados: { pessoal: { contas: [], cartoes: [], lancs: [1, 2, 3, 4, 5].map(lanc) } } } });
+  assert.match(rodar('2027-06-08'), /lembretes enviados: 0/, 'desligado por padrão');
+  assert.strictEqual((await chamar('preferencias', { lembrete: true })).json.usuario.lembrete, true);
+  assert.match(rodar('2027-06-06'), /lembretes enviados: 0/, 'ontem teve lançamento');
+  assert.match(rodar('2027-06-08'), /lembretes enviados: 1/);
+  assert.ok(emails().includes('Ontem ficou sem lançamentos'));
+  assert.match(rodar('2027-06-08'), /lembretes enviados: 0/, 'só uma vez por dia');
+  assert.match(rodar('2027-07-30'), /lembretes enviados: 0/, 'quem parou de usar não recebe');
+  await chamar('preferencias', { lembrete: false });
+  assert.match(rodar('2027-06-09'), /lembretes enviados: 0/);
+});
 test('espaço compartilhado: convite, os dois veem os mesmos dados, só 2 pessoas, remover e sair', async () => {
   const cookieAna = cookie;
   const dadosAna = (await chamar('dados', undefined, { metodo: 'GET' })).json;

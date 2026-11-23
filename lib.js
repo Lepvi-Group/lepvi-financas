@@ -214,6 +214,117 @@
     return 'Outros';
   }
 
+  /* ---------- lançar por texto ou voz: "gastei 45 no mercado ontem" ---------- */
+  function interpretarTexto(texto, hoje = hojeISO(), lancs = []) {
+    const t = String(texto || '').trim(); if (!t) return null;
+    const m = t.match(/(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/); if (!m) return null;
+    const bruto = m[1]; const valor = /^\d+\.\d{1,2}$/.test(bruto) ? Number(bruto) : /^\d{1,3}(\.\d{3})+$/.test(bruto) ? Number(bruto.replace(/\./g, '')) : numeroBR(bruto);
+    if (!(valor > 0)) return null;
+    const n = normalizar(t);
+    const tipo = /\b(recebi|ganhei|entrou|vendi|venda|salario|recebimento|deposito|reembolso|me pagaram|me pagou)\b/.test(n) ? 'receita' : 'despesa';
+    let data = hoje;
+    const dd = (k) => { const d = new Date(hoje + 'T12:00:00'); d.setDate(d.getDate() - k); return hojeISO(d); };
+    const bar = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+    const dia = n.match(/\bdia (\d{1,2})\b/);
+    if (/\banteontem\b/.test(n)) data = dd(2); else if (/\bontem\b/.test(n)) data = dd(1);
+    else if (bar && +bar[2] >= 1 && +bar[2] <= 12 && +bar[1] >= 1 && +bar[1] <= 31) { const a = bar[3] ? (bar[3].length === 2 ? '20' + bar[3] : bar[3]) : hoje.slice(0, 4); data = `${a}-${pad(+bar[2])}-${pad(diaValido(`${a}-${pad(+bar[2])}`, +bar[1]))}`; }
+    else if (dia && +dia[1] >= 1 && +dia[1] <= 31) data = `${mesDe(hoje)}-${pad(diaValido(mesDe(hoje), +dia[1]))}`;
+    const boleto = /\b(boleto|vence|vencimento|vai vencer)\b/.test(n);
+    const futuro = boleto || /\b(vou pagar|vou receber|a receber|a pagar|receber dia|pagar dia)\b/.test(n);
+    let desc = t.replace(m[0], ' ').replace(/R\$|reais|real\b/gi, ' ')
+      .replace(/\b(gastei|paguei|comprei|recebi|ganhei|vendi|entrou|me pagaram|me pagou|vou pagar|vou receber|boleto|hoje|ontem|anteontem|vence|vencimento|dia|de|do|da|no|na|em|com|pra|para|um|uma)\b/gi, ' ')
+      .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ').replace(/\s+/g, ' ').trim();
+    desc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : (tipo === 'receita' ? 'Receita' : 'Despesa');
+    return { tipo, valor: arred(valor), desc: desc.slice(0, 60), data, categoria: sugerirCategoria(desc, tipo, lancs), pago: !futuro, boleto: tipo === 'despesa' && boleto };
+  }
+
+  /* ---------- projeção de saldo: com o que já está cadastrado (contas, parcelas, faturas) ---------- */
+  function projecaoSaldo(lancs, contas, cartoes, hoje = hojeISO(), n = 4) {
+    let saldo = arred(contas.filter((c) => !c.fora && c.tipo !== 'investimento').reduce((t, c) => t + saldoConta(lancs, c), 0));
+    const mesAtual = mesDe(hoje); const meses = [];
+    const faturasAbertas = faturas(lancs, cartoes).filter((f) => !f.paga);
+    for (let i = 0; i < n; i++) {
+      const mes = somaMes(mesAtual, i);
+      const noMes = (data) => (i === 0 ? mesDe(data) <= mes : mesDe(data) === mes);
+      const abertos = lancs.filter((l) => !l.pago && !l.ignorar && (l.tipo === 'receita' || l.tipo === 'despesa') && !ehCartao(l) && noMes(l.data));
+      const entradas = arred(abertos.filter((l) => l.tipo === 'receita').reduce((t, l) => t + l.valor, 0));
+      const saidas = arred(abertos.filter((l) => l.tipo === 'despesa').reduce((t, l) => t + l.valor, 0) + faturasAbertas.filter((f) => noMes(f.vencimento)).reduce((t, f) => t + f.total, 0));
+      saldo = arred(saldo + entradas - saidas);
+      meses.push({ mes, entradas, saidas, saldoFim: saldo });
+    }
+    return meses;
+  }
+
+  /* ---------- gasto fora do normal: categoria que já passou de 1,5x a média dos 3 meses anteriores ---------- */
+  function gastosAnormais(lancs, mes) {
+    const porMes = (mm) => resumoMes(lancs, mm).porCategoria;
+    const atual = porMes(mes); const ant = [1, 2, 3].map((k) => porMes(somaMes(mes, -k)));
+    return Object.keys(atual).map((cat) => {
+      const media = arred(ant.reduce((t, x) => t + (x[cat] || 0), 0) / 3);
+      return { categoria: cat, gasto: atual[cat], media, vezes: media ? Math.round((atual[cat] / media) * 10) / 10 : 0 };
+    }).filter((x) => x.media >= 30 && x.gasto > x.media * 1.5 && x.gasto - x.media >= 50).sort((a, b) => (b.gasto - b.media) - (a.gasto - a.media));
+  }
+
+  /* ---------- reserva de emergência: quantos meses o dinheiro guardado cobre ---------- */
+  function reservaEmergencia(lancs, contas, hoje = hojeISO()) {
+    const mesAtual = mesDe(hoje);
+    const totais = [1, 2, 3].map((k) => resumoMes(lancs, somaMes(mesAtual, -k)).despesas).filter((v) => v > 0);
+    const media = totais.length ? arred(totais.reduce((t, v) => t + v, 0) / totais.length) : 0;
+    const disponivel = arred(contas.filter((c) => !c.fora).reduce((t, c) => t + saldoConta(lancs, c), 0));
+    const meses = media ? Math.max(0, Math.round((disponivel / media) * 10) / 10) : null;
+    return { media, disponivel, meses, meta: arred(media * 6), falta: arred(Math.max(0, media * 6 - disponivel)) };
+  }
+
+  /* ---------- dívidas: bola de neve (menor saldo primeiro) ou avalanche (maior juro primeiro) ---------- */
+  function simularDividas(dividas, extra, metodo) {
+    let ds = dividas.map((d) => ({ nome: d.nome, saldo: Number(d.saldo) || 0, juros: (Number(d.juros) || 0) / 100, minimo: Number(d.minimo) || 0 })).filter((d) => d.saldo > 0);
+    if (!ds.length) return { meses: 0, jurosTotal: 0, total: 0, ordem: [] };
+    const ordenar = (a, b) => (metodo === 'bola' ? a.saldo - b.saldo : b.juros - a.juros);
+    let meses = 0; let jurosTotal = 0; let pagoTotal = 0; const ordem = [];
+    const orcamento = ds.reduce((t, d) => t + d.minimo, 0) + (Number(extra) || 0);
+    if (ds.some((d) => d.saldo * d.juros >= orcamento) || orcamento <= 0) return { meses: null, jurosTotal: null, total: null, ordem: [], semSolucao: true };
+    while (ds.some((d) => d.saldo > 0.005) && meses < 600) {
+      meses += 1;
+      ds.forEach((d) => { if (d.saldo > 0) { const j = arred(d.saldo * d.juros); d.saldo = arred(d.saldo + j); jurosTotal += j; } });
+      let sobra = orcamento;
+      ds.filter((d) => d.saldo > 0).forEach((d) => { const p = Math.min(d.minimo, d.saldo); d.saldo = arred(d.saldo - p); sobra -= p; pagoTotal += p; });
+      ds.filter((d) => d.saldo > 0).sort(ordenar).forEach((d) => { const p = Math.min(sobra, d.saldo); if (p > 0) { d.saldo = arred(d.saldo - p); sobra -= p; pagoTotal += p; } });
+      ds.forEach((d) => { if (d.saldo <= 0.005 && !ordem.some((o) => o.nome === d.nome)) ordem.push({ nome: d.nome, mes: meses }); });
+    }
+    return { meses: meses >= 600 ? null : meses, jurosTotal: arred(jurosTotal), total: arred(pagoTotal), ordem, semSolucao: meses >= 600 };
+  }
+
+  /* ---------- contas a receber: receitas ainda não recebidas ---------- */
+  function aReceber(lancs, hoje = hojeISO()) {
+    const itens = lancs.filter((l) => l.tipo === 'receita' && !l.pago && !l.ignorar && !ehCartao(l))
+      .map((l) => ({ id: l.id, titulo: l.desc || l.categoria, valor: l.valor, vencimento: l.data, atrasado: l.data < hoje, dias: Math.round((new Date(l.data) - new Date(hoje)) / 86400000) }))
+      .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+    return { itens, total: arred(itens.reduce((t, i) => t + i.valor, 0)), atrasado: arred(itens.filter((i) => i.atrasado).reduce((t, i) => t + i.valor, 0)) };
+  }
+
+  /* ---------- resultado do mês (DRE simples) ---------- */
+  function dreMes(lancs, mes) {
+    const doMes = lancs.filter((l) => mesDe(l.data) === mes && conta_(l));
+    const porCat = (tipo) => { const o = {}; doMes.filter((l) => l.tipo === tipo).forEach((l) => { o[l.categoria] = arred((o[l.categoria] || 0) + l.valor); }); return Object.entries(o).map(([categoria, valor]) => ({ categoria, valor })).sort((a, b) => b.valor - a.valor); };
+    const receitas = arred(doMes.filter((l) => l.tipo === 'receita').reduce((t, l) => t + l.valor, 0));
+    const despesas = arred(doMes.filter((l) => l.tipo === 'despesa').reduce((t, l) => t + l.valor, 0));
+    return { receitas, despesas, resultado: arred(receitas - despesas), margem: receitas ? Math.round(((receitas - despesas) / receitas) * 1000) / 10 : null, linhasReceita: porCat('receita'), linhasDespesa: porCat('despesa') };
+  }
+
+  /* ---------- MEI: faturamento do ano contra o limite (R$ 81 mil por padrão) ---------- */
+  function limiteMei(lancs, ano, limite = 81000, hoje = hojeISO()) {
+    const fat = arred(lancs.filter((l) => l.tipo === 'receita' && !l.ignorar && l.data.slice(0, 4) === String(ano) && ['Vendas', 'Serviços'].includes(l.categoria)).reduce((t, l) => t + l.valor, 0));
+    const mesesPassados = String(ano) === hoje.slice(0, 4) ? Number(hoje.slice(5, 7)) : 12;
+    const projecao = arred((fat / Math.max(1, mesesPassados)) * 12);
+    return { faturamento: fat, limite, restante: arred(limite - fat), pct: limite ? Math.round((fat / limite) * 1000) / 10 : 0, projecao, vaiEstourar: projecao > limite, estourou: fat > limite };
+  }
+
+  /* saldo (bancos e carteiras que somam) ao fim de um dia, só com o que já foi pago ou recebido */
+  function saldoAteDia(lancs, contas, dia) {
+    const ate = lancs.filter((l) => l.data <= dia);
+    return arred(contas.filter((c) => !c.fora && c.tipo !== 'investimento').reduce((t, c) => t + saldoConta(ate, c), 0));
+  }
+
   /* ---------- relatórios ---------- */
   function comparativo(lancs, mes) {
     const at = resumoMes(lancs, mes); const an = resumoMes(lancs, somaMes(mes, -1));
@@ -231,11 +342,17 @@
   }
 
   /* divisão de despesa: quem ainda deve a sua parte (a despesa fica inteira no lançamento, a parte dos outros é um valor a receber) */
+  /* "Ana" divide em partes iguais (com você); "Ana:30" é a porcentagem da Ana (o resto é seu). Vale o mesmo para os outros nomes. */
   function dividir(nomes, valor, antiga) {
-    const vistos = new Set(); const lista = (nomes || []).map((n) => String(n).trim()).filter((n) => n && !vistos.has(n.toLowerCase()) && vistos.add(n.toLowerCase())).slice(0, 6);
+    const vistos = new Set();
+    const lista = (nomes || []).map((n) => String(n).trim()).filter(Boolean).map((t) => { const m = t.match(/^(.*?)[:=]\s*(\d{1,3}(?:[.,]\d+)?)\s*%?$/); return m && m[1].trim() ? { nome: m[1].trim(), pct: Math.min(100, Number(m[2].replace(',', '.'))) } : { nome: t }; })
+      .filter((x) => !vistos.has(x.nome.toLowerCase()) && vistos.add(x.nome.toLowerCase())).slice(0, 6);
     if (!lista.length) return undefined;
-    const parte = arred(valor / (lista.length + 1));
-    return lista.map((nome) => ({ nome, valor: parte, pago: !!((antiga || []).find((x) => x.nome === nome) || {}).pago }));
+    const comPct = lista.filter((x) => x.pct !== undefined); const somaPct = comPct.reduce((t, x) => t + x.pct, 0);
+    const iguais = lista.filter((x) => x.pct === undefined);
+    const restoPct = Math.max(0, 100 - somaPct);
+    const parteIgual = iguais.length ? arred(((valor * restoPct) / 100) / (iguais.length + 1)) : 0;
+    return lista.map((x) => ({ nome: x.nome, valor: x.pct !== undefined ? arred((valor * Math.min(x.pct, 100)) / 100) : (comPct.length ? parteIgual : arred(valor / (lista.length + 1))), ...(x.pct !== undefined ? { pct: x.pct } : {}), pago: !!((antiga || []).find((o) => o.nome === x.nome) || {}).pago }));
   }
   function saldosDivisao(lancs) {
     const m = {};
@@ -335,7 +452,7 @@
     return juntar(base, local, remoto);
   }
 
-  const api = { juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  const api = { saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);
