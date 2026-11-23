@@ -787,3 +787,9 @@ body.carregando main { min-height: 100dvh; display: grid; place-items: center; p
 @media (prefers-reduced-motion: reduce) { .car-logo, .car-barra::after { animation: none !important; } .car-barra::after { left: 0; width: 100%; } }
 html[data-movimento="reduzido"] .car-logo, html[data-movimento="reduzido"] .car-barra::after { animation: none; }
 body.carregando .topo { display: none; }
+
+@media (min-width: 900px) {
+  .menu-fim .mf-mais { display: flex; align-items: center; gap: 12px; height: 52px; background: var(--sup2); border: 1px solid var(--linha); color: var(--tinta, inherit); }
+  .menu-fim .mf-mais:hover { filter: brightness(.97); }
+}
+html[data-contraste="alto"] .menu-fim .mf-mais { border: 2px solid #000; background: var(--sup); color: #000; }
