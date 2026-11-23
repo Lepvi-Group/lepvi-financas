@@ -280,7 +280,7 @@ dialog form { gap: 18px; }
 @media (min-width: 900px) { .menu { grid-auto-rows: 54px; row-gap: 6px; } main { padding-top: 20px; } .topo .dir { gap: 10px; } }
 
 /* entrada e conta */
-body.deslogado .perfil, body.deslogado [data-acao=olho], body.deslogado [data-acao=mais], body.deslogado .menu { display: none; }
+body.deslogado .perfil, body.deslogado .sino, body.deslogado [data-acao=olho], body.deslogado [data-acao=mais], body.deslogado .menu { display: none; }
 body.deslogado { padding-left: 0; padding-bottom: 32px; }
 body.deslogado .topo { margin-left: 0; padding-left: 20px; justify-content: space-between; }
 body.deslogado .topo .marca { position: static; }
@@ -739,3 +739,35 @@ html[data-movimento="reduzido"] #splash { display: none; }
 .sino { position: relative; }
 .sino-n { position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--vermelho); color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; line-height: 1; }
 .sino-n[hidden] { display: none; }
+
+/* entrada no computador: tudo cabe na tela, sem rolar */
+@media (min-width: 900px) {
+  body.deslogado { padding-bottom: 12px; }
+  body.deslogado main { padding-top: 0; }
+  body.deslogado .vitrine { min-height: 0; padding: 32px 40px; }
+  body.deslogado .vitrine h2 { font-size: 40px; }
+  body.deslogado .vit-p { font-size: 16px; }
+  body.deslogado .vit-lista { margin-top: 14px; gap: 8px; }
+  body.deslogado .vit-cards { margin-top: 18px; gap: 10px; }
+  body.deslogado .auth-c { padding: 22px 28px; gap: 12px; }
+  body.deslogado .auth-c h1 { font-size: 26px; }
+  body.deslogado .auth-f { gap: 12px; }
+  body.deslogado .auth input { min-height: 46px; padding-top: 8px; padding-bottom: 8px; }
+  body.deslogado .auth .btn-social, body.deslogado .auth .btn { min-height: 46px; }
+  body.deslogado .sociais { gap: 8px; }
+}
+@media (min-width: 900px) and (max-height: 820px) {
+  body.deslogado .vit-cards { display: none; }
+  body.deslogado .vitrine h2 { font-size: 34px; }
+  body.deslogado .auth-c { padding: 16px 24px; gap: 8px; }
+  body.deslogado .auth-f { gap: 8px; }
+  body.deslogado .auth input, body.deslogado .auth .btn-social, body.deslogado .auth .btn { min-height: 42px; }
+}
+@media (min-width: 900px) {
+  body.deslogado .topo { position: absolute; top: 8px; right: 12px; left: auto; padding: 0; height: auto; background: transparent; box-shadow: none; z-index: 5; }
+  body.deslogado main { padding-top: 12px; }
+  body.deslogado .selos { grid-template-columns: repeat(3, 1fr); }
+  body.deslogado .selos small { display: none; }
+  body.deslogado .selos li { padding: 10px 12px; }
+}
+@media (min-width: 900px) and (max-height: 1100px) { body.deslogado .selos, body.deslogado .auth-seg { display: none; } }
