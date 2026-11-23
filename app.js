@@ -225,7 +225,8 @@
     const cv = q.get('convite');
     if (cv) { history.replaceState(null, '', location.pathname); try { localStorage.setItem(CONVITE, cv); } catch (e) { /* sem armazenamento */ } }
     if (cv && !V.msg) V.msg = 'Você recebeu um convite para compartilhar um espaço. Entre ou crie a sua conta para aceitar.';
-    try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ }
+    /* Link de "criar nova senha" do e-mail: mostra o formulário mesmo que este navegador ainda tenha uma sessão aberta (senão o app abria direto e o link se perdia). */
+    if (!tr) { try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ } }
     if (!USER.logado) await carregarTurnstile();
     render();
     if (USER.logado) { carregarCapturas(); carregarConexoes(); carregarEspaco(); travar(); aceitarConvite(); }

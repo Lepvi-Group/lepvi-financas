@@ -273,6 +273,42 @@ test('dois passos (TOTP): vetores da RFC 6238, ativar, exigir código no login, 
   assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: SENHA_ATUAL }, { semCookie: true })).json.usuario.email, EMAIL, 'sem dois passos volta a entrar direto');
 });
 
+test('redefinir e trocar senha: link não abre sessão, sessões antigas caem, senha nova (com símbolos) entra, antiga não, dois passos continua valendo', async () => {
+  const BASE_SENHA = 'outra-senha-forte-33';
+  const P1 = 'Nova#Senha 2026çã!'; const P2 = 'Outra#Troca 2027ñ?';
+  const php = (cod) => execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_2fa.php"; ' + cod], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite::memory:', LEPVI_FINANCAS_ESTADO: DEV } }).toString().trim();
+  const cod = (seg, delta = 0) => php('echo totp_codigo("' + seg + '", intdiv(time(), 30) + ' + delta + ');');
+  const H = { 'Content-Type': 'application/json', 'X-Lepvi': 'financas' };
+
+  assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: BASE_SENHA }, { semCookie: true })).status, 200);
+  await chamar('esqueci', { email: EMAIL }, { semCookie: true });
+  const t1 = ultimoToken('redefinir');
+  const bruto = await fetch(BASE + '?a=redefinir', { method: 'POST', headers: H, body: JSON.stringify({ token: t1, senha: P1 }) });
+  assert.strictEqual(bruto.status, 200);
+  assert.strictEqual(bruto.headers.get('set-cookie'), null, 'o link de redefinição nunca abre sessão');
+  assert.strictEqual((await chamar('eu', null, { metodo: 'GET' })).status, 401, 'a sessão antiga caiu (é o "desconectou")');
+  assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: BASE_SENHA }, { semCookie: true })).status, 401, 'a senha antiga não entra mais');
+  assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: P1 })).status, 200, 'a senha nova entra');
+  assert.strictEqual((await chamar('eu', null, { metodo: 'GET' })).status, 200);
+
+  assert.strictEqual((await chamar('mudar_senha', { atual: P1, nova: P2 })).status, 200);
+  assert.strictEqual((await chamar('eu', null, { metodo: 'GET' })).status, 200, 'quem troca a senha continua logado neste aparelho');
+  assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: P1 }, { semCookie: true })).status, 401, 'a senha anterior não entra');
+  assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: P2 })).status, 200);
+
+  const ini = (await chamar('totp_iniciar', {})).json;
+  const at = await chamar('totp_ativar', { codigo: cod(ini.segredo) }); assert.strictEqual(at.status, 200);
+  await chamar('esqueci', { email: EMAIL }, { semCookie: true });
+  const t2 = ultimoToken('redefinir');
+  const br2 = await fetch(BASE + '?a=redefinir', { method: 'POST', headers: H, body: JSON.stringify({ token: t2, senha: BASE_SENHA }) });
+  assert.strictEqual(br2.status, 200); assert.strictEqual(br2.headers.get('set-cookie'), null);
+  const l = await chamar('entrar', { email: EMAIL, senha: BASE_SENHA }, { semCookie: true });
+  assert.strictEqual(l.json.passo2, true, 'mesmo depois de redefinir a senha, o código do celular continua sendo exigido'); assert.ok(!l.json.usuario);
+  const ok = await chamar('entrar_2fa', { ticket: l.json.ticket, codigo: at.json.reservas[0] }, { semCookie: true }); assert.strictEqual(ok.status, 200);
+  const off = await chamar('totp_gerenciar', { acao: 'desativar', senha: BASE_SENHA, codigo: at.json.reservas[1] });
+  assert.strictEqual(off.status, 200, JSON.stringify(off.json));
+});
+
 test('cadastro fechado por padrão: sem a chave de abrir, ninguém cria conta (e-mail nem Google/Microsoft) e a tela esconde o convite', async () => {
   const php = (env, cod) => execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_oauth.php"; ' + cod], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'fechado.sqlite'), LEPVI_FINANCAS_ESTADO: path.join(DEV, 'estado-fechado'), LEPVI_FINANCAS_CADASTRO: env } }).toString().trim();
   assert.strictEqual(php('', 'echo json_encode(cadastro_aberto());'), 'false');
