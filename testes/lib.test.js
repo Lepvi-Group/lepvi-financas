@@ -165,3 +165,25 @@ test('contasDoMes: junta boletos, contas fixas e faturas do mês, com o que já 
   assert.strictEqual(r.pago, 150); assert.strictEqual(r.total, r.pago + r.falta);
   assert.ok(r.itens.some((i) => i.tipo === 'fatura' && i.valor === 200));
 });
+
+test('sobra por dia: divide o balanço previsto pelos dias que faltam, só no mês atual', () => {
+  assert.deepStrictEqual(F.sobraPorDia({ saldo: 300 }, '2026-11', '2026-11-21'), { restam: 10, porDia: 30, negativo: false });
+  assert.strictEqual(F.sobraPorDia({ saldo: 300 }, '2026-10', '2026-11-21'), null);
+  assert.deepStrictEqual(F.sobraPorDia({ saldo: -50 }, '2026-11', '2026-11-30'), { restam: 1, porDia: 0, negativo: true });
+});
+test('assinaturas: acha cobrança mensal parecida, ignora parcelas e as que acabaram', () => {
+  const mk = (desc, mes, valor) => ({ tipo: 'despesa', desc, valor, data: `${mes}-05`, categoria: 'Assinaturas', conta: 'a' });
+  const l = [mk('Netflix', '2026-08', 39.9), mk('NETFLIX', '2026-09', 39.9), mk('Netflix', '2026-10', 41.9), mk('Netflix', '2026-11', 41.9),
+    mk('Celular 1/10', '2026-09', 200), mk('Celular 2/10', '2026-10', 200), mk('Celular 3/10', '2026-11', 200),
+    mk('Academia', '2026-01', 100), mk('Academia', '2026-02', 100), mk('Academia', '2026-03', 100), mk('Mercado', '2026-10', 80)];
+  const a = F.assinaturas(l, '2026-11-20');
+  assert.strictEqual(a.length, 1);
+  assert.deepStrictEqual([a[0].desc, a[0].valor, a[0].meses, a[0].porAno], ['Netflix', 41.9, 4, 502.8]);
+});
+test('juros compostos com aporte e desafio das 52 semanas', () => {
+  assert.deepStrictEqual(F.jurosCompostos(0, 100, 0, 12), { total: 1200, aportado: 1200, juros: 0 });
+  const j = F.jurosCompostos(1000, 100, 1, 12);
+  assert.strictEqual(j.aportado, 2200); assert.ok(j.total > 2200 && j.total < 2400);
+  const d = F.desafio52(1);
+  assert.strictEqual(d.semanas.length, 52); assert.strictEqual(d.total, 1378); assert.strictEqual(d.semanas[51].valor, 52);
+});

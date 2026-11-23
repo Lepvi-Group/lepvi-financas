@@ -693,3 +693,12 @@ html[data-contraste="alto"] dialog.confirma { border: 3px solid #000; }
 .dia-nome { display: inline-block; } .dia-nome::first-letter { text-transform: uppercase; }
 
 .versao-app { font-size: 13px; margin: 4px 0 0; opacity: .8; }
+
+/* ferramentas e bloqueio */
+#trava { position: fixed; inset: 0; z-index: 1000; background: var(--papel); display: grid; place-items: center; padding: 20px; }
+.trava-c { display: grid; gap: 14px; width: 100%; max-width: 380px; }
+.trava-c .botoes { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding-bottom: 12px; }
+.trava-c .erro { color: var(--vermelho); min-height: 1.4em; }
+.chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; padding-bottom: 12px; }
+.chips .chip { min-height: 56px; border-radius: 14px; background: var(--sup); box-shadow: inset 0 0 0 1.5px var(--linha); text-align: center; font-size: 13px; padding: 6px; }
+.chips .chip.on { background: var(--verde); color: #fff; box-shadow: none; }

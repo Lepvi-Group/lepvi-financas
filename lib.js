@@ -267,7 +267,50 @@
     return { itens: lista, total, pago, falta: arred(total - pago) };
   }
 
-  const api = { contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  /* Quanto sobra por dia até o fim do mês: balanço previsto ÷ dias que faltam (contando hoje). Só vale para o mês atual. */
+  function sobraPorDia(resumo, mes, hoje = hojeISO()) {
+    if (mesDe(hoje) !== mes) return null;
+    const [a, m] = mes.split('-').map(Number);
+    const restam = new Date(a, m, 0).getDate() - Number(hoje.slice(8, 10)) + 1;
+    return { restam, porDia: arred(Math.max(0, resumo.saldo) / restam), negativo: resumo.saldo < 0 };
+  }
+
+  /* Assinaturas: despesas que se repetem em 3 meses ou mais com valor parecido e ainda ativas (última cobrança há até 2 meses). */
+  function assinaturas(lancs, hoje = hojeISO()) {
+    const semAcento = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const chave = (t) => semAcento(t).toLowerCase().replace(/\d+/g, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+    const grupos = {};
+    lancs.filter((l) => l.tipo === 'despesa' && !l.ignorar && !/\d+\s*\/\s*\d+|parcela/i.test(l.desc || '')).forEach((l) => {
+      const k = chave(l.desc); if (k.length < 3) return;
+      (grupos[k] = grupos[k] || []).push(l);
+    });
+    const limite = somaMes(mesDe(hoje), -2);
+    return Object.values(grupos).map((g) => {
+      const porMes = {}; g.forEach((l) => { const x = porMes[mesDe(l.data)]; if (!x || l.data > x.data) porMes[mesDe(l.data)] = l; });
+      const meses = Object.keys(porMes).sort(); const ult = porMes[meses[meses.length - 1]];
+      const vals = meses.map((k) => porMes[k].valor).sort((a, b) => a - b); const mediana = vals[Math.floor(vals.length / 2)];
+      if (meses.length < 3 || meses[meses.length - 1] < limite || Math.abs(ult.valor - mediana) > mediana * 0.15) return null;
+      return { desc: ult.desc, valor: ult.valor, categoria: ult.categoria, meses: meses.length, ultima: ult.data, porAno: arred(ult.valor * 12) };
+    }).filter(Boolean).sort((a, b) => b.valor - a.valor);
+  }
+
+  /* Juros compostos com aporte mensal (simulador de meta). Taxa em % ao mês. */
+  function jurosCompostos(inicial, aporte, taxaMes, meses) {
+    const i = (Number(taxaMes) || 0) / 100; const n = Math.max(0, Math.round(Number(meses) || 0));
+    const f = Math.pow(1 + i, n);
+    const total = arred((Number(inicial) || 0) * f + (Number(aporte) || 0) * (i ? (f - 1) / i : n));
+    const aportado = arred((Number(inicial) || 0) + (Number(aporte) || 0) * n);
+    return { total, aportado, juros: arred(total - aportado) };
+  }
+
+  /* Desafio das 52 semanas: na semana k guarda k vezes o valor base. */
+  function desafio52(base) {
+    const b = Number(base) || 0; let acum = 0;
+    const semanas = Array.from({ length: 52 }, (_, i) => { acum = arred(acum + b * (i + 1)); return { n: i + 1, valor: arred(b * (i + 1)), acum }; });
+    return { semanas, total: acum };
+  }
+
+  const api = { sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

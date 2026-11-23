@@ -196,7 +196,7 @@
     try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ }
     if (!USER.logado) await carregarTurnstile();
     render();
-    if (USER.logado) carregarCapturas();
+    if (USER.logado) { carregarCapturas(); travar(); }
   }
 
   /* ---------- compras automáticas (avisos do banco) ---------- */
@@ -409,6 +409,7 @@
     <div class="duas"><div class="card kpi"><span class="kpi-t">Receitas do mês</span><b class="pos num">${m(r.receitas)}</b><div class="barra ok" role="img" aria-label="Recebido"><i style="width:${r.receitas ? Math.min(100, (r.recebido / r.receitas) * 100) : 0}%"></i></div><span class="kpi-s">Já recebido: <b class="num">${m(r.recebido)}</b></span></div>
       <div class="card kpi"><span class="kpi-t">Despesas do mês</span><b class="neg num">${m(r.despesas)}</b><div class="barra estourou" role="img" aria-label="Pago"><i style="width:${r.despesas ? Math.min(100, (r.pago / r.despesas) * 100) : 0}%"></i></div><span class="kpi-s">Já pago: <b class="num">${m(r.pago)}</b></span></div></div>
     <div class="card" style="display:flex;justify-content:space-between;align-items:center"><span class="mut">Balanço previsto do mês</span><b class="num ${r.saldo >= 0 ? 'pos' : 'neg'}" style="font-size:20px">${m(r.saldo)}</b></div>
+    ${(() => { const sd = F.sobraPorDia(r, V.mes); return sd ? `<section class="card" data-bloco="diario"><span class="mut">Pode gastar por dia até o fim do mês</span><b class="num ${sd.negativo ? 'neg' : 'pos'}" style="font-size:22px;display:block;margin-top:4px">${sd.negativo ? 'Nada: o mês está no vermelho' : m(sd.porDia)}</b><small class="mut">${sd.negativo ? `Faltam ${m(Math.abs(r.saldo))} para fechar o mês.` : `Sobram ${m(r.saldo)} para ${sd.restam} ${sd.restam === 1 ? 'dia' : 'dias'}, já descontando o que ainda vence.`}</small></section>` : ''; })()}
     <section class="card" data-bloco="pagar"><div class="sec-h"><h2 class="secao">Vencimentos</h2><button class="link" type="button" data-acao="ir-pagar">Ver todas</button></div>
       ${pagar.length ? `<ul class="lista">${pagar.slice(0, 3).map(itemPagar).join('')}</ul>` : '<p class="mut" style="padding:8px 0">Tudo em dia. Nenhum boleto ou fatura pendente. 🎉</p>'}</section>
     ${orc.length ? `<section class="card" data-bloco="orcamento"><h2 class="secao">Atenção no orçamento</h2><ul class="lista">${orc.map(rowOrc).join('')}</ul></section>` : ''}
@@ -592,6 +593,11 @@
       + linha({ icone: LI.chave, titulo: 'Conectar avisos do banco', desc: 'Chave e passo a passo, sem dar a senha do banco', attrs: 'data-acao="captura-config"' }))}
     ${grupo('Divisão de despesas',
       linha({ icone: LI.copia, titulo: 'Quem deve a sua parte', desc: (() => { const s = F.saldosDivisao(d.lancs); return s.length ? `${s.length} pessoa(s) a acertar · ${m(s.reduce((t, x) => t + x.total, 0))}` : 'Despesas divididas com casal ou sócios'; })(), attrs: 'data-acao="divisoes"' }))}
+    ${grupo('Ferramentas',
+      linha({ icone: LI.bell, titulo: 'Assinaturas', desc: 'Cobranças que se repetem todo mês', attrs: 'data-acao="assinaturas"' })
+      + linha({ icone: LI.brilho, titulo: 'Simulador de juros e metas', desc: 'Quanto vira se guardar todo mês', attrs: 'data-acao="simulador"' })
+      + linha({ icone: LI.copia, titulo: 'Desafio das 52 semanas', desc: 'Guarde um pouco mais a cada semana', attrs: 'data-acao="desafio"' })
+      + linha({ icone: LI.chave, titulo: 'Bloqueio com PIN', desc: PIN.ativo() ? 'Ligado neste aparelho' : 'Peça um PIN ao abrir o app', attrs: 'data-acao="pin"' }))}
     ${grupo('Seus dados',
       linha({ tag: 'label', icone: LI.subir, titulo: 'Importar extrato ou fatura', desc: 'Arquivo OFX ou CSV do seu banco', dentro: '<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden>' })
       + linha({ icone: LI.copia, titulo: 'Cópia de segurança', desc: 'Baixar um arquivo com seus lançamentos', attrs: 'data-acao="backup"' })
@@ -640,7 +646,7 @@
       f.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => { const a = b.dataset.sheet; dlg.close(); if (a === 'perfil' || a === 'mais') ir(a); else if (a === 'acess') formAcess(); else sair(); }));
     });
   }
-  async function sair() { try { await api('sair', {}); } catch (e) { /* já saiu */ } USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Você saiu. Até logo!'; render(); window.scrollTo(0, 0); }
+  async function sair() { try { await api('sair', {}); } catch (e) { /* já saiu */ } PIN.remover(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Você saiu. Até logo!'; render(); window.scrollTo(0, 0); }
   async function processarFoto(arq) {
     if (!arq || !/^image\//.test(arq.type)) { aviso('Escolha um arquivo de imagem (JPG, PNG ou WebP).'); return; }
     try {
@@ -940,8 +946,77 @@
       (fd) => { const v = F.arred(F.numeroBR(fd.get('v'))); if (!(v > 0)) { aviso('Informe um valor.'); return false; } o.guardado = F.arred(o.guardado + v); (o.aportes = o.aportes || []).push({ data: F.hojeISO(), valor: v }); salvar(); render(); aviso(o.guardado >= o.meta ? 'Objetivo alcançado! 🎉' : 'Valor guardado.'); });
   }
 
+  /* ---------- ferramentas (como Mobills e Organizze) ---------- */
+  function formAssinaturas() {
+    const a = F.assinaturas(D().lancs); const mes = a.reduce((t, x) => t + x.valor, 0);
+    abrir('Assinaturas', a.length ? `<p class="mut">O app achou ${a.length} ${a.length === 1 ? 'cobrança' : 'cobranças'} que se repetem todo mês. Somam <b class="num">${m(F.arred(mes))}</b> por mês, ou <b class="num">${m(F.arred(mes * 12))}</b> por ano. Vale rever se você ainda usa todas.</p>
+      <ul class="lista">${a.map((x) => { const c = F.catInfo(x.categoria, 'despesa'); return `<li><div class="item"><span class="ic" style="background:${c.cor}22" aria-hidden="true">${c.icone}</span><span class="txt"><strong>${esc(x.desc)}</strong><span>${x.meses} meses · ${m(x.porAno)} por ano</span></span><b class="val num">${m(x.valor)}</b></div></li>`; }).join('')}</ul>`
+      : '<p class="mut">Ainda não achei cobranças mensais repetidas. Elas aparecem aqui depois de três meses com o mesmo nome e valor parecido.</p>', null);
+  }
+  function formSimulador() {
+    abrir('Simulador de juros e metas', `<p class="mut">Veja quanto o seu dinheiro vira guardando um valor todo mês. É uma conta de exemplo: o rendimento real muda.</p>
+      ${campo('Já tenho (R$)', '<input name="ini" inputmode="decimal" placeholder="0,00">')}${campo('Guardo por mês (R$)', '<input name="apo" inputmode="decimal" placeholder="0,00">')}
+      ${campo('Rendimento ao mês (%)', '<input name="tx" inputmode="decimal" value="0,8">')}${campo('Por quantos meses', '<input name="n" inputmode="numeric" value="24">')}
+      <div class="card" id="sim-res" role="status" aria-live="polite"></div>`, null, (f) => {
+      const calc = () => {
+        const r = F.jurosCompostos(F.numeroBR(f.ini.value), F.numeroBR(f.apo.value), F.numeroBR(f.tx.value), f.n.value);
+        $('#sim-res', f).innerHTML = `<small class="mut">Você teria</small><b class="num pos" style="font-size:24px;display:block">${F.brl(r.total)}</b><small class="mut">Guardado por você: ${F.brl(r.aportado)} · Rendimento: ${F.brl(r.juros)}</small>`;
+      };
+      f.addEventListener('input', calc); calc();
+    });
+  }
+  function formDesafio() {
+    const salvo = D().desafio || { base: 5, feitas: [] }; const feitas = new Set(salvo.feitas);
+    const desenha = (f) => {
+      const d = F.desafio52(salvo.base); const guardado = F.arred(d.semanas.filter((s) => feitas.has(s.n)).reduce((t, s) => t + s.valor, 0));
+      $('#des-res', f).innerHTML = `<small class="mut">Meta do ano: ${F.brl(d.total)}</small><b class="num pos" style="font-size:22px;display:block">${F.brl(guardado)} guardados</b><small class="mut">${feitas.size} de 52 semanas feitas</small>`;
+      $('#des-sem', f).innerHTML = d.semanas.map((s) => `<button type="button" class="chip${feitas.has(s.n) ? ' on' : ''}" data-sem="${s.n}" aria-pressed="${feitas.has(s.n)}" aria-label="Semana ${s.n}, ${F.brl(s.valor)}">Semana ${s.n}<br><b class="num">${F.brl(s.valor)}</b></button>`).join('');
+    };
+    abrir('Desafio das 52 semanas', `<p class="mut">Na semana 1 você guarda o valor base, na semana 2 guarda o dobro, e assim até a 52. Toque na semana para marcar como feita.</p>
+      ${campo('Valor base (R$)', `<input name="base" inputmode="decimal" value="${String(salvo.base).replace('.', ',')}">`)}<div class="card" id="des-res" role="status" aria-live="polite"></div><div id="des-sem" class="chips"></div>`, null, (f) => {
+      desenha(f);
+      f.base.addEventListener('input', () => { const v = F.numeroBR(f.base.value); if (v > 0) { salvo.base = v; D().desafio = salvo; salvar(); desenha(f); } });
+      $('#des-sem', f).addEventListener('click', (ev) => { const b = ev.target.closest('[data-sem]'); if (!b) return; const n = +b.dataset.sem; if (feitas.has(n)) feitas.delete(n); else feitas.add(n); salvo.feitas = [...feitas]; D().desafio = salvo; salvar(); desenha(f); });
+    });
+  }
+
+  /* ---------- bloqueio com PIN (só neste aparelho; o PIN nunca vai para o servidor) ---------- */
+  const PIN = (() => {
+    const K = 'lepvi-financas-pin'; let falhas = 0; let saiu = 0;
+    const ler = () => { try { return JSON.parse(localStorage.getItem(K)); } catch (e) { return null; } };
+    const hash = async (pin, sal) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sal + ':' + pin)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    return {
+      ativo: () => !!ler(),
+      async definir(pin) { const sal = Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem(K, JSON.stringify({ sal, h: await hash(pin, sal) })); return true; } catch (e) { return false; } },
+      remover: () => { try { localStorage.removeItem(K); } catch (e) { /* sem armazenamento */ } },
+      async conferir(pin) { const p = ler(); if (!p) return true; if (await hash(pin, p.sal) === p.h) { falhas = 0; return true; } falhas += 1; return false; },
+      falhas: () => falhas,
+      marcarSaida: () => { saiu = Date.now(); }, ausenteHa: () => (saiu ? Date.now() - saiu : 0),
+    };
+  })();
+  function travar() {
+    if (!PIN.ativo() || !USER.logado || document.getElementById('trava')) return;
+    const t = document.createElement('div'); t.id = 'trava'; t.setAttribute('role', 'dialog'); t.setAttribute('aria-modal', 'true'); t.setAttribute('aria-labelledby', 'trava-t');
+    t.innerHTML = `<form class="trava-c"><h2 id="trava-t">App bloqueado 🔒</h2><p class="mut">Digite o seu PIN para continuar.</p><label class="campo"><span>PIN</span><input name="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="8" required></label><p id="trava-e" class="erro" role="alert"></p><div class="botoes"><button class="btn" type="submit">Desbloquear</button><button class="link" type="button" data-esqueci>Esqueci o PIN (sair da conta)</button></div></form>`;
+    document.body.appendChild(t); t.querySelector('input').focus();
+    t.querySelector('form').addEventListener('submit', async (ev) => {
+      ev.preventDefault(); const f = ev.target;
+      if (await PIN.conferir(f.pin.value)) { t.remove(); return; }
+      f.pin.value = ''; $('#trava-e', t).textContent = PIN.falhas() >= 5 ? 'PIN errado várias vezes. Use "Esqueci o PIN" para entrar de novo com a senha.' : 'PIN errado. Tente de novo.'; f.pin.focus();
+    });
+    t.querySelector('[data-esqueci]').addEventListener('click', () => { PIN.remover(); t.remove(); sair(); });
+  }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) PIN.marcarSaida(); else if (PIN.ausenteHa() > 60000) travar(); });
+  function formPin() {
+    const on = PIN.ativo();
+    abrir('Bloqueio com PIN', on ? `<p class="mut">O bloqueio está ligado neste aparelho. O app pede o PIN quando você volta depois de 1 minuto fora.</p><button class="btn sec" type="button" data-troca>Trocar o PIN</button><button class="btn sec" type="button" data-tirar>Desligar o bloqueio</button>`
+      : `<p class="mut">Crie um PIN de 4 a 8 números. O app pede o PIN ao abrir e quando você volta depois de 1 minuto fora. O PIN fica só neste aparelho.</p>${campo('Novo PIN', '<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" required autocomplete="off">')}<button class="btn" type="submit">Ligar o bloqueio</button>`,
+    on ? null : async (fd) => { const v = String(fd.get('pin') || ''); if (!/^\d{4,8}$/.test(v)) { aviso('Use de 4 a 8 números.'); return false; } if (await PIN.definir(v)) { aviso('Bloqueio ligado.'); render(); } else aviso('Este aparelho não deixou guardar o PIN.'); },
+    (f) => { const t = f.querySelector('[data-tirar]'); if (t) t.addEventListener('click', () => { PIN.remover(); dlg.close(); aviso('Bloqueio desligado.'); render(); }); const c = f.querySelector('[data-troca]'); if (c) c.addEventListener('click', () => { PIN.remover(); dlg.close(); formPin(); }); });
+  }
+
   function formPersonalizar() {
-    const blocos = [['pagar', 'Vencimentos'], ['orcamento', 'Atenção no orçamento'], ['categorias', 'Despesas por categoria'], ['cartoes', 'Cartões'], ['ultimos', 'Últimos lançamentos']];
+    const blocos = [['diario', 'Quanto posso gastar por dia'], ['pagar', 'Vencimentos'], ['orcamento', 'Atenção no orçamento'], ['categorias', 'Despesas por categoria'], ['cartoes', 'Cartões'], ['ultimos', 'Últimos lançamentos']];
     S.inicio = S.inicio || {};
     abrir('Personalizar tela inicial', `<p class="mut">Escolha o que você quer ver no Início. O saldo e o resumo do mês sempre aparecem.</p>${blocos.map(([k, t]) => troca('b-' + k, t, S.inicio[k] !== false)).join('')}`, null, (f) => {
       f.addEventListener('change', () => { blocos.forEach(([k]) => { S.inicio[k] = f['b-' + k].checked; }); salvar(); render(); });
@@ -1049,6 +1124,10 @@
     const d = D(); const id = t.dataset.id; const a = t.dataset.acao;
     const acoes = {
       acess: () => formAcess(),
+      assinaturas: () => formAssinaturas(),
+      simulador: () => formSimulador(),
+      desafio: () => formDesafio(),
+      pin: () => formPin(),
       revisar: () => formRevisar(),
       divisoes: () => formDivisoes(),
       'captura-config': () => formCaptura(),
