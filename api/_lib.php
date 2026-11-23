@@ -76,6 +76,9 @@ function db(): PDO
     }
     try { $pdo->query('SELECT 1 FROM conexoes LIMIT 1'); } catch (Throwable $e) { foreach (['CREATE TABLE IF NOT EXISTS conexoes (id VARCHAR(32) NOT NULL PRIMARY KEY, usuario_id VARCHAR(32) NOT NULL, provedor VARCHAR(40) NOT NULL, item_id VARCHAR(120) NOT NULL, instituicao VARCHAR(80) NOT NULL, status VARCHAR(20) NOT NULL, ultima_sync INTEGER NULL, criado_em INTEGER NOT NULL)', 'CREATE TABLE IF NOT EXISTS of_vistos (usuario_id VARCHAR(32) NOT NULL, h VARCHAR(64) NOT NULL, criado_em INTEGER NOT NULL, PRIMARY KEY (usuario_id, h))'] as $sql) { try { $pdo->exec($sql); } catch (Throwable $e2) { /* já existe */ } } }
     try { $pdo->query('SELECT 1 FROM of_pluggy LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('CREATE TABLE IF NOT EXISTS of_pluggy (usuario_id VARCHAR(32) NOT NULL PRIMARY KEY, conteudo LONGTEXT NOT NULL, criado_em INTEGER NOT NULL)'); } catch (Throwable $e2) { /* já existe */ } }
+    try { $pdo->query('SELECT totp_ativo FROM usuarios LIMIT 1'); } catch (Throwable $e) {
+        foreach (['ALTER TABLE usuarios ADD COLUMN totp_segredo LONGTEXT NULL', 'ALTER TABLE usuarios ADD COLUMN totp_ativo INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE usuarios ADD COLUMN totp_passo INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE usuarios ADD COLUMN totp_reservas LONGTEXT NULL'] as $sql) { try { $pdo->exec($sql); } catch (Throwable $e2) { /* já existe */ } }
+    }
     try { $pdo->query('SELECT 1 FROM membros LIMIT 1'); } catch (Throwable $e) { foreach (['CREATE TABLE IF NOT EXISTS membros (usuario_id VARCHAR(32) NOT NULL PRIMARY KEY, dono_id VARCHAR(32) NOT NULL, entrou_em INTEGER NOT NULL)', 'CREATE INDEX idx_membros_dono ON membros (dono_id)'] as $sql) { try { $pdo->exec($sql); } catch (Throwable $e2) { /* já existe */ } } }
     try { $pdo->query('SELECT resumo FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN resumo INTEGER NOT NULL DEFAULT 1'); } catch (Throwable $e2) { /* já existe */ } }
     try { $pdo->query('SELECT lembrete FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN lembrete INTEGER NOT NULL DEFAULT 0'); } catch (Throwable $e2) { /* já existe */ } }
@@ -196,7 +199,7 @@ function validar_foto(string $d): string
 function exigir_usuario(): array { return usuario_atual() ?? erro('Entre para continuar.', 401); }
 function usuario_publico(array $u): array
 {
-    return ['email' => $u['email'], 'nome' => $u['nome'], 'foto' => $u['foto'] ?? null, 'avisos' => (bool) $u['avisos'], 'resumo' => (bool) ($u['resumo'] ?? 1), 'lembrete' => (bool) ($u['lembrete'] ?? 0), 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao'], 'criado_em' => (int) $u['criado_em']];
+    return ['email' => $u['email'], 'nome' => $u['nome'], 'foto' => $u['foto'] ?? null, 'avisos' => (bool) $u['avisos'], 'resumo' => (bool) ($u['resumo'] ?? 1), 'lembrete' => (bool) ($u['lembrete'] ?? 0), 'dois_passos' => !empty($u['totp_ativo']), 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao'], 'criado_em' => (int) $u['criado_em']];
 }
 /* Espaço compartilhado: quem entrou no espaço de outra pessoa lê e grava os dados dela (a conta de quem convidou é a "dona" dos dados). */
 function espaco_dono(string $uid): string

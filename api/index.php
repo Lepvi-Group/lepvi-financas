@@ -3,6 +3,7 @@ declare(strict_types=1);
 /* Lepvi Finanças: API. Uma ação por chamada: /api/?a=entrar etc. Produto separado do site e do Hub. */
 require __DIR__ . '/_oauth.php';
 require __DIR__ . '/_openfinance.php';
+require __DIR__ . '/_2fa.php';
 
 $acao = (string) ($_GET['a'] ?? '');
 $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -136,12 +137,25 @@ try {
             $u = $s->fetch() ?: null;
             if (!senha_confere($u, $senha)) { registrar_tentativa($kE); registrar_tentativa($kI); erro('E-mail ou senha incorretos.', 401); }
             if (!$u['email_verificado']) erro('Confirme seu e-mail pelo link que enviamos antes de entrar.', 403);
+            // Verificação em dois passos: a sessão só abre depois do código (ticket assinado vale 5 minutos)
+            if (totp_ativo($u)) resp(['passo2' => true, 'ticket' => assinar(['u' => $u['id'], 'a' => '2fa'], 300)]);
             if (password_needs_rehash($u['senha_hash'], defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT)) {
                 db()->prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?')->execute([gerar_hash($senha), $u['id']]);
             }
             db()->prepare('UPDATE usuarios SET ultimo_login = ? WHERE id = ?')->execute([agora(), $u['id']]);
             abrir_sessao($u['id']);
             resp(['usuario' => usuario_publico($u)]);
+        }
+        case 'entrar_2fa': {
+            $t = ler_assinado((string) ($b['ticket'] ?? ''));
+            if (!$t || ($t['a'] ?? '') !== '2fa') erro('O tempo acabou. Entre de novo com e-mail e senha.', 401);
+            $kU = '2fa:u:' . $t['u']; $kI = '2fa:i:' . ip_hash();
+            if (limite_estourou($kU, 5, 900) || limite_estourou($kI, 30, 900)) erro('Muitas tentativas. Espere 15 minutos e tente de novo.', 429);
+            $usr = totp_usuario((string) $t['u']);
+            if (!$usr || !totp_ativo($usr) || !totp_validar_usuario($usr, (string) ($b['codigo'] ?? ''))) { registrar_tentativa($kU); registrar_tentativa($kI); erro('Código incorreto ou vencido. Confira o código do app e tente de novo.', 401); }
+            db()->prepare('UPDATE usuarios SET ultimo_login = ? WHERE id = ?')->execute([agora(), $usr['id']]);
+            abrir_sessao($usr['id']);
+            resp(['usuario' => usuario_publico(totp_usuario((string) $usr['id']))]);
         }
         case 'sair': {
             $t = $_COOKIE['lf_sessao'] ?? '';
@@ -230,6 +244,39 @@ try {
             $id = novo_id();
             db()->prepare('INSERT INTO conexoes (id, usuario_id, provedor, item_id, instituicao, status, criado_em) VALUES (?,?,?,?,?,?,?)')->execute([$id, $dono, of_config()['provedor'], $item, $inst, 'ativa', agora()]);
             resp(['id' => $id]);
+        }
+        case 'totp_iniciar': {
+            if (totp_ativo($u)) erro('A verificação em dois passos já está ativa.', 422);
+            if (limite_estourou('totpi:' . $u['id'], 10, 3600)) erro('Muitas tentativas. Tente mais tarde.', 429);
+            registrar_tentativa('totpi:' . $u['id']);
+            $seg = totp_novo_segredo();
+            db()->prepare('UPDATE usuarios SET totp_segredo = ?, totp_ativo = 0, totp_passo = 0, totp_reservas = NULL WHERE id = ?')->execute([cifrar($seg), $u['id']]);
+            resp(['segredo' => $seg, 'uri' => totp_uri($u['email'], $seg)]);
+        }
+        case 'totp_ativar': {
+            $atual = totp_usuario($u['id']);
+            if (!$atual || totp_ativo($atual) || empty($atual['totp_segredo'])) erro('Comece pela chave: toque em ativar de novo.', 422);
+            if (limite_estourou('totpa:' . $u['id'], 8, 900)) erro('Muitas tentativas. Espere 15 minutos.', 429);
+            $seg = (string) decifrar((string) $atual['totp_segredo']);
+            $p = totp_conferir_passo($seg, (string) ($b['codigo'] ?? ''), 0);
+            if ($p === null) { registrar_tentativa('totpa:' . $u['id']); erro('Código incorreto. Confira se o relógio do celular está certo e digite o código atual do app.', 422); }
+            [$mostrar, $hashes] = totp_novos_reservas();
+            db()->prepare('UPDATE usuarios SET totp_ativo = 1, totp_passo = ?, totp_reservas = ? WHERE id = ?')->execute([$p, json_encode($hashes), $u['id']]);
+            resp(['reservas' => $mostrar, 'usuario' => usuario_publico(totp_usuario($u['id']))]);
+        }
+        case 'totp_gerenciar': {
+            // desativar ou gerar novos códigos de reserva: pede a senha e um código atual
+            $atual = totp_usuario($u['id']);
+            if (!$atual || !totp_ativo($atual)) erro('A verificação em dois passos não está ativa.', 422);
+            if (limite_estourou('totpg:' . $u['id'], 8, 900)) erro('Muitas tentativas. Espere 15 minutos.', 429);
+            if (!senha_confere($atual, (string) ($b['senha'] ?? '')) || !totp_validar_usuario($atual, (string) ($b['codigo'] ?? ''))) { registrar_tentativa('totpg:' . $u['id']); erro('Senha ou código incorretos.', 401); }
+            if (($b['acao'] ?? '') === 'desativar') {
+                db()->prepare('UPDATE usuarios SET totp_ativo = 0, totp_segredo = NULL, totp_passo = 0, totp_reservas = NULL WHERE id = ?')->execute([$u['id']]);
+                resp(['usuario' => usuario_publico(totp_usuario($u['id']))]);
+            }
+            [$mostrar, $hashes] = totp_novos_reservas();
+            db()->prepare('UPDATE usuarios SET totp_reservas = ? WHERE id = ?')->execute([json_encode($hashes), $u['id']]);
+            resp(['reservas' => $mostrar]);
         }
         case 'pluggy_conectar': {
             // Meu Pluggy (uso pessoal): guarda o Client ID/Secret cifrados, confere no Pluggy e já traz os últimos 30 dias para "Para revisar"

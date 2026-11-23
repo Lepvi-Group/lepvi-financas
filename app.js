@@ -135,6 +135,9 @@
       corpo = `${social('Cadastrar')}<form id="auth" class="auth-f" novalidate>${campo('Seu nome', '<input name="nome" required maxlength="120" autocomplete="name">')}${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campoSenha('Senha (mínimo 10 caracteres)', 'name="senha" type="password" required minlength="10" autocomplete="new-password"')}${mostrar}
         <label class="troca"><span>Li e aceito a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> e os <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a></span><input type="checkbox" role="switch" name="aceite" required></label>${erro}
         <button class="btn bloco" type="submit">Criar conta</button></form><p class="mut">Já tem conta? ${link('auth-entrar', 'Entrar')}</p>`;
+    } else if (modo === 'dois-passos') {
+      titulo = 'Código de verificação';
+      corpo = `<form id="auth" class="auth-f" novalidate><p class="mut">Abra o app autenticador no celular e digite o código de 6 dígitos do Lepvi Finanças. Perdeu o celular? Use um código de reserva.</p>${campo('Código', '<input name="codigo" required autocomplete="one-time-code" inputmode="text" maxlength="12" autofocus>')}<p class="erro" role="alert" id="auth-erro" tabindex="-1" hidden></p><button class="btn bloco" type="submit">Confirmar</button></form><p class="mut">${link('auth-entrar', 'Voltar')}</p>`;
     } else if (modo === 'esqueci') {
       titulo = 'Esqueci minha senha';
       corpo = `<form id="auth" class="auth-f" novalidate><p class="mut">Informe o e-mail da sua conta. Se ele existir, enviamos um link para criar uma nova senha.</p>${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${erro}<button class="btn bloco" type="submit">Enviar link</button></form><p class="mut">${link('auth-entrar', 'Voltar para entrar')}</p>`;
@@ -177,7 +180,8 @@
     if (V.ts && ['entrar', 'cadastro', 'esqueci'].includes(V.auth) && !V.tsTok) { er.textContent = 'Confirme que você não é um robô (marque a caixa acima do botão).'; er.hidden = false; er.focus(); return; }
     const v = Object.fromEntries(new FormData(f)); const rotulo = btn.textContent; btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = V.auth === 'entrar' ? 'Entrando…' : 'Enviando…';
     try {
-      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha, turnstile: V.tsTok }); USER.logado = true; USER.info = r.usuario; await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
+      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha, turnstile: V.tsTok }); if (r.passo2) { V.auth = 'dois-passos'; V.ticket = r.ticket; V.msg = ''; render(); return; } USER.logado = true; USER.info = r.usuario; await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
+      else if (V.auth === 'dois-passos') { const r = await api('entrar_2fa', { ticket: V.ticket, codigo: v.codigo }); V.ticket = ''; USER.logado = true; USER.info = r.usuario; await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.auth = 'entrar'; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
       else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: !!v.aceite, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: !!v.aceite }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
       else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
@@ -213,7 +217,7 @@
     const oa = q.get('oauth'); const op = q.get('p');
     if (oa) history.replaceState(null, '', location.pathname);
     const NOME_P = op === 'google' ? 'Google' : 'Microsoft';
-    const MENS = { 'nao-configurado': `Entrar com ${NOME_P} ainda não está ativo. Use seu e-mail e senha por enquanto.`, erro: 'Não foi possível entrar. Tente de novo.', cancelado: 'Você cancelou a entrada.', muitas: 'Muitas tentativas. Espere alguns minutos.', 'erro-conta-existente': 'Já existe uma conta com este e-mail. Entre com a senha e tente de novo.', 'erro-confirme-email': 'Confirme seu e-mail pelo link que enviamos antes de entrar.', 'erro-sem-email': 'O provedor não informou seu e-mail. Use e-mail e senha.', 'erro-dados': 'Não foi possível entrar. Tente de novo.' };
+    const MENS = { 'nao-configurado': `Entrar com ${NOME_P} ainda não está ativo. Use seu e-mail e senha por enquanto.`, erro: 'Não foi possível entrar. Tente de novo.', cancelado: 'Você cancelou a entrada.', muitas: 'Muitas tentativas. Espere alguns minutos.', 'erro-2fa': 'Sua conta tem verificação em dois passos. Entre com e-mail, senha e o código do app autenticador.', 'erro-conta-existente': 'Já existe uma conta com este e-mail. Entre com a senha e tente de novo.', 'erro-confirme-email': 'Confirme seu e-mail pelo link que enviamos antes de entrar.', 'erro-sem-email': 'O provedor não informou seu e-mail. Use e-mail e senha.', 'erro-dados': 'Não foi possível entrar. Tente de novo.' };
     if (oa === 'aceite') { try { V.pend = await api('oauth_pendente'); V.auth = 'oauth-aceite'; } catch (e) { V.msg = e.message; V.msgErro = true; } }
     else if (oa && oa !== 'ok') { V.msg = MENS[oa] || MENS.erro; V.msgErro = true; }
     if (tv) { try { await api('verificar', { token: tv }); V.msg = 'E-mail confirmado! Agora é só entrar.'; } catch (e) { V.msg = e.message; } }
@@ -745,6 +749,7 @@
       + linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' }))}
     ${grupo('Segurança e privacidade',
       linha({ icone: LI.chave, titulo: 'Alterar senha', attrs: 'data-acao="senha"' })
+      + linha({ icone: LI.escudo, titulo: 'Verificação em dois passos', desc: u.dois_passos ? 'Ativada: pede um código do celular ao entrar' : 'Recomendado: pede um código do celular ao entrar', fim: u.dois_passos ? '<span class="selo ok">Ativa</span>' : '›', attrs: 'data-acao="dois-passos"' })
       + linha({ tag: 'a', icone: LI.baixar, titulo: 'Baixar meus dados', desc: 'Arquivo completo da sua conta (LGPD)', attrs: 'href="api/?a=exportar" download' })
       + linha({ tag: 'a', icone: LI.escudo, titulo: 'Política de Privacidade', attrs: 'href="privacidade.html" target="_blank" rel="noopener"' }))}
     ${grupo('Zona de risco', linha({ icone: LI.lixo, titulo: 'Excluir meu cadastro', desc: 'Apaga o cadastro e todos os dados, para sempre', perigo: true, attrs: 'data-acao="excluir-conta"' }))}
@@ -1337,6 +1342,49 @@
       f.addEventListener('change', () => { blocos.forEach(([k]) => { S.inicio[k] = f['b-' + k].checked; }); salvar(); render(); });
     });
   }
+  /* ---------- verificação em dois passos (app autenticador) ---------- */
+  function copiarTexto(txt) { return navigator.clipboard.writeText(txt).then(() => aviso('Copiado.')).catch(() => aviso('Selecione e copie manualmente.')); }
+  function d2Reservas(lista) {
+    abrir('Guarde seus códigos de reserva', `<p class="mut">Se perder o celular, cada código abaixo entra <b>uma vez</b> no lugar do código do app. Eles <b>não aparecem de novo</b>: guarde num lugar seguro (gerenciador de senhas ou papel).</p>
+      <div class="card"><div class="d2-reservas" id="d2-lista">${lista.map((c) => `<code>${esc(c)}</code>`).join('')}</div></div>
+      <div class="botoes rodape-form"><button class="btn sec" type="button" id="d2-copiar">Copiar todos</button><button class="btn" type="submit">Guardei os códigos</button></div>`, () => { render(); aviso('Verificação em dois passos ativada.'); }, (f) => {
+      $('#d2-copiar', f).onclick = () => copiarTexto(lista.join('\n'));
+    });
+  }
+  function d2Chave(r) {
+    abrir('Adicionar no app autenticador', `<ol class="cap-ol"><li>No celular, abra o app autenticador e escolha <b>Adicionar conta</b> (ou <b>+</b>) → <b>Inserir chave de configuração</b>.</li><li>Digite o nome <b>Lepvi Finanças</b> e a chave abaixo (tipo: baseada em tempo).</li><li>Digite aqui o código de 6 dígitos que o app mostrar.</li></ol>
+      <section class="card cap-passo"><h3>Sua chave</h3><p class="d2-chave" id="d2-seg">${esc(r.segredo.match(/.{1,4}/g).join(' '))}</p><div class="botoes"><button class="btn sec mini" type="button" id="d2-cp">Copiar chave</button><a class="btn sec mini" href="${esc(r.uri)}">Abrir no app autenticador (celular)</a></div></section>
+      <label class="campo"><span>Código de 6 dígitos</span><input name="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>
+      <div class="botoes rodape-form"><button class="btn" type="submit">Ativar</button></div>`, (fd) => {
+      const bt = dlg.querySelector('button[type="submit"]'); bt.disabled = true;
+      api('totp_ativar', { codigo: fd.get('codigo') }).then((r2) => { USER.info = r2.usuario; d2Reservas(r2.reservas); }).catch((e) => { aviso(e.message); bt.disabled = false; });
+      return false;
+    }, (f) => { $('#d2-cp', f).onclick = () => copiarTexto(r.segredo); });
+  }
+  function formDoisPassos() {
+    const u = USER.info;
+    if (!u.dois_passos) {
+      abrir('Verificação em dois passos', `<p class="mut">Mesmo que alguém descubra sua senha, não consegue entrar sem o código do seu celular. Leva uns 2 minutos.</p>
+        <ol class="cap-ol"><li>Instale um app autenticador (Google Authenticator, Microsoft Authenticator, Authy ou 1Password).</li><li>Toque em <b>Começar</b> e adicione a chave no app.</li><li>Digite o código de 6 dígitos que o app mostrar e guarde os códigos de reserva.</li></ol>
+        <div class="botoes rodape-form"><button class="btn" type="button" id="d2-comecar">Começar</button></div>`, null, (f) => {
+        $('#d2-comecar', f).onclick = async () => { try { d2Chave(await api('totp_iniciar', {})); } catch (e) { aviso(e.message); } };
+      });
+      return;
+    }
+    abrir('Verificação em dois passos', `<p class="of-selo on">● Ativada</p><p class="mut">Ao entrar, o app pede a senha e depois o código do app autenticador. Para mudar algo, confirme a senha e um código atual (do app ou de reserva).</p>
+      <section class="card cap-passo"><label class="campo"><span>Senha</span><input name="senha" type="password" autocomplete="current-password" required></label>
+      <label class="campo"><span>Código</span><input name="codigo" autocomplete="one-time-code" maxlength="12" required></label>
+      <div class="botoes rodape-form"><button class="btn sec" type="button" id="d2-novos">Gerar novos códigos de reserva</button><button class="btn perigo" type="button" id="d2-off">Desativar</button></div></section>`, null, (f) => {
+      const dados = () => ({ senha: f.senha.value, codigo: f.codigo.value });
+      const ok = () => { const d = dados(); if (!d.senha || !d.codigo) { aviso('Informe a senha e o código.'); return null; } return d; };
+      $('#d2-novos', f).onclick = async () => { const d = ok(); if (!d) return; try { const r = await api('totp_gerenciar', { ...d, acao: 'novos' }); d2Reservas(r.reservas); } catch (e) { aviso(e.message); } };
+      $('#d2-off', f).onclick = async () => {
+        const d = ok(); if (!d) return;
+        if (!(await confirmar('Desativar os dois passos?', 'Sua conta volta a entrar só com e-mail e senha, o que é menos seguro.', 'Desativar'))) return;
+        try { const r = await api('totp_gerenciar', { ...d, acao: 'desativar' }); USER.info = r.usuario; dlg.close(); render(); aviso('Dois passos desativados.'); } catch (e) { aviso(e.message); }
+      };
+    });
+  }
   function formSenha() {
     abrir('Alterar senha', `${campoSenha('Senha atual', 'name="atual" type="password" required autocomplete="current-password"')}${campoSenha('Nova senha (mínimo 10 caracteres)', 'name="nova" type="password" required minlength="10" autocomplete="new-password"')}<div class="botoes"><button class="btn" type="submit">Salvar nova senha</button></div>`, null, (f) => {
       f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('mudar_senha', { atual: f.atual.value, nova: f.nova.value }); dlg.close(); aviso('Senha alterada. Enviamos um e-mail de confirmação.'); } catch (e) { aviso(e.message); } });
@@ -1467,6 +1515,7 @@
       'trocar-foto': () => $('#foto-arq').click(),
       'remover-foto': async () => { try { const r = await api('preferencias', { foto: null }); USER.info = r.usuario; render(); aviso('Foto removida.'); } catch (e) { aviso(e.message); } },
       senha: () => formSenha(),
+      'dois-passos': () => formDoisPassos(),
       personalizar: () => formPersonalizar(),
       categorias: () => formCategorias(),
       oauth: () => { window.location.href = 'api/oauth.php?a=iniciar&p=' + encodeURIComponent(t.dataset.p); },

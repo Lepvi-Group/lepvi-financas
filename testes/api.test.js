@@ -236,6 +236,43 @@ test('meu pluggy: confere as chaves, traz os últimos 30 dias sem a fatura nem o
   const fim = (await chamar('conexoes', null, { metodo: 'GET' })).json; assert.strictEqual(fim.tem_credencial, false); assert.strictEqual(fim.conexoes.length, 0);
 });
 
+test('dois passos (TOTP): vetores da RFC 6238, ativar, exigir código no login, não repetir código, reserva de uso único e desativar', async () => {
+  const SENHA_ATUAL = 'outra-senha-forte-33'; // a senha ficou assim depois do teste de redefinição
+  const php = (cod) => execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_2fa.php"; ' + cod], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite::memory:', LEPVI_FINANCAS_ESTADO: DEV } }).toString().trim();
+  const SEG_RFC = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'; // "12345678901234567890"
+  assert.deepStrictEqual(JSON.parse(php('echo json_encode([totp_codigo("' + SEG_RFC + '", intdiv(59, 30)), totp_codigo("' + SEG_RFC + '", intdiv(1111111109, 30)), totp_codigo("' + SEG_RFC + '", intdiv(20000000000, 30)), totp_conferir_passo("' + SEG_RFC + '", "287082", 0, 59), totp_conferir_passo("' + SEG_RFC + '", "287082", 1, 59), totp_conferir_passo("' + SEG_RFC + '", "000000", 0, 59)]);')), ['287082', '081804', '353130', 1, null, null]);
+  const cod = (seg, delta = 0) => php('echo totp_codigo("' + seg + '", intdiv(time(), 30) + ' + delta + ');');
+
+  const ini = (await chamar('totp_iniciar', {})).json; assert.match(ini.segredo, /^[A-Z2-7]{32}$/); assert.ok(ini.uri.startsWith('otpauth://totp/'));
+  assert.strictEqual((await chamar('totp_ativar', { codigo: '000000' })).status, 422, 'código errado não ativa');
+  const at = await chamar('totp_ativar', { codigo: cod(ini.segredo) });
+  assert.strictEqual(at.status, 200, JSON.stringify(at.json)); assert.strictEqual(at.json.reservas.length, 8); assert.strictEqual(at.json.usuario.dois_passos, true);
+  const bruto = execFileSync('sqlite3', [path.join(DEV, 'financas.sqlite'), 'SELECT totp_segredo || totp_reservas FROM usuarios WHERE email = \'' + EMAIL + '\'']).toString();
+  assert.ok(!bruto.includes(ini.segredo) && !bruto.includes(at.json.reservas[0].replace('-', '')), 'segredo cifrado e reservas só em hash');
+
+  const login = async () => { const r = await chamar('entrar', { email: EMAIL, senha: SENHA_ATUAL }, { semCookie: true }); assert.strictEqual(r.status, 200); assert.strictEqual(r.json.passo2, true, 'senha certa não abre a sessão sozinha'); assert.ok(!r.json.usuario); return r.json.ticket; };
+  let t = await login();
+  assert.strictEqual((await chamar('entrar_2fa', { ticket: t, codigo: cod(ini.segredo) }, { semCookie: true })).status, 401, 'o mesmo código da ativação não vale de novo');
+  assert.strictEqual((await chamar('entrar_2fa', { ticket: 'ticket.falso', codigo: '123456' }, { semCookie: true })).status, 401);
+  const ok = await chamar('entrar_2fa', { ticket: t, codigo: cod(ini.segredo, 1) }, { semCookie: true });
+  assert.strictEqual(ok.status, 200, JSON.stringify(ok.json)); assert.strictEqual(ok.json.usuario.dois_passos, true);
+  assert.strictEqual((await chamar('eu', null, { metodo: 'GET' })).status, 200, 'sessão aberta depois do código');
+
+  t = await login();
+  const reserva = at.json.reservas[0];
+  assert.strictEqual((await chamar('entrar_2fa', { ticket: t, codigo: reserva }, { semCookie: true })).status, 200, 'código de reserva entra');
+  t = await login();
+  assert.strictEqual((await chamar('entrar_2fa', { ticket: t, codigo: reserva }, { semCookie: true })).status, 401, 'reserva só vale uma vez');
+
+  assert.strictEqual((await chamar('totp_gerenciar', { acao: 'desativar', senha: 'errada', codigo: at.json.reservas[1] })).status, 401);
+  const novos = await chamar('totp_gerenciar', { acao: 'novos', senha: SENHA_ATUAL, codigo: at.json.reservas[1] });
+  assert.strictEqual(novos.status, 200); assert.strictEqual(novos.json.reservas.length, 8);
+  assert.strictEqual((await chamar('entrar_2fa', { ticket: await login(), codigo: at.json.reservas[2] }, { semCookie: true })).status, 401, 'as reservas antigas morrem quando geram novas');
+  const off = await chamar('totp_gerenciar', { acao: 'desativar', senha: SENHA_ATUAL, codigo: novos.json.reservas[0] });
+  assert.strictEqual(off.status, 200); assert.strictEqual(off.json.usuario.dois_passos, false);
+  assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: SENHA_ATUAL }, { semCookie: true })).json.usuario.email, EMAIL, 'sem dois passos volta a entrar direto');
+});
+
 test('anexos: guarda foto de recibo cifrada, recusa o que não é imagem e apaga', async () => {
   const PNG1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
   const env = await chamar('anexo_enviar', { lanc: 'l1', dataUrl: PNG1 });

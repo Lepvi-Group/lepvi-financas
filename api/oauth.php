@@ -4,6 +4,7 @@ declare(strict_types=1);
    /api/oauth.php?a=iniciar&p=google  -> leva a pessoa ao provedor
    /api/oauth.php?code=...&state=...  -> volta do provedor (este é o endereço que se cadastra no painel do Google/Microsoft) */
 require __DIR__ . '/_oauth.php';
+require_once __DIR__ . '/_2fa.php';
 
 $volta = function (string $q): never {
     header('Location: ' . rtrim(cfg()['site_url'], '/') . '/?' . $q);
@@ -40,6 +41,8 @@ try {
     $r = oauth_resolver($p, $claims);
     if (isset($r['erro'])) $volta('oauth=erro-' . $r['erro']);
     if ($r['acao'] === 'login') {
+        // quem ativou os dois passos entra só com e-mail, senha e código (o Google/Microsoft não substituem o código)
+        if (($uu = totp_usuario((string) $r['usuario']['id'])) && totp_ativo($uu)) $volta('oauth=erro-2fa');
         db()->prepare('UPDATE usuarios SET ultimo_login = ? WHERE id = ?')->execute([agora(), $r['usuario']['id']]);
         abrir_sessao($r['usuario']['id']);
         $volta('oauth=ok');
