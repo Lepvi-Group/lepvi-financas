@@ -309,6 +309,21 @@ test('redefinir e trocar senha: link não abre sessão, sessões antigas caem, s
   assert.strictEqual(off.status, 200, JSON.stringify(off.json));
 });
 
+test('"não sei a senha atual": quem está logado recebe o link por e-mail e cria a senha sem precisar da antiga (conta do Google/Microsoft)', async () => {
+  const SENHA_CONHECIDA = 'outra-senha-forte-33'; const SENHA_NOVA = 'Criada-Pelo-Link 2028ç!';
+  assert.strictEqual((await chamar('senha_link', {}, { semCookie: true })).status, 401, 'sem sessão não envia nada');
+  assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: SENHA_CONHECIDA }, { semCookie: true })).status, 200);
+  const antes = (emails().match(/PARA:/g) || []).length;
+  const r = await chamar('senha_link', {});
+  assert.strictEqual(r.status, 200); assert.strictEqual(r.json.email, EMAIL);
+  assert.ok((emails().match(/PARA:/g) || []).length > antes, 'o e-mail com o link foi enviado');
+  assert.strictEqual((await chamar('redefinir', { token: ultimoToken('redefinir'), senha: SENHA_NOVA }, { semCookie: true })).status, 200);
+  assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: SENHA_NOVA }, { semCookie: true })).status, 200, 'entra com a senha criada pelo link');
+  await chamar('senha_link', {}); await chamar('senha_link', {});
+  assert.strictEqual((await chamar('senha_link', {})).status, 429, 'limite de pedidos por hora');
+  assert.strictEqual((await chamar('mudar_senha', { atual: SENHA_NOVA, nova: SENHA_CONHECIDA })).status, 200, 'devolve a senha usada pelos testes seguintes');
+});
+
 test('cadastro fechado por padrão: sem a chave de abrir, ninguém cria conta (e-mail nem Google/Microsoft) e a tela esconde o convite', async () => {
   const php = (env, cod) => execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_oauth.php"; ' + cod], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'fechado.sqlite'), LEPVI_FINANCAS_ESTADO: path.join(DEV, 'estado-fechado'), LEPVI_FINANCAS_CADASTRO: env } }).toString().trim();
   assert.strictEqual(php('', 'echo json_encode(cadastro_aberto());'), 'false');

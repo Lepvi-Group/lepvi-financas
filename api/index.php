@@ -8,6 +8,11 @@ require __DIR__ . '/_2fa.php';
 $acao = (string) ($_GET['a'] ?? '');
 $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $link = fn(string $q) => rtrim(cfg()['site_url'], '/') . '/?' . $q;
+/* E-mail com o link para criar uma nova senha (usado por "esqueci" na entrada e por "não sei a senha atual" dentro do app). */
+function enviar_link_redefinir(string $email, string $token, callable $link): void
+{
+    enviar_email($email, 'Crie uma nova senha para o Lepvi Finanças', email_html('Redefinir senha', '<p style="margin:0 0 12px">Recebemos um pedido para criar uma nova senha para a sua conta.</p><p style="margin:0">O link vale por <b>1 hora</b>. Se não foi você, ignore este e-mail: sua senha continua a mesma.</p>', 'Criar nova senha', $link('redefinir=' . $token), 'Link para criar uma nova senha (vale por 1 hora).'));
+}
 
 try {
     if ($metodo === 'GET' && $acao === 'config') resp(['turnstile' => turnstile_config()['site_key'] ?? null, 'cadastro' => cadastro_aberto()]);
@@ -175,7 +180,7 @@ try {
                 $s->execute([$email]);
                 if ($u = $s->fetch()) {
                     $t = criar_token($u['id'], 'redefinir', 3600);
-                    enviar_email($email, 'Crie uma nova senha para o Lepvi Finanças', email_html('Redefinir senha', '<p style="margin:0 0 12px">Recebemos um pedido para criar uma nova senha para a sua conta.</p><p style="margin:0">O link vale por <b>1 hora</b>. Se não foi você, ignore este e-mail: sua senha continua a mesma.</p>', 'Criar nova senha', $link('redefinir=' . $t), 'Link para criar uma nova senha (vale por 1 hora).'));
+                    enviar_link_redefinir($email, $t, $link);
                 }
             }
             resp(['ok' => true, 'mensagem' => 'Se esse e-mail tiver conta, enviamos um link para criar uma nova senha.']);
@@ -347,6 +352,14 @@ try {
             db()->prepare('UPDATE usuarios SET nome = ?, avisos = ?, foto = ?, resumo = ?, lembrete = ? WHERE id = ?')->execute([$nome, $avisos, $foto, $resumo, $lembrete, $u['id']]);
             $u['nome'] = $nome; $u['avisos'] = $avisos; $u['foto'] = $foto; $u['resumo'] = $resumo; $u['lembrete'] = $lembrete;
             resp(['usuario' => usuario_publico($u)]);
+        }
+        case 'senha_link': {
+            // Conta criada pelo Google/Microsoft nasce com senha aleatória que ninguém conhece: quem está logado pode pedir o link por e-mail para criar a sua.
+            $k = 'senhalink:' . $u['id'];
+            if (limite_estourou($k, 3, 3600)) erro('Muitos pedidos. Tente de novo em 1 hora.', 429);
+            registrar_tentativa($k);
+            enviar_link_redefinir($u['email'], criar_token($u['id'], 'redefinir', 3600), $link);
+            resp(['ok' => true, 'email' => $u['email']]);
         }
         case 'mudar_senha': {
             $k = 'troca:' . $u['id'];

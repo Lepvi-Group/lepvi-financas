@@ -1448,7 +1448,9 @@
   }
   document.addEventListener('keydown', (ev) => { if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k' && USER.logado) { ev.preventDefault(); if (!dlg.open) formBusca(); } });
   function formSenha() {
-    abrir('Alterar senha', `${campoSenha('Senha atual', 'name="atual" type="password" required autocomplete="current-password"')}${campoSenha('Nova senha (mínimo 10 caracteres)', 'name="nova" type="password" required minlength="10" autocomplete="new-password"')}<div class="botoes"><button class="btn" type="submit">Salvar nova senha</button></div>`, null, (f) => {
+    abrir('Alterar senha', `${campoSenha('Senha atual', 'name="atual" type="password" required autocomplete="current-password"')}${campoSenha('Nova senha (mínimo 10 caracteres)', 'name="nova" type="password" required minlength="10" autocomplete="new-password"')}<div class="botoes"><button class="btn" type="submit">Salvar nova senha</button></div>
+      <p class="mut" style="margin-top:14px">Entrou com Google ou Microsoft, ou não lembra a senha atual?<br><button class="link" type="button" data-senha-link>Enviar um link para o meu e-mail</button></p>`, null, (f) => {
+      f.querySelector('[data-senha-link]').addEventListener('click', async (ev) => { ev.target.disabled = true; try { const r = await api('senha_link', {}); ev.target.closest('p').innerHTML = `✅ Enviamos o link para <b>${esc(r.email)}</b>. Abra o e-mail e crie a nova senha (vale por 1 hora).`; } catch (e) { aviso(e.message); ev.target.disabled = false; } });
       f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('mudar_senha', { atual: f.atual.value, nova: f.nova.value }); dlg.close(); aviso('Senha alterada. Enviamos um e-mail de confirmação.'); } catch (e) { aviso(e.message); } });
     });
   }
