@@ -3,7 +3,7 @@ declare(strict_types=1);
 /* Lepvi Finanças: avisos de vencimento por e-mail. Roda todo dia de manhã pelo agendador da Hostinger (só linha de comando).
    Uso: php cron-avisos.php [--hoje=AAAA-MM-DD] */
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
-require __DIR__ . '/_lib.php';
+require __DIR__ . '/_openfinance.php';
 date_default_timezone_set('America/Sao_Paulo');
 
 $hoje = date('Y-m-d');
@@ -194,4 +194,5 @@ foreach ($usuarios as $u) {
     }
 }
 $lembretes = lembrete_lancar_rodar($hoje);
-echo date('c') . " avisos enviados: $enviados, lembretes: $lembretes\n";
+try { $bancos = pluggy_sincronizar_todos(); } catch (Throwable $e) { $bancos = 0; error_log('[lepvi-financas pluggy] ' . $e->getMessage()); }
+echo date('c') . " avisos enviados: $enviados, lembretes: $lembretes, movimentações do banco: $bancos\n";

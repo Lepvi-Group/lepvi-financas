@@ -81,6 +81,11 @@ CREATE TABLE IF NOT EXISTS conexoes (
   ultima_sync INTEGER NULL,
   criado_em INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS of_pluggy (
+  usuario_id VARCHAR(32) NOT NULL PRIMARY KEY,
+  conteudo LONGTEXT NOT NULL,
+  criado_em INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS of_vistos (
   usuario_id VARCHAR(32) NOT NULL,
   h VARCHAR(64) NOT NULL,

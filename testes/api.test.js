@@ -10,7 +10,27 @@ const DEV = path.join(require('node:os').tmpdir(), 'lepvi-financas-teste-api');
 const PORTA = 4189;
 const BASE = `http://127.0.0.1:${PORTA}/api/`;
 let servidor;
+let mock;
 let cookie = '';
+const PORTA_PLUGGY = 4190;
+const TRANSACOES = [
+  { id: 'p1', description: 'MERCADO SOL', amount: -89.9, type: 'DEBIT', date: '2026-11-20T12:00:00.000Z', status: 'POSTED' },
+  { id: 'p2', description: 'Pix recebido JOAO', amount: 120, type: 'CREDIT', date: '2026-11-21T12:00:00.000Z', status: 'POSTED' },
+  { id: 'p3', description: 'PAGAMENTO DE FATURA', amount: -500, type: 'DEBIT', date: '2026-11-21T12:00:00.000Z', status: 'POSTED' },
+  { id: 'p4', description: 'COMPRA PENDENTE', amount: -10, type: 'DEBIT', date: '2026-11-22T12:00:00.000Z', status: 'PENDING' },
+];
+const pluggyMock = require('node:http').createServer((req, res) => {
+  const u = new URL(req.url, 'http://x'); res.setHeader('Content-Type', 'application/json');
+  const chave = req.headers['x-api-key'];
+  if (req.method === 'POST' && u.pathname === '/auth') {
+    let c = ''; req.on('data', (d) => (c += d)); req.on('end', () => { const b = JSON.parse(c || '{}'); if (b.clientId === 'cid-ok' && b.clientSecret === 'sec-ok') res.end(JSON.stringify({ apiKey: 'chave-pluggy' })); else { res.statusCode = 403; res.end('{}'); } });
+    return;
+  }
+  if (chave !== 'chave-pluggy') { res.statusCode = 403; return res.end('{}'); }
+  if (u.pathname === '/accounts') { if (u.searchParams.get('itemId') !== 'item-ok') { res.statusCode = 404; return res.end('{}'); } return res.end(JSON.stringify({ results: [{ id: 'conta-1', type: 'BANK', number: '12345' }] })); }
+  if (u.pathname === '/transactions') return res.end(JSON.stringify({ results: u.searchParams.get('accountId') === 'conta-1' ? TRANSACOES : [], totalPages: 1 }));
+  res.statusCode = 404; res.end('{}');
+});
 
 async function chamar(acao, corpo, { metodo = 'POST', semCookie = false } = {}) {
   const r = await fetch(BASE + '?a=' + acao, {
@@ -28,11 +48,12 @@ const emails = () => (fs.existsSync(path.join(DEV, 'emails.log')) ? fs.readFileS
 const ultimoToken = (param) => { const m = [...emails().matchAll(new RegExp(param + '=([A-Za-z0-9_-]+)', 'g'))]; return m[m.length - 1][1]; };
 
 test.before(async () => {
+  await new Promise((r) => pluggyMock.listen(PORTA_PLUGGY, '127.0.0.1', r));
   fs.rmSync(DEV, { recursive: true, force: true });
-  servidor = spawn('php', ['-S', `127.0.0.1:${PORTA}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV, LEPVI_FINANCAS_OF_SEGREDO: 'segredo-de-teste-open-finance-1234' } });
+  servidor = spawn('php', ['-S', `127.0.0.1:${PORTA}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV, LEPVI_FINANCAS_OF_SEGREDO: 'segredo-de-teste-open-finance-1234', LEPVI_FINANCAS_PLUGGY_URL: `http://127.0.0.1:${PORTA_PLUGGY}` } });
   for (let i = 0; i < 40; i++) { try { await fetch(BASE + '?a=eu'); break; } catch (e) { await new Promise((r) => setTimeout(r, 150)); } }
 });
-test.after(() => { servidor.kill(); fs.rmSync(DEV, { recursive: true, force: true }); });
+test.after(() => { pluggyMock.close(); servidor.kill(); fs.rmSync(DEV, { recursive: true, force: true }); });
 
 const EMAIL = 'teste@example.com';
 const SENHA = 'uma-senha-bem-forte-1';
@@ -188,9 +209,31 @@ test('open finance: normaliza movimentações, sem segredo fica desligado, e cad
   assert.strictEqual((await (await post(corpo)).json()).novas, 0, 'depois de lançado ou descartado, não volta');
   const lista = (await chamar('conexoes', null, { metodo: 'GET' })).json.conexoes;
   assert.strictEqual(lista.length, 1); assert.ok(lista[0].ultima_sync);
-  assert.strictEqual((await chamar('conexao_iniciar', {})).status, 501);
   await chamar('conexao_remover', { id: reg.id });
   assert.strictEqual((await chamar('conexoes', null, { metodo: 'GET' })).json.conexoes.length, 0);
+});
+
+test('meu pluggy: confere as chaves, traz os últimos 30 dias sem a fatura nem o pendente, não repete e guarda as chaves cifradas', async () => {
+  const ruim = await chamar('pluggy_conectar', { instituicao: 'Nubank', item_id: 'item-ok', client_id: 'cid-ok', client_secret: 'errado' });
+  assert.strictEqual(ruim.status, 422, JSON.stringify(ruim.json)); assert.match(String(ruim.json.erro), /Client ID/, JSON.stringify(ruim.json));
+  const semBanco = await chamar('pluggy_conectar', { instituicao: 'Nubank', item_id: 'item-inexistente', client_id: 'cid-ok', client_secret: 'sec-ok' });
+  assert.strictEqual(semBanco.status, 422); assert.match(semBanco.json.erro, /Não achei esse banco/);
+  assert.strictEqual((await chamar('conexoes', null, { metodo: 'GET' })).json.tem_credencial, false, 'chave errada não fica guardada');
+  const antes = (await chamar('capturas', null, { metodo: 'GET' })).json.capturas.length;
+  const ok = await chamar('pluggy_conectar', { instituicao: 'Nubank', item_id: 'item-ok', client_id: 'cid-ok', client_secret: 'sec-ok' });
+  assert.strictEqual(ok.status, 200, JSON.stringify(ok.json)); assert.strictEqual(ok.json.novas, 2, 'só compra e pix: sem fatura e sem pendente');
+  const caps = (await chamar('capturas', null, { metodo: 'GET' })).json.capturas.filter((c) => c.origem === 'openfinance');
+  assert.strictEqual(caps.length + 0, (await chamar('capturas', null, { metodo: 'GET' })).json.capturas.length - antes);
+  const mercado = caps.find((c) => c.desc === 'MERCADO SOL'); assert.deepStrictEqual([mercado.tipo, mercado.valor, mercado.data], ['despesa', 89.9, '2026-11-20']);
+  assert.deepStrictEqual([caps.find((c) => c.desc.startsWith('Pix')).tipo], ['receita']);
+  assert.strictEqual((await chamar('pluggy_conectar', { instituicao: 'Nubank 2', item_id: 'item-ok' })).status, 422, 'mesmo banco duas vezes');
+  const sync = await chamar('conexao_sincronizar', {}); assert.strictEqual(sync.status, 200); assert.strictEqual(sync.json.novas, 0, 'atualizar não duplica');
+  const lista = (await chamar('conexoes', null, { metodo: 'GET' })).json; assert.strictEqual(lista.tem_credencial, true); assert.strictEqual(lista.conexoes[0].provedor, 'meupluggy');
+  const bruto = execFileSync('sqlite3', [path.join(DEV, 'financas.sqlite'), 'SELECT conteudo FROM of_pluggy']).toString();
+  assert.ok(bruto.length > 20 && !bruto.includes('sec-ok') && !bruto.includes('cid-ok'), 'chaves guardadas cifradas');
+  await chamar('capturas_resolver', { ids: caps.map((c) => c.id) });
+  await chamar('pluggy_esquecer', {});
+  const fim = (await chamar('conexoes', null, { metodo: 'GET' })).json; assert.strictEqual(fim.tem_credencial, false); assert.strictEqual(fim.conexoes.length, 0);
 });
 
 test('anexos: guarda foto de recibo cifrada, recusa o que não é imagem e apaga', async () => {

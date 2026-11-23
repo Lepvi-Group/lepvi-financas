@@ -295,27 +295,44 @@
       };
     });
   }
-  /* ---------- Open Finance (tela pronta; liga quando o servidor tiver o agregador configurado) ---------- */
+  /* ---------- Open Finance pelo Meu Pluggy (grátis, uso pessoal) ---------- */
   async function carregarConexoes() {
-    try { V.of = await api('conexoes'); } catch (e) { V.of = V.of || { ativo: false, conexoes: [] }; }
+    try { V.of = await api('conexoes'); } catch (e) { V.of = V.of || { ativo: true, tem_credencial: false, conexoes: [] }; }
     return V.of;
   }
   async function formOpenFinance() {
     const of = V.of || await carregarConexoes();
     const quando = (t) => { if (!t) return 'ainda não sincronizou'; const min = Math.max(0, Math.round((Date.now() / 1000 - t) / 60)); return min < 1 ? 'atualizado agora há pouco' : min < 60 ? `atualizado há ${min} min` : min < 1440 ? `atualizado há ${Math.round(min / 60)} h` : `atualizado há ${Math.round(min / 1440)} dia(s)`; };
-    const lista = of.conexoes.map((c) => `<div class="of-cx"><span class="of-ic" aria-hidden="true">🏦</span><span class="of-t"><b>${esc(c.instituicao)}</b><small>${esc(quando(c.ultima_sync))}</small></span><button class="btn sec mini" type="button" data-of-sair="${esc(c.id)}" aria-label="Desconectar ${esc(c.instituicao)}">Desconectar</button></div>`).join('');
-    abrir('Bancos conectados', `<p class="of-selo ${of.ativo ? 'on' : 'off'}" role="status">${of.ativo ? '● Pronto para conectar' : '○ Em breve: estamos preparando a ligação com os bancos'}</p>
-      <p class="mut">O Open Finance é o sistema oficial do Banco Central: você autoriza o banco a compartilhar suas movimentações e elas chegam aqui sozinhas, em <b>Para revisar</b>. Nada de digitar compra por compra.</p>
-      ${lista ? `<section class="card">${lista}</section>` : ''}
-      <section class="card cap-passo"><h3>Como vai funcionar</h3><ol class="cap-ol"><li>Você escolhe o banco e entra no <b>aplicativo ou site do próprio banco</b>.</li><li>Autoriza só a <b>leitura</b> das movimentações, por até 12 meses.</li><li>As compras e entradas aparecem em <b>Para revisar</b>; você confere a categoria e lança com um toque.</li></ol></section>
-      <section class="card cap-passo"><h3>Sua segurança</h3><ul class="cap-ol"><li>A senha do banco <b>nunca passa por aqui</b>.</li><li>O app só <b>lê</b>: não consegue pagar, transferir nem mexer na sua conta.</li><li>Você pode <b>desconectar a qualquer momento</b>, aqui ou no app do banco.</li><li>Cada movimentação entra uma vez só, sem repetir lançamentos.</li></ul></section>
-      <div class="botoes rodape-form"><button class="btn" type="button" id="of-conectar" ${of.ativo ? '' : 'disabled'}>Conectar um banco</button></div>
-      ${of.ativo ? '' : '<p class="mut">Este botão liga assim que a conexão com os bancos estiver ativa. Enquanto isso, use <b>Compras automáticas</b> para receber os avisos do seu banco.</p>'}`, null, (f) => {
-      $('#of-conectar', f).onclick = async () => { try { await api('conexao_iniciar', {}); } catch (e) { aviso(e.message); } };
+    const renova = of.conexoes.length ? new Date(Math.min(...of.conexoes.map((c) => c.criado_em)) * 1000 + 365 * 86400000).toLocaleDateString('pt-BR') : '';
+    const lista = of.conexoes.map((c) => `<div class="of-cx"><span class="of-ic" aria-hidden="true">🏦</span><span class="of-t"><b>${esc(c.instituicao)}</b><small>${c.status === 'erro' ? '⚠️ precisa de atenção, toque em Atualizar agora' : esc(quando(c.ultima_sync))}</small></span><button class="btn sec mini" type="button" data-of-sair="${esc(c.id)}" aria-label="Desconectar ${esc(c.instituicao)}">Desconectar</button></div>`).join('');
+    const campoCred = of.tem_credencial ? '' : `<label class="campo"><span>Client ID</span><input name="client_id" autocomplete="off" autocapitalize="off" spellcheck="false" required></label><label class="campo"><span>Client Secret</span><input name="client_secret" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>`;
+    const formulario = of.conexoes.length < 5 ? `<section class="card cap-passo"><h3>${of.conexoes.length ? 'Adicionar outro banco' : '3. Cole os códigos aqui'}</h3>
+        <label class="campo"><span>Nome do banco (como você quer ver)</span><input name="instituicao" maxlength="60" placeholder="Ex.: Nubank" required></label>
+        <label class="campo"><span>Código do item (itemId)</span><input name="item_id" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>
+        ${campoCred}
+        <button class="btn" type="submit">Conectar e trazer os últimos 30 dias</button></section>` : '<p class="mut">Você chegou ao limite de 5 bancos do Meu Pluggy gratuito.</p>';
+    abrir('Bancos conectados', `<p class="mut">Conexão pelo <b>Meu Pluggy</b>, o caminho gratuito do Open Finance para uso pessoal. As compras do banco chegam sozinhas em <b>Para revisar</b>, todo dia.</p>
+      ${lista ? `<section class="card">${lista}</section><div class="botoes"><button class="btn sec" type="button" id="of-atualizar">Atualizar agora</button></div>` : ''}
+      ${renova ? `<p class="mut">A autorização do Meu Pluggy vale 1 ano. Renove por volta de <b>${esc(renova)}</b>.</p>` : ''}
+      ${of.conexoes.length ? '' : `<section class="card cap-passo"><h3>1. Conecte seu banco no Meu Pluggy</h3><p class="mut">Crie sua conta em <a href="https://meu.pluggy.ai" target="_blank" rel="noopener">meu.pluggy.ai</a> e autorize seu banco lá. A senha do banco fica só com eles.</p></section>
+      <section class="card cap-passo"><h3>2. Pegue seus códigos no painel do Pluggy</h3><ol class="cap-ol"><li>Entre em <a href="https://dashboard.pluggy.ai" target="_blank" rel="noopener">dashboard.pluggy.ai</a> com a mesma conta.</li><li>Abra <b>Aplicações → sua aplicação → Demo → Conectar Conta</b> e escolha <b>MeuPluggy</b> (não o seu banco).</li><li>Copie o <b>itemId</b> do banco em <i>Itens conectados</i>.</li><li>Em Aplicações, copie o <b>Client ID</b> e gere o <b>Client Secret</b> (ele só aparece uma vez).</li></ol><p class="mut"><a href="https://docs.pluggy.ai/pt/docs/guides/meu-pluggy-personal-use" target="_blank" rel="noopener">Guia oficial com as telas</a></p></section>`}
+      ${formulario}
+      <section class="card cap-passo"><h3>Sua segurança</h3><ul class="cap-ol"><li>Os códigos ficam <b>criptografados</b> e só servem para <b>ler</b>: não movem dinheiro.</li><li>Cada movimentação entra uma vez só. O pagamento da fatura do cartão é ignorado para não duplicar.</li><li>Você desconecta a qualquer momento, aqui ou no Meu Pluggy.</li></ul>${of.tem_credencial ? '<button class="link" type="button" id="of-esquecer">Apagar meus códigos do Pluggy daqui</button>' : ''}</section>`,
+    (fd) => {
+      const corpo = { instituicao: fd.get('instituicao'), item_id: fd.get('item_id'), client_id: fd.get('client_id') || '', client_secret: fd.get('client_secret') || '' };
+      const bt = dlg.querySelector('button[type="submit"]'); bt.disabled = true; bt.textContent = 'Conectando…';
+      api('pluggy_conectar', corpo).then(async (r) => { await carregarConexoes(); await carregarCapturas(); dlg.close(); render(); aviso(r.aviso ? r.aviso : `Banco conectado. ${r.novas} movimentação(ões) em Para revisar.`); })
+        .catch((e) => { aviso(e.message); bt.disabled = false; bt.textContent = 'Conectar e trazer os últimos 30 dias'; });
+      return false;
+    }, (f) => {
+      const at = $('#of-atualizar', f);
+      if (at) at.onclick = async () => { at.disabled = true; at.textContent = 'Atualizando…'; try { const r = await api('conexao_sincronizar', {}); await carregarConexoes(); await carregarCapturas(); dlg.close(); render(); aviso(r.aviso ? r.aviso : `${r.novas} movimentação(ões) nova(s) em Para revisar.`); } catch (e) { aviso(e.message); at.disabled = false; at.textContent = 'Atualizar agora'; } };
       f.querySelectorAll('[data-of-sair]').forEach((b) => b.addEventListener('click', async () => {
         if (!(await confirmar('Desconectar este banco?', 'Os lançamentos já feitos continuam. Novas movimentações deixam de chegar.', 'Desconectar'))) return;
         try { await api('conexao_remover', { id: b.dataset.ofSair }); await carregarConexoes(); dlg.close(); render(); aviso('Banco desconectado.'); } catch (e) { aviso(e.message); }
       }));
+      const es = $('#of-esquecer', f);
+      if (es) es.onclick = async () => { if (!(await confirmar('Apagar os códigos do Pluggy?', 'Os bancos conectados por eles também saem daqui. Os lançamentos já feitos continuam.', 'Apagar'))) return; try { await api('pluggy_esquecer', {}); await carregarConexoes(); dlg.close(); render(); aviso('Códigos apagados.'); } catch (e) { aviso(e.message); } };
     });
   }
   /* ---------- divisão de despesas e meta mensal ---------- */
@@ -668,7 +685,7 @@
       linha({ icone: LI.bell, titulo: 'Para revisar', desc: (V.rev && V.rev.length) ? `${V.rev.length} aviso(s) do banco esperando você` : 'Avisos do banco que viram lançamento', attrs: 'data-acao="revisar"' })
       + linha({ icone: LI.chave, titulo: 'Conectar avisos do banco', desc: 'Chave e passo a passo, sem dar a senha do banco', attrs: 'data-acao="captura-config"' }))}
     ${grupo('Open Finance',
-      linha({ icone: LI.escudo, titulo: 'Bancos conectados', desc: V.of && V.of.ativo ? (V.of.conexoes.length ? `${V.of.conexoes.length} banco(s) conectado(s)` : 'Conecte o banco e os lançamentos chegam sozinhos') : 'Em breve: lançamentos do banco sem digitar nada', fim: V.of && V.of.ativo ? '›' : '<span class="selo-breve">Em breve</span>', attrs: 'data-acao="openfinance"' }))}
+      linha({ icone: LI.escudo, titulo: 'Bancos conectados', desc: V.of && V.of.conexoes.length ? `${V.of.conexoes.length} banco(s) conectado(s)` : 'Conecte o banco grátis pelo Meu Pluggy', attrs: 'data-acao="openfinance"' }))}
     ${grupo('Divisão de despesas',
       linha({ icone: LI.copia, titulo: 'Quem deve a sua parte', desc: (() => { const s = F.saldosDivisao(d.lancs); return s.length ? `${s.length} pessoa(s) a acertar · ${m(s.reduce((t, x) => t + x.total, 0))}` : 'Despesas divididas com casal ou sócios'; })(), attrs: 'data-acao="divisoes"' }))}
     ${grupo('Configurações',
