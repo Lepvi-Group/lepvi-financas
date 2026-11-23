@@ -187,3 +187,20 @@ test('juros compostos com aporte e desafio das 52 semanas', () => {
   const d = F.desafio52(1);
   assert.strictEqual(d.semanas.length, 52); assert.strictEqual(d.total, 1378); assert.strictEqual(d.semanas[51].valor, 52);
 });
+
+test('juntar edições: o que cada pessoa fez em lançamentos diferentes fica, apagar e editar o mesmo item respeita o apagar', () => {
+  const l = (id, v) => ({ id, desc: id, valor: v });
+  const base = { pessoal: { lancs: [l('a', 1), l('b', 2), l('c', 3)], orcamentos: { Mercado: 100 }, contas: [{ id: 'x', nome: 'Banco', saldoInicial: 0 }] } };
+  const local = { pessoal: { lancs: [l('a', 1), l('b', 20), l('c', 3), l('d', 4)], orcamentos: { Mercado: 100 }, contas: [{ id: 'x', nome: 'Banco', saldoInicial: 0 }] } };
+  const remoto = { pessoal: { lancs: [l('a', 1), l('b', 2), l('e', 5)], orcamentos: { Mercado: 100, Lazer: 50 }, contas: [{ id: 'x', nome: 'Banco', saldoInicial: 10 }] } };
+  const r = F.juntarDados(base, local, remoto).pessoal;
+  assert.deepStrictEqual(r.lancs.map((x) => x.id).sort(), ['a', 'b', 'd', 'e'], 'c foi apagado por quem está no servidor, d e e foram criados por cada um');
+  assert.strictEqual(r.lancs.find((x) => x.id === 'b').valor, 20, 'edição local de b vale');
+  assert.deepStrictEqual(r.orcamentos, { Mercado: 100, Lazer: 50 });
+  assert.strictEqual(r.contas[0].saldoInicial, 10, 'só o servidor mexeu na conta');
+});
+test('juntar edições: sem mudança local vale o servidor; sem mudança no servidor vale o local; mesmo campo vale o local', () => {
+  assert.deepStrictEqual(F.juntarDados({ n: 1 }, { n: 1 }, { n: 2 }), { n: 2 });
+  assert.deepStrictEqual(F.juntarDados({ n: 1 }, { n: 3 }, { n: 1 }), { n: 3 });
+  assert.deepStrictEqual(F.juntarDados({ n: 1 }, { n: 3 }, { n: 2 }), { n: 3 });
+});

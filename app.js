@@ -36,6 +36,7 @@
     return s;
   }
   const PREFS = 'lepvi-financas-prefs';
+  const CONVITE = 'lepvi-financas-convite';
   const S = norm({ perfil: 'pessoal', dados: {} }); // dados financeiros: só em memória e no servidor (nunca no aparelho)
   const USER = { logado: false, info: null };
   try { const p = JSON.parse(localStorage.getItem(PREFS)); if (p) { S.texto = p.texto; S.escala = p.escala; S.tema = p.tema; S.semMovimento = p.semMovimento; S.destacar = p.destacar; S.contraste = p.contraste; S.oculto = p.oculto; } } catch (e) { /* sem preferências guardadas */ }
@@ -59,20 +60,26 @@
     el.dataset.estado = estado; el.querySelector('b').textContent = t; el.hidden = !t; el.title = t;
   }
   let versaoServidor = 0; let enviando = false; let precisaEnviar = false; let tmr = null;
-  function limparMemoria() { status(''); const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; }
+  function limparMemoria() { status(''); const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; V.esp = null; baseDados = null; }
   function sessaoExpirou() { USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua sessão terminou. Entre de novo.'; render(); }
   function salvar() {
     try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, escala: S.escala, tema: S.tema, semMovimento: S.semMovimento, destacar: S.destacar, contraste: S.contraste, oculto: S.oculto })); } catch (e) { /* sem armazenamento */ }
     if (!USER.logado) return;
     precisaEnviar = true; status('salvando'); clearTimeout(tmr); tmr = setTimeout(enviarDados, 600);
   }
+  const clonar = (x) => JSON.parse(JSON.stringify(x));
+  let baseDados = null; // o último estado que o servidor confirmou (base para juntar edições)
   async function enviarDados() {
     if (enviando || !USER.logado) return;
     enviando = true;
     while (precisaEnviar && USER.logado) {
       precisaEnviar = false;
-      try { versaoServidor = (await api('dados', { versao: versaoServidor, conteudo: { perfil: S.perfil, guia: !!S.guia, inicio: S.inicio || {}, dados: S.dados } })).versao; if (!precisaEnviar) { status('ok'); if (!document.getElementById('aviso').classList.contains('on')) aviso('Salvo ✓', 2000); } }
+      const enviado = clonar(S.dados);
+      try { versaoServidor = (await api('dados', { versao: versaoServidor, conteudo: { perfil: S.perfil, guia: !!S.guia, inicio: S.inicio || {}, dados: S.dados } })).versao; baseDados = enviado; if (!precisaEnviar) { status('ok'); if (!document.getElementById('aviso').classList.contains('on')) aviso('Salvo ✓', 2000); } }
       catch (e) {
+        if (e.conflito && baseDados) { // duas pessoas (ou duas janelas) salvaram ao mesmo tempo: junta as duas alterações
+          try { const antes = clonar(S.dados); const r = await api('dados'); if (r.conteudo && r.conteudo.dados) { versaoServidor = r.versao; S.dados = norm({ perfil: S.perfil, dados: F.juntarDados(baseDados, antes, r.conteudo.dados) }).dados; baseDados = clonar(r.conteudo.dados); precisaEnviar = true; if (!dlg.open) render(); aviso('Outra pessoa também mexeu ao mesmo tempo. Juntamos as duas alterações.'); continue; } } catch (e2) { /* cai na recarga abaixo */ }
+        }
         if (e.conflito) { await carregarDados(); render(); status('conflito'); aviso('Seus dados foram alterados em outra janela ou aparelho. Mostramos a versão mais recente: confira se o seu último lançamento está aí.'); break; }
         if (e.rede) { precisaEnviar = true; status('erro'); aviso('Sem conexão. Vamos tentar salvar de novo.'); await new Promise((ok) => setTimeout(ok, 5000)); continue; }
         status('erro'); aviso('Não consegui salvar: ' + e.message); break;
@@ -86,8 +93,8 @@
   async function carregarDados() {
     const r = await api('dados');
     versaoServidor = r.versao;
-    if (r.conteudo && r.conteudo.dados) { const n = norm({ perfil: r.conteudo.perfil, dados: r.conteudo.dados }); S.perfil = n.perfil; S.dados = n.dados; S.guia = !!r.conteudo.guia; S.inicio = r.conteudo.inicio || S.inicio || {}; status('ok'); return; }
-    limparMemoria();
+    if (r.conteudo && r.conteudo.dados) { const n = norm({ perfil: r.conteudo.perfil, dados: r.conteudo.dados }); S.perfil = n.perfil; S.dados = n.dados; baseDados = clonar(n.dados); S.guia = !!r.conteudo.guia; S.inicio = r.conteudo.inicio || S.inicio || {}; status('ok'); return; }
+    limparMemoria(); baseDados = clonar(S.dados);
     try { // dados da versão antiga do app, que ficavam só neste aparelho: sobem para a conta
       const antigo = JSON.parse(localStorage.getItem(CHAVE));
       if (antigo && antigo.dados) { const n = norm(antigo); S.perfil = n.perfil; S.dados = n.dados; S.guia = !!antigo.guia; localStorage.removeItem(CHAVE); salvar(); aviso('Trouxemos para a sua conta os dados que estavam neste aparelho.'); }
@@ -170,9 +177,9 @@
     if (V.ts && ['entrar', 'cadastro', 'esqueci'].includes(V.auth) && !V.tsTok) { er.textContent = 'Confirme que você não é um robô (marque a caixa acima do botão).'; er.hidden = false; er.focus(); return; }
     const v = Object.fromEntries(new FormData(f)); const rotulo = btn.textContent; btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = V.auth === 'entrar' ? 'Entrando…' : 'Enviando…';
     try {
-      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha, turnstile: V.tsTok }); USER.logado = true; USER.info = r.usuario; await carregarDados(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
+      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha, turnstile: V.tsTok }); USER.logado = true; USER.info = r.usuario; await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
       else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: !!v.aceite, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
-      else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: !!v.aceite }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; await carregarDados(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
+      else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: !!v.aceite }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
       else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'redefinir') { await api('redefinir', { token: V.token, senha: v.senha }); V.auth = 'entrar'; V.token = ''; V.msg = 'Senha alterada. Entre com a nova senha.'; render(); }
     } catch (e) { er.textContent = e.message; er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; if (window.turnstile && tsId !== null) { window.turnstile.reset(tsId); V.tsTok = ''; } }
@@ -193,10 +200,13 @@
     else if (oa && oa !== 'ok') { V.msg = MENS[oa] || MENS.erro; V.msgErro = true; }
     if (tv) { try { await api('verificar', { token: tv }); V.msg = 'E-mail confirmado! Agora é só entrar.'; } catch (e) { V.msg = e.message; } }
     if (tr) { V.auth = 'redefinir'; V.token = tr; }
+    const cv = q.get('convite');
+    if (cv) { history.replaceState(null, '', location.pathname); try { localStorage.setItem(CONVITE, cv); } catch (e) { /* sem armazenamento */ } }
+    if (cv && !V.msg) V.msg = 'Você recebeu um convite para compartilhar um espaço. Entre ou crie a sua conta para aceitar.';
     try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ }
     if (!USER.logado) await carregarTurnstile();
     render();
-    if (USER.logado) { carregarCapturas(); travar(); }
+    if (USER.logado) { carregarCapturas(); carregarEspaco(); travar(); aceitarConvite(); }
   }
 
   /* ---------- compras automáticas (avisos do banco) ---------- */
@@ -362,7 +372,7 @@
     const transf = l.tipo === 'transf';
     const info = transf ? { icone: '🔁', cor: '#2D4BFF' } : catInfo(l.categoria, l.tipo);
     const cartao = F.ehCartao(l);
-    const sub = transf ? `${esc(nomeConta(l.conta))} → ${esc(nomeConta(l.destino))}` : `${esc(l.categoria)} · ${cartao ? '💳 ' : ''}${esc(nomeConta(l.conta))}${(l.tags || []).map((t) => ` <span class="tag">#${esc(t)}</span>`).join('')}`;
+    const sub = transf ? `${esc(nomeConta(l.conta))} → ${esc(nomeConta(l.destino))}` : `${esc(l.categoria)} · ${cartao ? '💳 ' : ''}${esc(nomeConta(l.conta))}${(l.tags || []).map((t) => ` <span class="tag">#${esc(t)}</span>`).join('')}${l.por && V.esp && V.esp.papel !== 'sozinho' ? ` · ${esc(l.por)}` : ''}`;
     const sinal = l.tipo === 'receita' ? '+ ' : transf ? '' : '− ';
     const cor = l.tipo === 'receita' ? 'pos' : transf ? '' : 'neg';
     const visto = cartao ? '' : `<button class="visto ${l.pago ? 'on' : ''}" type="button" data-acao="alternar" data-id="${l.id}" aria-label="Pago ou recebido: ${esc(l.desc || l.categoria)}" aria-pressed="${!!l.pago}">${l.pago ? '✓' : ''}</button>`;
@@ -593,6 +603,8 @@
       + linha({ icone: LI.chave, titulo: 'Conectar avisos do banco', desc: 'Chave e passo a passo, sem dar a senha do banco', attrs: 'data-acao="captura-config"' }))}
     ${grupo('Divisão de despesas',
       linha({ icone: LI.copia, titulo: 'Quem deve a sua parte', desc: (() => { const s = F.saldosDivisao(d.lancs); return s.length ? `${s.length} pessoa(s) a acertar · ${m(s.reduce((t, x) => t + x.total, 0))}` : 'Despesas divididas com casal ou sócios'; })(), attrs: 'data-acao="divisoes"' }))}
+    ${grupo('Compartilhar',
+      linha({ icone: LI.user, titulo: 'Compartilhar com outra pessoa', desc: !V.esp || V.esp.papel === 'sozinho' ? 'Cônjuge ou sócio vê e edita com você' : V.esp.papel === 'membro' ? `Você está no espaço de ${esc(V.esp.dono.nome)}` : `Compartilhando com ${esc(V.esp.membros[0].nome)}`, attrs: 'data-acao="compartilhar"' }))}
     ${grupo('Ferramentas',
       linha({ icone: LI.bell, titulo: 'Assinaturas', desc: 'Cobranças que se repetem todo mês', attrs: 'data-acao="assinaturas"' })
       + linha({ icone: LI.brilho, titulo: 'Simulador de juros e metas', desc: 'Quanto vira se guardar todo mês', attrs: 'data-acao="simulador"' })
@@ -780,7 +792,7 @@
         const parte = rep === 'parcelado' ? F.arred(valor / n) : valor; const serie = n > 1 ? uid() : undefined;
         for (let i = 0; i < n; i++) {
           const v = rep === 'parcelado' && i === n - 1 ? F.arred(valor - parte * (n - 1)) : parte;
-          d.lancs.push({ ...reg, ...(serie ? { serie, n: i + 1, de: n, modoSerie: rep, freq } : {}), id: uid(), valor: v, divisao: F.dividir(nomes, v), desc: rep === 'parcelado' ? `${reg.desc} (${i + 1}/${n})` : reg.desc, data: dataSerie(reg.data, freq, i), pago: i === 0 ? reg.pago : false });
+          d.lancs.push({ ...reg, ...(serie ? { serie, n: i + 1, de: n, modoSerie: rep, freq } : {}), id: uid(), por: String((USER.info && USER.info.nome) || '').split(' ')[0] || undefined, valor: v, divisao: F.dividir(nomes, v), desc: rep === 'parcelado' ? `${reg.desc} (${i + 1}/${n})` : reg.desc, data: dataSerie(reg.data, freq, i), pago: i === 0 ? reg.pago : false });
         }
       } else {
         const alvo = d.lancs.find((x) => x.id === base.id); const aplicar = base.serie ? (fd.get('aplicar') || 'este') : 'este';
@@ -944,6 +956,43 @@
   function formAporte(o) {
     abrir('Guardar dinheiro', `<p class="mut">${esc(o.nome)}: ${F.brl(o.guardado)} de ${F.brl(o.meta)}</p>${campo('Quanto guardar agora (R$)', '<input name="v" inputmode="decimal" required placeholder="0,00">')}<button class="btn" type="submit">Guardar</button>`,
       (fd) => { const v = F.arred(F.numeroBR(fd.get('v'))); if (!(v > 0)) { aviso('Informe um valor.'); return false; } o.guardado = F.arred(o.guardado + v); (o.aportes = o.aportes || []).push({ data: F.hojeISO(), valor: v }); salvar(); render(); aviso(o.guardado >= o.meta ? 'Objetivo alcançado! 🎉' : 'Valor guardado.'); });
+  }
+
+  /* ---------- espaço compartilhado (duas pessoas, mesmos dados) ---------- */
+  async function carregarEspaco() {
+    try { V.esp = await api('espaco'); } catch (e) { V.esp = V.esp || { papel: 'sozinho', membros: [], dono: null, max: 1 }; }
+    if (USER.logado && !dlg.open && ['inicio', 'lancs', 'mais'].includes(V.tela)) render();
+  }
+  async function aceitarConvite() {
+    let t = null; try { t = localStorage.getItem(CONVITE); } catch (e) { /* sem armazenamento */ }
+    if (!t || !USER.logado) return;
+    try { localStorage.removeItem(CONVITE); } catch (e) { /* sem armazenamento */ }
+    if (!(await confirmar('Entrar num espaço compartilhado?', 'Você vai ver e editar os mesmos lançamentos, contas e cartões da pessoa que convidou, e ela vai ver os seus lançamentos novos. O que você já tinha fica guardado e volta se você sair do espaço.', 'Entrar no espaço', false))) return;
+    try { const r = await api('convite_aceitar', { token: t }); await carregarDados(); await carregarEspaco(); render(); aviso(`Pronto! Você entrou no espaço de ${r.dono}.`); } catch (e) { aviso(e.message); }
+  }
+  async function atualizarDoServidor() { // vê o que a outra pessoa lançou, sem precisar recarregar a página
+    if (!USER.logado || enviando || precisaEnviar || dlg.open || !V.esp || V.esp.papel === 'sozinho' || document.hidden) return;
+    try { const r = await api('dados'); if (r.versao !== versaoServidor && r.conteudo && r.conteudo.dados && !precisaEnviar && !enviando) { versaoServidor = r.versao; const n = norm({ perfil: S.perfil, dados: r.conteudo.dados }); S.dados = n.dados; baseDados = clonar(n.dados); if (!dlg.open) render(); } } catch (e) { /* tenta de novo no próximo ciclo */ }
+  }
+  setInterval(atualizarDoServidor, 45000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarDoServidor(); });
+  function formCompartilhar() {
+    const e = V.esp || { papel: 'sozinho', membros: [] }; let link = '';
+    const corpo = () => {
+      if (e.papel === 'membro') return `<p>Você está no espaço de <b>${esc(e.dono.nome)}</b>. Vocês veem e editam os mesmos lançamentos, contas e cartões.</p><p class="mut">Ao sair, você volta aos seus dados de antes e deixa de ver os dela.</p><button class="btn sec" type="button" data-sair>Sair do espaço</button>`;
+      const membros = e.membros.map((x) => `<div class="troca"><span><b>${esc(x.nome)}</b><br><small class="mut">${esc(x.email)}</small></span><button class="btn sec mini" type="button" data-rem="${esc(x.id)}">Remover</button></div>`).join('');
+      const convite = !e.membros.length ? (link ? `<label class="campo"><span>Link do convite (vale 7 dias, uma pessoa só)</span><input readonly value="${esc(link)}" id="conv-link"></label><div class="botoes"><button class="btn" type="button" data-copiar>Copiar link</button><a class="btn sec" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Entra no nosso espaço do Lepvi Finanças: ' + link)}">Enviar pelo WhatsApp</a></div>` : '<button class="btn" type="button" data-convidar>Convidar uma pessoa</button>') : '';
+      return `<p>Compartilhe com outra pessoa (cônjuge, sócio): vocês dois entram com o próprio e-mail e senha e veem os <b>mesmos</b> lançamentos, contas, cartões e metas, quase em tempo real.</p>${membros}${convite}<p class="mut">Cabem duas pessoas. Quem entra vê tudo, inclusive o que já foi lançado. Você pode remover a pessoa quando quiser. Se você excluir a sua conta, os dados compartilhados são apagados.</p>`;
+    };
+    const desenha = (f) => {
+      f.querySelector('#comp-c').innerHTML = corpo();
+      const q = (x) => f.querySelector(x);
+      if (q('[data-convidar]')) q('[data-convidar]').addEventListener('click', async () => { try { const r = await api('convite_criar', {}); link = `${location.origin}${location.pathname}?convite=${r.token}`; desenha(f); } catch (er) { aviso(er.message); } });
+      if (q('[data-copiar]')) q('[data-copiar]').addEventListener('click', async () => { try { await navigator.clipboard.writeText(link); aviso('Link copiado.'); } catch (er) { q('#conv-link').select(); aviso('Selecione e copie o link.'); } });
+      f.querySelectorAll('[data-rem]').forEach((b) => b.addEventListener('click', async () => { if (!(await confirmar('Remover essa pessoa?', 'Ela deixa de ver e editar os seus dados. Os lançamentos continuam com você.', 'Remover'))) return; try { await api('espaco_remover', { id: b.dataset.rem }); await carregarEspaco(); Object.assign(e, V.esp); link = ''; desenha(f); } catch (er) { aviso(er.message); } }));
+      if (q('[data-sair]')) q('[data-sair]').addEventListener('click', async () => { if (!(await confirmar('Sair do espaço?', 'Você volta aos seus dados de antes e deixa de ver os da outra pessoa.', 'Sair'))) return; try { await api('espaco_sair', {}); dlg.close(); await carregarDados(); await carregarEspaco(); render(); aviso('Você saiu do espaço.'); } catch (er) { aviso(er.message); } });
+    };
+    abrir('Compartilhar com outra pessoa', '<div id="comp-c"></div>', null, desenha);
   }
 
   /* ---------- ferramentas (como Mobills e Organizze) ---------- */
@@ -1124,6 +1173,7 @@
     const d = D(); const id = t.dataset.id; const a = t.dataset.acao;
     const acoes = {
       acess: () => formAcess(),
+      compartilhar: () => formCompartilhar(),
       assinaturas: () => formAssinaturas(),
       simulador: () => formSimulador(),
       desafio: () => formDesafio(),

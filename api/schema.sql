@@ -78,3 +78,9 @@ CREATE TABLE IF NOT EXISTS anexos (
   conteudo LONGTEXT NOT NULL,
   criado_em INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS membros (
+  usuario_id VARCHAR(32) NOT NULL PRIMARY KEY,
+  dono_id VARCHAR(32) NOT NULL,
+  entrou_em INTEGER NOT NULL
+);
+CREATE INDEX idx_membros_dono ON membros (dono_id);

@@ -208,6 +208,68 @@ test('alerta de orçamento por e-mail: avisa em 80% e de novo em 100%, uma vez c
   assert.ok(emails().includes('Mercado: 120% do limite do mês') && emails().includes('O limite foi ultrapassado'));
   assert.match(rodar('2027-03-15'), /enviados: 0/);
 });
+test('espaço compartilhado: convite, os dois veem os mesmos dados, só 2 pessoas, remover e sair', async () => {
+  const cookieAna = cookie;
+  const dadosAna = (await chamar('dados', undefined, { metodo: 'GET' })).json;
+  const salvo = await chamar('dados', { versao: dadosAna.versao, conteudo: { dados: { pessoal: { lancs: [{ id: 'a1', desc: 'Mercado' }] } } } });
+  assert.strictEqual(salvo.status, 200);
+  // Beto e Caio criam conta
+  const entrarNovo = async (email, nome) => {
+    cookie = '';
+    assert.strictEqual((await chamar('cadastro', { email, nome, senha: SENHA, aceite: true })).status, 200);
+    assert.strictEqual((await chamar('verificar', { token: ultimoToken('verificar') })).status, 200);
+    assert.strictEqual((await chamar('entrar', { email, senha: SENHA })).status, 200);
+    return cookie;
+  };
+  const cookieBeto = await entrarNovo('beto@example.com', 'Beto');
+  const cookieCaio = await entrarNovo('caio@example.com', 'Caio');
+  // Beto tem dados próprios que ficam guardados
+  cookie = cookieBeto;
+  assert.strictEqual((await chamar('dados', { versao: 0, conteudo: { dados: { pessoal: { lancs: [{ id: 'b1', desc: 'Só do Beto' }] } } } })).status, 200);
+  // quem não é dono não convida; sem convite válido não entra
+  assert.strictEqual((await chamar('convite_aceitar', { token: 'falso' })).status, 422);
+  // Ana convida
+  cookie = cookieAna;
+  const conv = await chamar('convite_criar', {});
+  assert.strictEqual(conv.status, 200);
+  const token = conv.json.token;
+  assert.strictEqual((await chamar('convite_aceitar', { token })).status, 422, 'não aceita o próprio convite');
+  // Beto aceita
+  cookie = cookieBeto;
+  assert.strictEqual((await chamar('convite_aceitar', { token })).status, 200);
+  assert.strictEqual((await chamar('convite_aceitar', { token })).status, 422, 'convite vale uma vez só');
+  const vistoBeto = (await chamar('dados', undefined, { metodo: 'GET' })).json;
+  assert.strictEqual(vistoBeto.conteudo.dados.pessoal.lancs[0].desc, 'Mercado', 'Beto vê os dados da Ana');
+  assert.strictEqual((await chamar('espaco', undefined, { metodo: 'GET' })).json.papel, 'membro');
+  assert.strictEqual((await chamar('convite_criar', {})).status, 403, 'membro não convida');
+  // Beto grava, Ana vê
+  assert.strictEqual((await chamar('dados', { versao: vistoBeto.versao, conteudo: { dados: { pessoal: { lancs: [{ id: 'a1', desc: 'Mercado' }, { id: 'b2', desc: 'Feito pelo Beto' }] } } } })).status, 200);
+  cookie = cookieAna;
+  const visto = (await chamar('dados', undefined, { metodo: 'GET' })).json;
+  assert.strictEqual(visto.conteudo.dados.pessoal.lancs.length, 2);
+  const esp = (await chamar('espaco', undefined, { metodo: 'GET' })).json;
+  assert.strictEqual(esp.papel, 'dono'); assert.strictEqual(esp.membros.length, 1);
+  // só duas pessoas
+  assert.strictEqual((await chamar('convite_criar', {})).status, 422);
+  // Caio, sem espaço, não consegue entrar num convite quando o espaço está cheio; remover libera
+  const idBeto = esp.membros[0].id;
+  assert.strictEqual((await chamar('espaco_remover', { id: 'inexistente' })).status, 404);
+  assert.strictEqual((await chamar('espaco_remover', { id: idBeto })).status, 200);
+  cookie = cookieBeto;
+  const volta = (await chamar('dados', undefined, { metodo: 'GET' })).json;
+  assert.strictEqual(volta.conteudo.dados.pessoal.lancs[0].desc, 'Só do Beto', 'ao sair, os dados próprios voltam');
+  // Caio entra e depois sai sozinho
+  cookie = cookieAna;
+  const t2 = (await chamar('convite_criar', {})).json.token;
+  cookie = cookieCaio;
+  assert.strictEqual((await chamar('convite_aceitar', { token: t2 })).status, 200);
+  assert.strictEqual((await chamar('espaco_sair', {})).status, 200);
+  assert.strictEqual((await chamar('espaco', undefined, { metodo: 'GET' })).json.papel, 'sozinho');
+  assert.strictEqual((await chamar('espaco_sair', {})).status, 422);
+  // limpeza: as contas de teste saem (excluir também desfaz vínculos)
+  for (const c of [cookieBeto, cookieCaio]) { cookie = c; assert.strictEqual((await chamar('excluir', { senha: SENHA })).status, 200); }
+  cookie = cookieAna;
+});
 test('excluir conta apaga tudo', async () => {
   assert.strictEqual((await chamar('excluir', { senha: 'errada-errada' })).status, 401);
   assert.strictEqual((await chamar('excluir', { senha: 'outra-senha-forte-33' })).status, 200);

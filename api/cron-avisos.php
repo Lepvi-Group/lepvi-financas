@@ -60,7 +60,7 @@ function resumo_semanal_rodar(string $hoje): int
         $chave = 'semanal|' . $semana;
         $j = db()->prepare('SELECT 1 FROM avisos WHERE usuario_id = ? AND chave = ?'); $j->execute([$u['id'], $chave]);
         if ($j->fetchColumn()) continue;
-        $s = db()->prepare('SELECT conteudo FROM dados WHERE usuario_id = ?'); $s->execute([$u['id']]);
+        $s = db()->prepare('SELECT conteudo FROM dados WHERE usuario_id = ?'); $s->execute([espaco_dono($u['id'])]);
         $bruto = $s->fetchColumn(); $S = $bruto ? json_decode((string) decifrar($bruto), true) : null;
         if (!is_array($S)) continue;
         $tot = 0.0; $ant = 0.0; $rec = 0.0; $cats = []; $lista = []; $proximos = [];
@@ -97,7 +97,7 @@ $usuarios = db()->query('SELECT * FROM usuarios WHERE avisos = 1 AND email_verif
 $enviados = 0;
 foreach ($usuarios as $u) {
     $s = db()->prepare('SELECT conteudo FROM dados WHERE usuario_id = ?');
-    $s->execute([$u['id']]);
+    $s->execute([espaco_dono($u['id'])]);
     $bruto = $s->fetchColumn();
     $S = $bruto ? json_decode((string) decifrar($bruto), true) : null;
     if (!is_array($S)) continue;

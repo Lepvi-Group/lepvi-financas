@@ -74,6 +74,7 @@ function db(): PDO
     try { $pdo->query('SELECT 1 FROM capturas LIMIT 1'); } catch (Throwable $e) {
         foreach (['CREATE TABLE IF NOT EXISTS chaves_captura (hash VARCHAR(64) NOT NULL PRIMARY KEY, usuario_id VARCHAR(32) NOT NULL, criado_em INTEGER NOT NULL, ultimo_uso INTEGER NULL)', 'CREATE TABLE IF NOT EXISTS capturas (id VARCHAR(32) NOT NULL PRIMARY KEY, usuario_id VARCHAR(32) NOT NULL, conteudo LONGTEXT NOT NULL, criado_em INTEGER NOT NULL)', 'CREATE TABLE IF NOT EXISTS anexos (id VARCHAR(32) NOT NULL PRIMARY KEY, usuario_id VARCHAR(32) NOT NULL, lanc_id VARCHAR(64) NOT NULL, conteudo LONGTEXT NOT NULL, criado_em INTEGER NOT NULL)'] as $sql) { try { $pdo->exec($sql); } catch (Throwable $e2) { /* já existe */ } }
     }
+    try { $pdo->query('SELECT 1 FROM membros LIMIT 1'); } catch (Throwable $e) { foreach (['CREATE TABLE IF NOT EXISTS membros (usuario_id VARCHAR(32) NOT NULL PRIMARY KEY, dono_id VARCHAR(32) NOT NULL, entrou_em INTEGER NOT NULL)', 'CREATE INDEX idx_membros_dono ON membros (dono_id)'] as $sql) { try { $pdo->exec($sql); } catch (Throwable $e2) { /* já existe */ } } }
     try { $pdo->query('SELECT resumo FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN resumo INTEGER NOT NULL DEFAULT 1'); } catch (Throwable $e2) { /* já existe */ } }
     try { $pdo->query('SELECT foto FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN foto LONGTEXT NULL'); } catch (Throwable $e2) { /* já existe */ } }
     return $pdo;
@@ -193,6 +194,30 @@ function exigir_usuario(): array { return usuario_atual() ?? erro('Entre para co
 function usuario_publico(array $u): array
 {
     return ['email' => $u['email'], 'nome' => $u['nome'], 'foto' => $u['foto'] ?? null, 'avisos' => (bool) $u['avisos'], 'resumo' => (bool) ($u['resumo'] ?? 1), 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao'], 'criado_em' => (int) $u['criado_em']];
+}
+/* Espaço compartilhado: quem entrou no espaço de outra pessoa lê e grava os dados dela (a conta de quem convidou é a "dona" dos dados). */
+function espaco_dono(string $uid): string
+{
+    $s = db()->prepare('SELECT dono_id FROM membros WHERE usuario_id = ?');
+    $s->execute([$uid]);
+    $d = $s->fetchColumn();
+    return $d ? (string) $d : $uid;
+}
+const ESPACO_MAX_MEMBROS = 1;
+function espaco_membros(string $donoId): array
+{
+    $s = db()->prepare('SELECT u.id, u.nome, u.email, m.entrou_em FROM membros m JOIN usuarios u ON u.id = m.usuario_id WHERE m.dono_id = ? ORDER BY m.entrou_em');
+    $s->execute([$donoId]);
+    return $s->fetchAll();
+}
+function espaco_info(array $u, string $dono): array
+{
+    if ($dono !== $u['id']) {
+        $q = db()->prepare('SELECT nome, email FROM usuarios WHERE id = ?'); $q->execute([$dono]); $o = $q->fetch() ?: ['nome' => '', 'email' => ''];
+        return ['papel' => 'membro', 'dono' => ['nome' => $o['nome'], 'email' => $o['email']], 'membros' => [], 'max' => ESPACO_MAX_MEMBROS];
+    }
+    $m = array_map(fn($x) => ['id' => $x['id'], 'nome' => $x['nome'], 'email' => $x['email'], 'desde' => (int) $x['entrou_em']], espaco_membros($u['id']));
+    return ['papel' => $m ? 'dono' : 'sozinho', 'dono' => null, 'membros' => $m, 'max' => ESPACO_MAX_MEMBROS];
 }
 function criar_token(string $uid, string $tipo, int $segundos): string
 {

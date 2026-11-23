@@ -310,7 +310,32 @@
     return { semanas, total: acum };
   }
 
-  const api = { sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  /* Junta duas edições feitas ao mesmo tempo (duas pessoas no mesmo espaço): base = o último que o app sincronizou, local = o que esta pessoa fez,
+     remoto = o que está no servidor. Lista com id (ou nome): cada item é decidido sozinho; o que só um lado mexeu vale; no mesmo campo vale o local. */
+  function juntarDados(base, local, remoto) {
+    const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const obj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+    const chave = (x) => (obj(x) ? (x.id !== undefined ? x.id : x.nome) : undefined);
+    const mapa = (l) => { const m = new Map(); (l || []).forEach((x) => m.set(chave(x), x)); return m; };
+    const juntar = (b, l, r) => {
+      if (igual(l, b)) return r;
+      if (igual(r, b)) return l;
+      if (Array.isArray(l) && Array.isArray(r) && (b === undefined || Array.isArray(b)) && [...(b || []), ...l, ...r].every((x) => chave(x) !== undefined)) {
+        const mb = mapa(b); const ml = mapa(l); const mr = mapa(r);
+        const ordem = [...mr.keys(), ...[...ml.keys()].filter((k) => !mr.has(k))];
+        return ordem.filter((k) => !(mb.has(k) && (!ml.has(k) || !mr.has(k)))).map((k) => (ml.has(k) && mr.has(k) ? juntar(mb.get(k), ml.get(k), mr.get(k)) : (ml.get(k) || mr.get(k))));
+      }
+      if (obj(l) && obj(r) && (b === undefined || obj(b))) {
+        const out = {};
+        [...new Set([...Object.keys(l), ...Object.keys(r)])].forEach((k) => { const v = juntar(b ? b[k] : undefined, l[k], r[k]); if (v !== undefined) out[k] = v; });
+        return out;
+      }
+      return l;
+    };
+    return juntar(base, local, remoto);
+  }
+
+  const api = { juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

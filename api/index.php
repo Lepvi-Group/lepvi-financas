@@ -17,41 +17,43 @@ try {
         resp(['provedor' => oauth_provedores()[$pend['p']]['nome'] ?? '', 'email' => $pend['email'], 'nome' => $pend['nome']]);
     }
     // Leitura sem efeito colateral (exportar baixa um arquivo).
-    if ($metodo === 'GET' && in_array($acao, ['eu', 'dados', 'exportar', 'capturas', 'anexos', 'anexo'], true)) {
+    if ($metodo === 'GET' && in_array($acao, ['eu', 'dados', 'exportar', 'capturas', 'anexos', 'anexo', 'espaco'], true)) {
         $u = exigir_usuario();
+        $dono = espaco_dono($u['id']);
         if ($acao === 'eu') resp(['usuario' => usuario_publico($u)]);
+        if ($acao === 'espaco') resp(espaco_info($u, $dono));
         if ($acao === 'capturas') {
             $k = db()->prepare('SELECT criado_em, ultimo_uso FROM chaves_captura WHERE usuario_id = ?');
             $k->execute([$u['id']]);
             $ch = $k->fetch();
-            resp(['capturas' => capturas_listar($u['id']), 'chave' => $ch ? ['criada_em' => (int) $ch['criado_em'], 'ultimo_uso' => $ch['ultimo_uso'] !== null ? (int) $ch['ultimo_uso'] : null] : null]);
+            resp(['capturas' => capturas_listar($dono), 'chave' => $ch ? ['criada_em' => (int) $ch['criado_em'], 'ultimo_uso' => $ch['ultimo_uso'] !== null ? (int) $ch['ultimo_uso'] : null] : null]);
         }
         if ($acao === 'anexos') {
             $s = db()->prepare('SELECT id, criado_em FROM anexos WHERE usuario_id = ? AND lanc_id = ? ORDER BY criado_em');
-            $s->execute([$u['id'], substr((string) ($_GET['lanc'] ?? ''), 0, 64)]);
+            $s->execute([$dono, substr((string) ($_GET['lanc'] ?? ''), 0, 64)]);
             resp(['anexos' => $s->fetchAll()]);
         }
         if ($acao === 'anexo') {
             $s = db()->prepare('SELECT conteudo FROM anexos WHERE usuario_id = ? AND id = ?');
-            $s->execute([$u['id'], substr((string) ($_GET['id'] ?? ''), 0, 32)]);
+            $s->execute([$dono, substr((string) ($_GET['id'] ?? ''), 0, 32)]);
             $c = $s->fetchColumn();
             if ($c === false) erro('Anexo não encontrado.', 404);
             resp(['dataUrl' => decifrar((string) $c)]);
         }
         if ($acao === 'dados') {
             $s = db()->prepare('SELECT conteudo, versao FROM dados WHERE usuario_id = ?');
-            $s->execute([$u['id']]);
+            $s->execute([$dono]);
             $l = $s->fetch();
             resp(['versao' => $l ? (int) $l['versao'] : 0, 'conteudo' => $l ? json_decode((string) decifrar($l['conteudo']), true) : null]);
         }
         // exportar: todos os dados da pessoa (LGPD, direito de acesso e portabilidade)
         $s = db()->prepare('SELECT conteudo, versao, atualizado_em FROM dados WHERE usuario_id = ?');
-        $s->execute([$u['id']]);
+        $s->execute([$dono]);
         $d = $s->fetch();
         $c = db()->prepare('SELECT tipo, versao, quando FROM consentimentos WHERE usuario_id = ? ORDER BY quando');
         $c->execute([$u['id']]);
         $an = db()->prepare('SELECT id, lanc_id, conteudo, criado_em FROM anexos WHERE usuario_id = ? ORDER BY criado_em');
-        $an->execute([$u['id']]);
+        $an->execute([$dono]);
         $fotos = array_map(fn($x) => ['id' => $x['id'], 'lancamento' => $x['lanc_id'], 'em' => date('c', (int) $x['criado_em']), 'imagem' => decifrar((string) $x['conteudo'])], $an->fetchAll());
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
@@ -61,7 +63,7 @@ try {
             'conta' => ['email' => $u['email'], 'nome' => $u['nome'], 'tem_foto' => !empty($u['foto']), 'criada_em' => date('c', (int) $u['criado_em']), 'avisos_por_email' => (bool) $u['avisos'], 'email_confirmado' => (bool) $u['email_verificado']],
             'consentimentos' => array_map(fn($x) => ['tipo' => $x['tipo'], 'versao' => $x['versao'], 'em' => date('c', (int) $x['quando'])], $c->fetchAll()),
             'dados_financeiros' => $d ? json_decode((string) decifrar($d['conteudo']), true) : null,
-            'avisos_do_banco_para_revisar' => capturas_listar($u['id']),
+            'avisos_do_banco_para_revisar' => capturas_listar($dono),
             'fotos_de_comprovantes' => $fotos,
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         exit;
@@ -174,6 +176,7 @@ try {
 
     // A partir daqui, só com sessão válida.
     $u = exigir_usuario();
+    $dono = espaco_dono($u['id']);
     switch ($acao) {
         case 'dados': {
             $esperada = (int) ($b['versao'] ?? -1);
@@ -185,16 +188,16 @@ try {
             $pdo = db();
             $pdo->beginTransaction();
             $s = $pdo->prepare('SELECT versao FROM dados WHERE usuario_id = ?');
-            $s->execute([$u['id']]);
+            $s->execute([$dono]);
             $atual = $s->fetchColumn();
             if ($atual === false) {
                 if ($esperada !== 0) { $pdo->rollBack(); resp(['conflito' => true, 'versao' => 0], 409); }
-                $pdo->prepare('INSERT INTO dados (usuario_id, conteudo, versao, atualizado_em) VALUES (?,?,1,?)')->execute([$u['id'], $cif, agora()]);
+                $pdo->prepare('INSERT INTO dados (usuario_id, conteudo, versao, atualizado_em) VALUES (?,?,1,?)')->execute([$dono, $cif, agora()]);
                 $nova = 1;
             } else {
                 if ((int) $atual !== $esperada) { $pdo->rollBack(); resp(['conflito' => true, 'versao' => (int) $atual], 409); }
                 $nova = (int) $atual + 1;
-                $pdo->prepare('UPDATE dados SET conteudo = ?, versao = ?, atualizado_em = ? WHERE usuario_id = ?')->execute([$cif, $nova, agora(), $u['id']]);
+                $pdo->prepare('UPDATE dados SET conteudo = ?, versao = ?, atualizado_em = ? WHERE usuario_id = ?')->execute([$cif, $nova, agora(), $dono]);
             }
             $pdo->commit();
             resp(['versao' => $nova]);
@@ -209,11 +212,11 @@ try {
             $c = captura_interpretar((string) ($b['texto'] ?? ''));
             if (!$c) erro('Não achei um valor em reais nesse texto. Cole o aviso completo do banco.', 422);
             $c['origem'] = 'teste'; $c['h'] = sha1($c['texto'] . $c['valor'] . agora());
-            resp(['captura' => ['id' => captura_guardar($u['id'], $c)] + $c]);
+            resp(['captura' => ['id' => captura_guardar($dono, $c)] + $c]);
         }
         case 'capturas_resolver': {
             $ids = isset($b['ids']) && is_array($b['ids']) ? array_slice(array_map('strval', $b['ids']), 0, 200) : [];
-            foreach ($ids as $id) db()->prepare('DELETE FROM capturas WHERE usuario_id = ? AND id = ?')->execute([$u['id'], substr($id, 0, 32)]);
+            foreach ($ids as $id) db()->prepare('DELETE FROM capturas WHERE usuario_id = ? AND id = ?')->execute([$dono, substr($id, 0, 32)]);
             resp(['ok' => true]);
         }
         case 'anexo_enviar': {
@@ -222,17 +225,17 @@ try {
             if (!preg_match('#^data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$#', $d, $m) || strlen($d) > 900000) erro('Imagem inválida ou grande demais.', 422);
             $bin = base64_decode($m[2], true); $info = $bin !== false ? @getimagesizefromstring($bin) : false;
             if (!$info || $info[0] > 2400 || $info[1] > 2400) erro('Imagem inválida.', 422);
-            $n = db()->prepare('SELECT COUNT(*) FROM anexos WHERE usuario_id = ? AND lanc_id = ?'); $n->execute([$u['id'], $lanc]);
+            $n = db()->prepare('SELECT COUNT(*) FROM anexos WHERE usuario_id = ? AND lanc_id = ?'); $n->execute([$dono, $lanc]);
             if ((int) $n->fetchColumn() >= 5) erro('Cada lançamento aceita até 5 fotos.', 422);
-            $t = db()->prepare('SELECT COUNT(*) FROM anexos WHERE usuario_id = ?'); $t->execute([$u['id']]);
+            $t = db()->prepare('SELECT COUNT(*) FROM anexos WHERE usuario_id = ?'); $t->execute([$dono]);
             if ((int) $t->fetchColumn() >= 300) erro('Você chegou ao limite de fotos guardadas.', 422);
             $id = novo_id();
-            db()->prepare('INSERT INTO anexos (id, usuario_id, lanc_id, conteudo, criado_em) VALUES (?,?,?,?,?)')->execute([$id, $u['id'], $lanc, cifrar($d), agora()]);
+            db()->prepare('INSERT INTO anexos (id, usuario_id, lanc_id, conteudo, criado_em) VALUES (?,?,?,?,?)')->execute([$id, $dono, $lanc, cifrar($d), agora()]);
             resp(['id' => $id]);
         }
         case 'anexo_excluir': {
-            if (!empty($b['id'])) db()->prepare('DELETE FROM anexos WHERE usuario_id = ? AND id = ?')->execute([$u['id'], substr((string) $b['id'], 0, 32)]);
-            elseif (!empty($b['lanc'])) db()->prepare('DELETE FROM anexos WHERE usuario_id = ? AND lanc_id = ?')->execute([$u['id'], substr((string) $b['lanc'], 0, 64)]);
+            if (!empty($b['id'])) db()->prepare('DELETE FROM anexos WHERE usuario_id = ? AND id = ?')->execute([$dono, substr((string) $b['id'], 0, 32)]);
+            elseif (!empty($b['lanc'])) db()->prepare('DELETE FROM anexos WHERE usuario_id = ? AND lanc_id = ?')->execute([$dono, substr((string) $b['lanc'], 0, 64)]);
             resp(['ok' => true]);
         }
         case 'preferencias': {
@@ -257,12 +260,56 @@ try {
             enviar_email($u['email'], 'Sua senha do Lepvi Finanças foi alterada', email_html('Senha alterada', '<p>A senha da sua conta foi alterada agora. Se não foi você, use "Esqueci minha senha" na tela de entrada e fale com a gente: lepvi@lepvi.com.br.</p>'));
             resp(['ok' => true]);
         }
+        case 'convite_criar': {
+            if ($dono !== $u['id']) erro('Só quem criou o espaço pode convidar.', 403);
+            if (limite_estourou('conv:' . $u['id'], 10, 3600)) erro('Muitos convites. Tente de novo mais tarde.', 429);
+            registrar_tentativa('conv:' . $u['id']);
+            if (count(espaco_membros($u['id'])) >= ESPACO_MAX_MEMBROS) erro('O espaço já tem duas pessoas. Remova a outra pessoa para convidar alguém.', 422);
+            resp(['token' => criar_token($u['id'], 'convite', 7 * 86400)]);
+        }
+        case 'convite_aceitar': {
+            $k = 'convacc:' . $u['id'];
+            if (limite_estourou($k, 10, 900)) erro('Muitas tentativas. Espere alguns minutos.', 429);
+            registrar_tentativa($k);
+            $t = (string) ($b['token'] ?? '');
+            $s = db()->prepare('SELECT usuario_id FROM tokens WHERE hash = ? AND tipo = ? AND expira_em > ?');
+            $s->execute([hash_token($t), 'convite', agora()]);
+            $de = strlen($t) <= 100 ? $s->fetchColumn() : false;
+            if (!$de) erro('Este convite não vale mais. Peça um novo link para a outra pessoa.', 422);
+            $de = (string) $de;
+            if ($de === $u['id']) erro('Este convite é da sua própria conta.', 422);
+            if ($dono !== $u['id']) erro('Você já está num espaço compartilhado. Saia dele antes de entrar em outro.', 422);
+            if (count(espaco_membros($u['id'])) > 0) erro('Você já compartilha o seu espaço. Encerre o compartilhamento antes de entrar no de outra pessoa.', 422);
+            if (espaco_dono($de) !== $de) erro('Este convite não vale mais. Peça um novo link.', 422);
+            if (count(espaco_membros($de)) >= ESPACO_MAX_MEMBROS) erro('O espaço já tem duas pessoas.', 422);
+            $q = db()->prepare('SELECT nome, email FROM usuarios WHERE id = ?'); $q->execute([$de]); $o = $q->fetch();
+            if (!$o) erro('Este convite não vale mais.', 422);
+            db()->prepare('INSERT INTO membros (usuario_id, dono_id, entrou_em) VALUES (?,?,?)')->execute([$u['id'], $de, agora()]);
+            db()->prepare('DELETE FROM tokens WHERE hash = ?')->execute([hash_token($t)]);
+            enviar_email($o['email'], $u['nome'] . ' entrou no seu espaço do Lepvi Finanças', email_html('Nova pessoa no seu espaço', '<p><b>' . htmlspecialchars($u['nome']) . '</b> aceitou o seu convite e agora vê e edita os mesmos lançamentos que você. Você pode remover essa pessoa quando quiser, em Mais opções → Compartilhar.</p>'));
+            resp(['ok' => true, 'dono' => $o['nome']]);
+        }
+        case 'espaco_sair': {
+            if ($dono === $u['id']) erro('Você não está no espaço de outra pessoa.', 422);
+            $q = db()->prepare('SELECT email FROM usuarios WHERE id = ?'); $q->execute([$dono]); $em = $q->fetchColumn();
+            db()->prepare('DELETE FROM membros WHERE usuario_id = ?')->execute([$u['id']]);
+            if ($em) enviar_email((string) $em, $u['nome'] . ' saiu do seu espaço do Lepvi Finanças', email_html('Uma pessoa saiu do seu espaço', '<p><b>' . htmlspecialchars($u['nome']) . '</b> saiu do espaço compartilhado. Os seus lançamentos continuam com você.</p>'));
+            resp(['ok' => true]);
+        }
+        case 'espaco_remover': {
+            $id = substr((string) ($b['id'] ?? ''), 0, 32);
+            $q = db()->prepare('SELECT usuario_id FROM membros WHERE usuario_id = ? AND dono_id = ?'); $q->execute([$id, $u['id']]);
+            if (!$q->fetchColumn()) erro('Essa pessoa não está no seu espaço.', 404);
+            db()->prepare('DELETE FROM membros WHERE usuario_id = ? AND dono_id = ?')->execute([$id, $u['id']]);
+            resp(['ok' => true]);
+        }
         case 'excluir': {
             $k = 'excl:' . $u['id'];
             if (limite_estourou($k, 5, 900)) erro('Muitas tentativas. Espere 15 minutos.', 429);
             if (!senha_confere($u, (string) ($b['senha'] ?? ''))) { registrar_tentativa($k); erro('Senha incorreta.', 401); }
             $pdo = db(); $pdo->beginTransaction();
             foreach (['sessoes', 'tokens', 'dados', 'avisos', 'consentimentos', 'identidades', 'chaves_captura', 'capturas', 'anexos'] as $t) $pdo->prepare("DELETE FROM $t WHERE usuario_id = ?")->execute([$u['id']]);
+            $pdo->prepare('DELETE FROM membros WHERE usuario_id = ? OR dono_id = ?')->execute([$u['id'], $u['id']]);
             $pdo->prepare('DELETE FROM usuarios WHERE id = ?')->execute([$u['id']]);
             $pdo->commit();
             fechar_cookie();

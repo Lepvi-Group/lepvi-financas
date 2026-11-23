@@ -22,6 +22,7 @@ try {
     $s->execute([hash_token($token)]);
     $uid = $token !== '' && strlen($token) <= 120 ? $s->fetchColumn() : false;
     if (!$uid) { registrar_tentativa($kIp); $sai(['erro' => 'Chave inválida.'], 401); }
+    $dono = espaco_dono((string) $uid);
     if (limite_estourou('cap:' . $uid, 60, 60)) $sai(['erro' => 'Muitos avisos em pouco tempo.'], 429);
     registrar_tentativa('cap:' . $uid);
     db()->prepare('UPDATE chaves_captura SET ultimo_uso = ? WHERE hash = ?')->execute([agora(), hash_token($token)]);
@@ -33,8 +34,8 @@ try {
     if (!$c) $sai(['erro' => 'Não achei um valor em reais no texto.'], 422);
     $c['origem'] = in_array($dados['origem'] ?? '', ['email', 'sms', 'push'], true) ? $dados['origem'] : 'aviso';
     $c['h'] = sha1($c['texto'] . $c['valor']);
-    foreach (capturas_listar((string) $uid) as $x) if (($x['h'] ?? '') === $c['h']) $sai(['ok' => true, 'repetido' => true]);
-    $sai(['ok' => true, 'id' => captura_guardar((string) $uid, $c), 'valor' => $c['valor'], 'desc' => $c['desc']]);
+    foreach (capturas_listar($dono) as $x) if (($x['h'] ?? '') === $c['h']) $sai(['ok' => true, 'repetido' => true]);
+    $sai(['ok' => true, 'id' => captura_guardar($dono, $c), 'valor' => $c['valor'], 'desc' => $c['desc']]);
 } catch (Throwable $e) {
     error_log('[lepvi-financas captura] ' . $e->getMessage());
     $sai(['erro' => 'Não foi possível registrar agora.'], 500);
