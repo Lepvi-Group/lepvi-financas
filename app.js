@@ -799,7 +799,7 @@
         v.textContent = '🎤 Ouvindo…'; v.disabled = true;
         const fim = () => { v.textContent = '🎤 Falar'; v.disabled = false; };
         rec.onresult = (ev) => { campoTxt.value = ev.results[0][0].transcript; fim(); usar(); };
-        rec.onerror = () => { fim(); aviso('Não consegui ouvir. Tente de novo ou escreva a frase.'); };
+        rec.onerror = (ev) => { fim(); const e = ev && ev.error; aviso(e === 'not-allowed' || e === 'service-not-allowed' ? 'O microfone está bloqueado. Libere o microfone para este site nas permissões do navegador (cadeado ao lado do endereço).' : e === 'no-speech' ? 'Não ouvi nada. Fale perto do microfone e tente de novo.' : e === 'audio-capture' ? 'Não encontrei um microfone neste aparelho.' : e === 'network' ? 'A voz precisa de internet. Tente de novo ou escreva a frase.' : 'Não consegui ouvir. Tente de novo ou escreva a frase.'); };
         rec.onend = fim;
         try { rec.start(); } catch (e) { fim(); }
       });
