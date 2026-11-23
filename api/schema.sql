@@ -71,6 +71,22 @@ CREATE TABLE IF NOT EXISTS capturas (
   conteudo LONGTEXT NOT NULL,
   criado_em INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS conexoes (
+  id VARCHAR(32) NOT NULL PRIMARY KEY,
+  usuario_id VARCHAR(32) NOT NULL,
+  provedor VARCHAR(40) NOT NULL,
+  item_id VARCHAR(120) NOT NULL,
+  instituicao VARCHAR(80) NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  ultima_sync INTEGER NULL,
+  criado_em INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS of_vistos (
+  usuario_id VARCHAR(32) NOT NULL,
+  h VARCHAR(64) NOT NULL,
+  criado_em INTEGER NOT NULL,
+  PRIMARY KEY (usuario_id, h)
+);
 CREATE TABLE IF NOT EXISTS anexos (
   id VARCHAR(32) NOT NULL PRIMARY KEY,
   usuario_id VARCHAR(32) NOT NULL,

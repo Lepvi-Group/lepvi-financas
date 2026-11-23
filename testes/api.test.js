@@ -29,7 +29,7 @@ const ultimoToken = (param) => { const m = [...emails().matchAll(new RegExp(para
 
 test.before(async () => {
   fs.rmSync(DEV, { recursive: true, force: true });
-  servidor = spawn('php', ['-S', `127.0.0.1:${PORTA}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV } });
+  servidor = spawn('php', ['-S', `127.0.0.1:${PORTA}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV, LEPVI_FINANCAS_OF_SEGREDO: 'segredo-de-teste-open-finance-1234' } });
   for (let i = 0; i < 40; i++) { try { await fetch(BASE + '?a=eu'); break; } catch (e) { await new Promise((r) => setTimeout(r, 150)); } }
 });
 test.after(() => { servidor.kill(); fs.rmSync(DEV, { recursive: true, force: true }); });
@@ -162,6 +162,37 @@ test('captura pelo endereço público: chave própria, repetido ignorado, revis�
   await chamar('capturas_resolver', { ids: [lista[0].id] });
   assert.strictEqual((await chamar('capturas', null, { metodo: 'GET' })).json.capturas.length, 2);
 });
+test('open finance: normaliza movimentações, sem segredo fica desligado, e cada movimentação entra uma vez só', async () => {
+  const n = JSON.parse(execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_openfinance.php"; echo json_encode([of_config(), of_para_captura(["valor" => -45.9, "descricao" => " PADARIA <b>DO ZE</b> ", "data" => "2026-11-20T10:00:00Z"], "Banco X"), of_para_captura(["amount" => 300, "type" => "CREDIT"]), of_para_captura(["valor" => 0]), of_para_captura(["descricao" => "sem valor"])]);'], { env: { ...process.env, LEPVI_FINANCAS_OF_SEGREDO: '', LEPVI_FINANCAS_DSN: 'sqlite::memory:', LEPVI_FINANCAS_ESTADO: DEV } }).toString());
+  assert.strictEqual(n[0], null, 'sem segredo, desligado');
+  assert.deepStrictEqual([n[1].tipo, n[1].valor, n[1].desc, n[1].data, n[1].origem], ['despesa', 45.9, 'PADARIA DO ZE', '2026-11-20', 'openfinance']);
+  assert.deepStrictEqual([n[2].tipo, n[2].valor], ['receita', 300]);
+  assert.strictEqual(n[3], null); assert.strictEqual(n[4], null);
+
+  const OF = BASE.replace('/api/', '/api/openfinance.php');
+  const post = (corpo, segredo = 'segredo-de-teste-open-finance-1234') => fetch(OF, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-OF-Segredo': segredo }, body: JSON.stringify(corpo) });
+  assert.strictEqual((await post({ item_id: 'x', transacoes: [] }, 'errado')).status, 401);
+  assert.strictEqual((await post({ item_id: 'inexistente', transacoes: [{ id: '1', valor: -5 }] })).status, 404);
+
+  const antes = (await chamar('conexoes', null, { metodo: 'GET' })).json;
+  assert.strictEqual(antes.ativo, true);
+  assert.strictEqual((await chamar('conexao_registrar', { item_id: '', instituicao: 'Banco X' })).status, 422);
+  const reg = (await chamar('conexao_registrar', { item_id: 'item-teste-1', instituicao: 'Banco X' })).json;
+  assert.ok(reg.id);
+  const corpo = { item_id: 'item-teste-1', transacoes: [{ id: 't1', descricao: 'MERCADO SOL', valor: -89.9, data: '2026-11-21' }, { id: 't2', descricao: 'Pix recebido', valor: 120, data: '2026-11-21' }, { id: 't1', descricao: 'MERCADO SOL', valor: -89.9 }] };
+  assert.strictEqual((await (await post(corpo)).json()).novas, 2, 'duplicada na mesma remessa não conta');
+  assert.strictEqual((await (await post(corpo)).json()).novas, 0, 'remessa repetida não duplica');
+  const caps = (await chamar('capturas', null, { metodo: 'GET' })).json.capturas.filter((c) => c.origem === 'openfinance');
+  assert.strictEqual(caps.length, 2);
+  await chamar('capturas_resolver', { ids: caps.map((c) => c.id) });
+  assert.strictEqual((await (await post(corpo)).json()).novas, 0, 'depois de lançado ou descartado, não volta');
+  const lista = (await chamar('conexoes', null, { metodo: 'GET' })).json.conexoes;
+  assert.strictEqual(lista.length, 1); assert.ok(lista[0].ultima_sync);
+  assert.strictEqual((await chamar('conexao_iniciar', {})).status, 501);
+  await chamar('conexao_remover', { id: reg.id });
+  assert.strictEqual((await chamar('conexoes', null, { metodo: 'GET' })).json.conexoes.length, 0);
+});
+
 test('anexos: guarda foto de recibo cifrada, recusa o que não é imagem e apaga', async () => {
   const PNG1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
   const env = await chamar('anexo_enviar', { lanc: 'l1', dataUrl: PNG1 });

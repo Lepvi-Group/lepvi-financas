@@ -793,3 +793,10 @@ body.carregando .topo { display: none; }
   .menu-fim .mf-mais:hover { filter: brightness(.97); }
 }
 html[data-contraste="alto"] .menu-fim .mf-mais { border: 2px solid #000; background: var(--sup); color: #000; }
+
+/* Open Finance */
+.selo-breve{font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--chip);color:var(--tinta);white-space:nowrap}
+.of-selo{font-weight:700;margin:0 0 8px}.of-selo.on{color:var(--verde)}.of-selo.off{color:var(--suave)}
+.of-cx{display:flex;align-items:center;gap:12px;padding:10px 4px}.of-cx+.of-cx{border-top:1px solid var(--linha)}
+.of-t{flex:1;min-width:0;display:flex;flex-direction:column}.of-t small{color:var(--suave)}
+#of-conectar[disabled]{opacity:.45;cursor:not-allowed}

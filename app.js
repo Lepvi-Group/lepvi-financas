@@ -224,7 +224,7 @@
     try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ }
     if (!USER.logado) await carregarTurnstile();
     render();
-    if (USER.logado) { carregarCapturas(); carregarEspaco(); travar(); aceitarConvite(); }
+    if (USER.logado) { carregarCapturas(); carregarConexoes(); carregarEspaco(); travar(); aceitarConvite(); }
   }
 
   /* ---------- compras automáticas (avisos do banco) ---------- */
@@ -293,6 +293,29 @@
         const res = $('#cap-res', f); res.textContent = 'Testando…';
         try { const r = await api('captura_teste', { texto: $('#cap-texto', f).value }); V.rev = [r.captura].concat(V.rev || []); const c = r.captura; res.textContent = `Entendi: ${c.tipo === 'receita' ? 'receita' : 'compra'} de ${F.brl(c.valor)} em "${c.desc}". Ela já está em Para revisar.`; } catch (e) { res.textContent = e.message; }
       };
+    });
+  }
+  /* ---------- Open Finance (tela pronta; liga quando o servidor tiver o agregador configurado) ---------- */
+  async function carregarConexoes() {
+    try { V.of = await api('conexoes'); } catch (e) { V.of = V.of || { ativo: false, conexoes: [] }; }
+    return V.of;
+  }
+  async function formOpenFinance() {
+    const of = V.of || await carregarConexoes();
+    const quando = (t) => { if (!t) return 'ainda não sincronizou'; const min = Math.max(0, Math.round((Date.now() / 1000 - t) / 60)); return min < 1 ? 'atualizado agora há pouco' : min < 60 ? `atualizado há ${min} min` : min < 1440 ? `atualizado há ${Math.round(min / 60)} h` : `atualizado há ${Math.round(min / 1440)} dia(s)`; };
+    const lista = of.conexoes.map((c) => `<div class="of-cx"><span class="of-ic" aria-hidden="true">🏦</span><span class="of-t"><b>${esc(c.instituicao)}</b><small>${esc(quando(c.ultima_sync))}</small></span><button class="btn sec mini" type="button" data-of-sair="${esc(c.id)}" aria-label="Desconectar ${esc(c.instituicao)}">Desconectar</button></div>`).join('');
+    abrir('Bancos conectados', `<p class="of-selo ${of.ativo ? 'on' : 'off'}" role="status">${of.ativo ? '● Pronto para conectar' : '○ Em breve: estamos preparando a ligação com os bancos'}</p>
+      <p class="mut">O Open Finance é o sistema oficial do Banco Central: você autoriza o banco a compartilhar suas movimentações e elas chegam aqui sozinhas, em <b>Para revisar</b>. Nada de digitar compra por compra.</p>
+      ${lista ? `<section class="card">${lista}</section>` : ''}
+      <section class="card cap-passo"><h3>Como vai funcionar</h3><ol class="cap-ol"><li>Você escolhe o banco e entra no <b>aplicativo ou site do próprio banco</b>.</li><li>Autoriza só a <b>leitura</b> das movimentações, por até 12 meses.</li><li>As compras e entradas aparecem em <b>Para revisar</b>; você confere a categoria e lança com um toque.</li></ol></section>
+      <section class="card cap-passo"><h3>Sua segurança</h3><ul class="cap-ol"><li>A senha do banco <b>nunca passa por aqui</b>.</li><li>O app só <b>lê</b>: não consegue pagar, transferir nem mexer na sua conta.</li><li>Você pode <b>desconectar a qualquer momento</b>, aqui ou no app do banco.</li><li>Cada movimentação entra uma vez só, sem repetir lançamentos.</li></ul></section>
+      <div class="botoes rodape-form"><button class="btn" type="button" id="of-conectar" ${of.ativo ? '' : 'disabled'}>Conectar um banco</button></div>
+      ${of.ativo ? '' : '<p class="mut">Este botão liga assim que a conexão com os bancos estiver ativa. Enquanto isso, use <b>Compras automáticas</b> para receber os avisos do seu banco.</p>'}`, null, (f) => {
+      $('#of-conectar', f).onclick = async () => { try { await api('conexao_iniciar', {}); } catch (e) { aviso(e.message); } };
+      f.querySelectorAll('[data-of-sair]').forEach((b) => b.addEventListener('click', async () => {
+        if (!(await confirmar('Desconectar este banco?', 'Os lançamentos já feitos continuam. Novas movimentações deixam de chegar.', 'Desconectar'))) return;
+        try { await api('conexao_remover', { id: b.dataset.ofSair }); await carregarConexoes(); dlg.close(); render(); aviso('Banco desconectado.'); } catch (e) { aviso(e.message); }
+      }));
     });
   }
   /* ---------- divisão de despesas e meta mensal ---------- */
@@ -644,6 +667,8 @@
     ${grupo('Compras automáticas',
       linha({ icone: LI.bell, titulo: 'Para revisar', desc: (V.rev && V.rev.length) ? `${V.rev.length} aviso(s) do banco esperando você` : 'Avisos do banco que viram lançamento', attrs: 'data-acao="revisar"' })
       + linha({ icone: LI.chave, titulo: 'Conectar avisos do banco', desc: 'Chave e passo a passo, sem dar a senha do banco', attrs: 'data-acao="captura-config"' }))}
+    ${grupo('Open Finance',
+      linha({ icone: LI.escudo, titulo: 'Bancos conectados', desc: V.of && V.of.ativo ? (V.of.conexoes.length ? `${V.of.conexoes.length} banco(s) conectado(s)` : 'Conecte o banco e os lançamentos chegam sozinhos') : 'Em breve: lançamentos do banco sem digitar nada', fim: V.of && V.of.ativo ? '›' : '<span class="selo-breve">Em breve</span>', attrs: 'data-acao="openfinance"' }))}
     ${grupo('Divisão de despesas',
       linha({ icone: LI.copia, titulo: 'Quem deve a sua parte', desc: (() => { const s = F.saldosDivisao(d.lancs); return s.length ? `${s.length} pessoa(s) a acertar · ${m(s.reduce((t, x) => t + x.total, 0))}` : 'Despesas divididas com casal ou sócios'; })(), attrs: 'data-acao="divisoes"' }))}
     ${grupo('Configurações',
@@ -1418,6 +1443,7 @@
       revisar: () => formRevisar(),
       divisoes: () => formDivisoes(),
       'captura-config': () => formCaptura(),
+      openfinance: () => formOpenFinance(),
       sair: () => sair(),
       'conta-menu': () => menuConta(),
       perfil: () => ir('perfil'),

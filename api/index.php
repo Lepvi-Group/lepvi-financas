@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /* Lepvi Finanças: API. Uma ação por chamada: /api/?a=entrar etc. Produto separado do site e do Hub. */
 require __DIR__ . '/_oauth.php';
-require __DIR__ . '/_captura.php';
+require __DIR__ . '/_openfinance.php';
 
 $acao = (string) ($_GET['a'] ?? '');
 $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -17,11 +17,12 @@ try {
         resp(['provedor' => oauth_provedores()[$pend['p']]['nome'] ?? '', 'email' => $pend['email'], 'nome' => $pend['nome']]);
     }
     // Leitura sem efeito colateral (exportar baixa um arquivo).
-    if ($metodo === 'GET' && in_array($acao, ['eu', 'dados', 'exportar', 'capturas', 'anexos', 'anexo', 'espaco'], true)) {
+    if ($metodo === 'GET' && in_array($acao, ['eu', 'dados', 'exportar', 'capturas', 'anexos', 'anexo', 'espaco', 'conexoes'], true)) {
         $u = exigir_usuario();
         $dono = espaco_dono($u['id']);
         if ($acao === 'eu') resp(['usuario' => usuario_publico($u)]);
         if ($acao === 'espaco') resp(espaco_info($u, $dono));
+        if ($acao === 'conexoes') resp(['ativo' => of_config() !== null, 'conexoes' => of_conexoes($dono)]);
         if ($acao === 'capturas') {
             $k = db()->prepare('SELECT criado_em, ultimo_uso FROM chaves_captura WHERE usuario_id = ?');
             $k->execute([$u['id']]);
@@ -219,6 +220,26 @@ try {
             foreach ($ids as $id) db()->prepare('DELETE FROM capturas WHERE usuario_id = ? AND id = ?')->execute([$dono, substr($id, 0, 32)]);
             resp(['ok' => true]);
         }
+        case 'conexao_registrar': {
+            // chamado depois que a pessoa conclui a conexão no widget do agregador
+            if (!of_config()) erro('Open Finance ainda não está ativado.', 503);
+            $item = substr(trim((string) ($b['item_id'] ?? '')), 0, 120); $inst = mb_substr(trim(strip_tags((string) ($b['instituicao'] ?? ''))), 0, 80);
+            if ($item === '' || $inst === '') erro('Dados da conexão incompletos.', 422);
+            $n = db()->prepare('SELECT COUNT(*) FROM conexoes WHERE usuario_id = ?'); $n->execute([$dono]);
+            if ((int) $n->fetchColumn() >= 10) erro('Você chegou ao limite de bancos conectados.', 422);
+            $id = novo_id();
+            db()->prepare('INSERT INTO conexoes (id, usuario_id, provedor, item_id, instituicao, status, criado_em) VALUES (?,?,?,?,?,?,?)')->execute([$id, $dono, of_config()['provedor'], $item, $inst, 'ativa', agora()]);
+            resp(['id' => $id]);
+        }
+        case 'conexao_iniciar': {
+            // O agregador escolhido entra aqui: devolver o token do widget dele. Enquanto não houver agregador ligado, a tela mostra "em breve".
+            if (!of_config()) erro('Open Finance ainda não está ativado. Em breve você poderá conectar seu banco por aqui.', 503);
+            erro('A ligação com o agregador ainda não foi concluída.', 501);
+        }
+        case 'conexao_remover': {
+            db()->prepare('DELETE FROM conexoes WHERE usuario_id = ? AND id = ?')->execute([$dono, substr((string) ($b['id'] ?? ''), 0, 32)]);
+            resp(['ok' => true]);
+        }
         case 'anexo_enviar': {
             $lanc = substr((string) ($b['lanc'] ?? ''), 0, 64); $d = (string) ($b['dataUrl'] ?? '');
             if ($lanc === '') erro('Lançamento inválido.', 422);
@@ -309,7 +330,7 @@ try {
             if (limite_estourou($k, 5, 900)) erro('Muitas tentativas. Espere 15 minutos.', 429);
             if (!senha_confere($u, (string) ($b['senha'] ?? ''))) { registrar_tentativa($k); erro('Senha incorreta.', 401); }
             $pdo = db(); $pdo->beginTransaction();
-            foreach (['sessoes', 'tokens', 'dados', 'avisos', 'consentimentos', 'identidades', 'chaves_captura', 'capturas', 'anexos'] as $t) $pdo->prepare("DELETE FROM $t WHERE usuario_id = ?")->execute([$u['id']]);
+            foreach (['sessoes', 'tokens', 'dados', 'avisos', 'consentimentos', 'identidades', 'chaves_captura', 'capturas', 'anexos', 'conexoes', 'of_vistos'] as $t) $pdo->prepare("DELETE FROM $t WHERE usuario_id = ?")->execute([$u['id']]);
             $pdo->prepare('DELETE FROM membros WHERE usuario_id = ? OR dono_id = ?')->execute([$u['id'], $u['id']]);
             $pdo->prepare('DELETE FROM usuarios WHERE id = ?')->execute([$u['id']]);
             $pdo->commit();
