@@ -61,7 +61,7 @@
   }
   let versaoServidor = 0; let enviando = false; let precisaEnviar = false; let tmr = null;
   function limparMemoria() { status(''); const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; V.esp = null; baseDados = null; }
-  function sessaoExpirou() { USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua sessão terminou. Entre de novo.'; render(); }
+  async function sessaoExpirou() { USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua sessão terminou. Entre de novo.'; await carregarTurnstile(); render(); }
   function salvar() {
     try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, escala: S.escala, tema: S.tema, semMovimento: S.semMovimento, destacar: S.destacar, contraste: S.contraste, oculto: S.oculto, ordem: S.ordem, saldoDiario: S.saldoDiario, sugestoes: S.sugestoes, dispensados: (S.dispensados || []).slice(-200) })); } catch (e) { /* sem armazenamento */ }
     if (!USER.logado) return;
@@ -765,7 +765,7 @@
       f.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => { const a = b.dataset.sheet; dlg.close(); if (a === 'perfil' || a === 'mais') ir(a); else if (a === 'acess') formAcess(); else sair(); }));
     });
   }
-  async function sair() { try { await api('sair', {}); } catch (e) { /* já saiu */ } PIN.remover(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Você saiu. Até logo!'; render(); window.scrollTo(0, 0); }
+  async function sair() { try { await api('sair', {}); } catch (e) { /* já saiu */ } PIN.remover(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Você saiu. Até logo!'; await carregarTurnstile(); render(); window.scrollTo(0, 0); }
   async function processarFoto(arq) {
     if (!arq || !/^image\//.test(arq.type)) { aviso('Escolha um arquivo de imagem (JPG, PNG ou WebP).'); return; }
     try {
@@ -1392,7 +1392,7 @@
   }
   function formExcluirConta() {
     abrir('Excluir meu cadastro', `<p>Isso apaga o seu cadastro e <b>todos</b> os seus dados financeiros do servidor, de forma definitiva. Não dá para desfazer. Antes, se quiser, baixe uma cópia em "Baixar meus dados".</p>${campoSenha('Digite sua senha para confirmar', 'name="senha" type="password" required autocomplete="current-password"')}<div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn perigo" type="submit">Excluir para sempre</button></div>`, null, (f) => {
-      f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('excluir', { senha: f.senha.value }); dlg.close(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Seu cadastro e todos os seus dados foram apagados.'; render(); } catch (e) { aviso(e.message); } });
+      f.addEventListener('submit', async (ev) => { ev.preventDefault(); try { await api('excluir', { senha: f.senha.value }); dlg.close(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Seu cadastro e todos os seus dados foram apagados.'; await carregarTurnstile(); render(); } catch (e) { aviso(e.message); } });
     });
   }
 
