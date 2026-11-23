@@ -391,7 +391,15 @@
   const soltarAnexos = (lancs) => { lancs.forEach((l) => api('anexo_excluir', { lanc: l.id }).catch(() => {})); };
 
   const m = (v) => (S.oculto ? 'R$ •••' : F.brl(v));
-  function aviso(t, ms) { const el = $('#aviso'); el.textContent = t; el.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('on'), ms || 6000); }
+  function aviso(t, ms) {
+    /* janela aberta (dialog) fica acima do aviso da página: mostra a mensagem dentro dela, senão o erro some */
+    const dl = document.getElementById('dlg');
+    if (dl && dl.open && ms === undefined) { /* avisos com tempo (ex.: "Salvo ✓" do salvamento automático) seguem na página */
+      let b = dl.querySelector('.erro-dlg');
+      if (!b) { b = document.createElement('p'); b.className = 'erro-dlg'; b.setAttribute('role', 'alert'); const f = dl.querySelector('form'); (f || dl).appendChild(b); }
+      b.textContent = t; b.scrollIntoView({ block: 'nearest' }); return;
+    }
+    const el = $('#aviso'); el.textContent = t; el.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('on'), ms || 6000); }
 
   const NOME_MES = (x) => new Date(x + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'long' }) + ' ' + x.slice(0, 4);
   const MES_CURTO = (x) => new Date(x + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');

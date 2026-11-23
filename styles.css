@@ -289,6 +289,7 @@ body.deslogado .topo .marca { position: static; }
 .auth-c h1 { font-size: 28px; font-weight: 600; letter-spacing: -.01em; }
 .auth-f { display: grid; gap: 18px; }
 .auth-seg { text-align: center; }
+.erro-dlg { color: var(--vermelho); font-weight: 600; margin: 12px 0 0; padding: 12px 14px; border-radius: 12px; background: #FDE7E4; border: 2px solid var(--vermelho); }
 .erro { color: var(--vermelho); font-weight: 600; margin: 0; padding: 12px 14px; border-radius: 12px; background: #FDE7E4; border: 2px solid var(--vermelho); }
 .ok-msg { background: #D9F2EA; color: #00573D; padding: 14px 16px; border-radius: 14px; font-weight: 500; border: 2px solid #00573D; }
 .auth a, .card a:not(.btn) { color: var(--azul); font-weight: 600; }
