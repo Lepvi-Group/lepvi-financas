@@ -28,7 +28,8 @@ const pluggyMock = require('node:http').createServer((req, res) => {
   }
   if (chave !== 'chave-pluggy') { res.statusCode = 403; return res.end('{}'); }
   if (u.pathname === '/accounts') { if (u.searchParams.get('itemId') !== 'item-ok') { res.statusCode = 404; return res.end('{}'); } return res.end(JSON.stringify({ results: [{ id: 'conta-1', type: 'BANK', number: '12345' }] })); }
-  if (u.pathname === '/transactions') return res.end(JSON.stringify({ results: u.searchParams.get('accountId') === 'conta-1' ? TRANSACOES : [], totalPages: 1 }));
+  if (u.pathname === '/transactions') { res.statusCode = 410; return res.end('{}'); } // o Pluggy aposentou a rota antiga
+  if (u.pathname === '/v2/transactions') return res.end(JSON.stringify({ results: u.searchParams.get('accountId') === 'conta-1' && u.searchParams.get('dateFrom') ? TRANSACOES : [], next: null }));
   res.statusCode = 404; res.end('{}');
 });
 

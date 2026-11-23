@@ -123,14 +123,16 @@ function pluggy_sincronizar_conexao(array $cx, string $chave): int
     foreach (array_slice($contas, 0, 10) as $conta) {
         if (empty($conta['id'])) continue;
         $final = isset($conta['number']) && ($conta['type'] ?? '') === 'CREDIT' && preg_match('/(\d{4})$/', (string) $conta['number'], $m) ? $m[1] : null;
-        for ($pg = 1; $pg <= 3; $pg++) {
-            [$st, $j] = pluggy_http('GET', '/transactions?accountId=' . rawurlencode((string) $conta['id']) . '&from=' . $de . '&pageSize=500&page=' . $pg, null, $chave);
+        // O Pluggy aposentou o GET /transactions (responde 410): usa a versão v2, paginada por cursor ("next" já vem pronto para anexar).
+        $url = '/v2/transactions?accountId=' . rawurlencode((string) $conta['id']) . '&dateFrom=' . $de;
+        for ($pg = 1; $pg <= 6 && $url !== null; $pg++) {
+            [$st, $j] = pluggy_http('GET', $url, null, $chave);
             if ($st !== 200) throw new RuntimeException('Não consegui ler as movimentações (código ' . $st . ').');
             foreach (($j['results'] ?? []) as $t) {
                 if (!is_array($t) || ($t['status'] ?? 'POSTED') === 'PENDING' || pluggy_ignorar((string) ($t['description'] ?? ''))) continue;
                 $lista[] = ['id' => $t['id'] ?? '', 'descricao' => $t['description'] ?? '', 'valor' => $t['amount'] ?? 0, 'tipo' => $t['type'] ?? '', 'data' => $t['date'] ?? '', 'final' => $final];
             }
-            if ($pg >= (int) ($j['totalPages'] ?? 1)) break;
+            $url = !empty($j['next']) ? '/v2/transactions' . $j['next'] : null;
         }
     }
     return of_importar_conexao($cx, $lista);
