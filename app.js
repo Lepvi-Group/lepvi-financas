@@ -39,7 +39,7 @@
   const CONVITE = 'lepvi-financas-convite';
   const S = norm({ perfil: 'pessoal', dados: {} }); // dados financeiros: só em memória e no servidor (nunca no aparelho)
   const USER = { logado: false, info: null };
-  try { const p = JSON.parse(localStorage.getItem(PREFS)); if (p) { S.texto = p.texto; S.escala = p.escala; S.tema = p.tema; S.semMovimento = p.semMovimento; S.destacar = p.destacar; S.contraste = p.contraste; S.oculto = p.oculto; S.ordem = p.ordem; S.saldoDiario = p.saldoDiario; S.sugestoes = p.sugestoes; } } catch (e) { /* sem preferências guardadas */ }
+  try { const p = JSON.parse(localStorage.getItem(PREFS)); if (p) { S.texto = p.texto; S.escala = p.escala; S.tema = p.tema; S.semMovimento = p.semMovimento; S.destacar = p.destacar; S.contraste = p.contraste; S.oculto = p.oculto; S.ordem = p.ordem; S.saldoDiario = p.saldoDiario; S.sugestoes = p.sugestoes; S.dispensados = Array.isArray(p.dispensados) ? p.dispensados : []; } } catch (e) { /* sem preferências guardadas */ }
   const V = { tela: 'inicio', mes: F.mesDe(F.hojeISO()), filtro: 'todos', sub: 'todos', q: '', plano: 'orc', reltipo: 'despesa', cartao: null, fmes: null, auth: 'entrar', token: '', msg: '' };
   const D = () => S.dados[S.perfil];
 
@@ -63,7 +63,7 @@
   function limparMemoria() { status(''); const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; V.esp = null; baseDados = null; }
   function sessaoExpirou() { USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua sessão terminou. Entre de novo.'; render(); }
   function salvar() {
-    try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, escala: S.escala, tema: S.tema, semMovimento: S.semMovimento, destacar: S.destacar, contraste: S.contraste, oculto: S.oculto, ordem: S.ordem, saldoDiario: S.saldoDiario, sugestoes: S.sugestoes })); } catch (e) { /* sem armazenamento */ }
+    try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, escala: S.escala, tema: S.tema, semMovimento: S.semMovimento, destacar: S.destacar, contraste: S.contraste, oculto: S.oculto, ordem: S.ordem, saldoDiario: S.saldoDiario, sugestoes: S.sugestoes, dispensados: (S.dispensados || []).slice(-200) })); } catch (e) { /* sem armazenamento */ }
     if (!USER.logado) return;
     precisaEnviar = true; status('salvando'); clearTimeout(tmr); tmr = setTimeout(enviarDados, 600);
   }
@@ -1055,13 +1055,14 @@
     const neg = F.projecaoSaldo(d.lancs, d.contas, d.cartoes, hoje, 3).find((x) => x.saldoFim < 0); if (neg) lista.push({ ic: '⚠️', t: `O saldo previsto fica negativo em ${esc(nomeMes(neg.mes))}`, a: 'projecao' });
     const rc = F.aReceber(d.lancs, hoje); if (rc.atrasado > 0) lista.push({ ic: '💰', t: `${m(rc.atrasado)} a receber em atraso`, a: 'receber' });
     if (V.rev && V.rev.length) lista.push({ ic: '🧾', t: `${V.rev.length} compra(s) do banco para revisar`, a: 'revisar' });
-    return lista;
+    return lista.filter((x) => !(S.dispensados || []).includes(x.t));
   }
   function formNotif() {
     const l = alertasApp(); const u = USER.info;
     abrir('Notificações', `${u.avisos ? '' : '<div class="card"><b>Os avisos por e-mail estão desligados.</b><p class="mut">Ligue para receber de manhã o que vence hoje, em breve ou já venceu.</p><button class="btn" type="button" data-liga>Ligar avisos por e-mail</button></div>'}
-      ${l.length ? `<ul class="lista">${l.map((x, i) => `<li><button class="item" type="button" data-n="${i}"><span class="ic" aria-hidden="true">${x.ic}</span><span class="txt"><strong>${x.t}</strong></span><span aria-hidden="true">›</span></button></li>`).join('')}</ul>` : '<div class="card vazio"><span class="vazio-ic" aria-hidden="true">🔔</span><h2 class="secao">Nenhum aviso por enquanto :)</h2><p class="mut">Quando uma conta estiver perto de vencer ou um limite estourar, ele aparece aqui.</p></div>'}`, null, (f) => {
+      ${l.length ? `<div class="botoes"><button class="btn sec" type="button" data-limpar>Limpar notificações</button></div><ul class="lista">${l.map((x, i) => `<li><button class="item" type="button" data-n="${i}"><span class="ic" aria-hidden="true">${x.ic}</span><span class="txt"><strong>${x.t}</strong></span><span aria-hidden="true">›</span></button></li>`).join('')}</ul>` : '<div class="card vazio"><span class="vazio-ic" aria-hidden="true">🔔</span><h2 class="secao">Nenhum aviso por enquanto :)</h2><p class="mut">Quando uma conta estiver perto de vencer ou um limite estourar, ele aparece aqui.</p></div>'}`, null, (f) => {
       f.querySelectorAll('[data-n]').forEach((b) => b.addEventListener('click', () => { const a = l[+b.dataset.n].a; dlg.close(); ({ 'ir-pagar': () => { V.sub = 'apagar'; ir('lancs'); }, 'plano-orc': () => { V.plano = 'orc'; ir('planejar'); }, 'ir-rel': () => { V.plano = 'rel'; ir('planejar'); }, projecao: () => formProjecao(), receber: () => formReceber(), revisar: () => formRevisar() })[a](); }));
+      const lp = f.querySelector('[data-limpar]'); if (lp) lp.addEventListener('click', () => { S.dispensados = [...(S.dispensados || []), ...l.map((x) => x.t)]; salvar(); atualizarSino(); formNotif(); aviso('Notificações limpas.'); });
       const lg = f.querySelector('[data-liga]'); if (lg) lg.addEventListener('click', async () => { try { const r = await api('preferencias', { avisos: true }); USER.info = r.usuario; dlg.close(); render(); aviso('Avisos por e-mail ligados.'); } catch (e) { aviso(e.message); } });
     });
   }
