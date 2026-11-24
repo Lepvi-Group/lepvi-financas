@@ -39,8 +39,8 @@ async function chamar(acao, corpo, { metodo = 'POST', semCookie = false } = {}) 
     headers: { 'Content-Type': 'application/json', 'X-Lepvi': 'financas', ...(cookie && !semCookie ? { Cookie: cookie } : {}) },
     body: metodo === 'POST' ? JSON.stringify(corpo || {}) : undefined,
   });
-  const sc = r.headers.get('set-cookie');
-  if (sc && sc.startsWith('lf_sessao=')) cookie = sc.split(';')[0].endsWith('=') ? '' : sc.split(';')[0];
+  const sc = r.headers.getSetCookie().find((c) => c.startsWith('lf_sessao='));
+  if (sc) cookie = sc.split(';')[0].endsWith('=') ? '' : sc.split(';')[0];
   const txt = await r.text();
   let json; try { json = JSON.parse(txt); } catch (e) { json = txt; }
   return { status: r.status, json };
@@ -323,6 +323,31 @@ test('"não sei a senha atual": quem está logado recebe o link por e-mail e cri
   await chamar('senha_link', {}); await chamar('senha_link', {});
   assert.strictEqual((await chamar('senha_link', {})).status, 429, 'limite de pedidos por hora');
   assert.strictEqual((await chamar('mudar_senha', { atual: SENHA_NOVA, nova: SENHA_CONHECIDA })).status, 200, 'devolve a senha usada pelos testes seguintes');
+});
+
+test('entrada pelo Google/Microsoft com dois passos: o ticket em cookie só abre a sessão com o código do app (sem cookie ou com código errado, nada)', async () => {
+  const SENHA_ATUAL = 'outra-senha-forte-33';
+  const phpCom = (cod) => execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_2fa.php"; ' + cod], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite::memory:', LEPVI_FINANCAS_ESTADO: DEV } }).toString().trim();
+  const cod = (seg, delta = 0) => phpCom('echo totp_codigo("' + seg + '", intdiv(time(), 30) + ' + delta + ');');
+  const H = { 'Content-Type': 'application/json', 'X-Lepvi': 'financas' };
+  assert.strictEqual((await chamar('entrar', { email: EMAIL, senha: SENHA_ATUAL }, { semCookie: true })).status, 200);
+  const ini = (await chamar('totp_iniciar', {})).json;
+  const at = await chamar('totp_ativar', { codigo: cod(ini.segredo) }); assert.strictEqual(at.status, 200);
+  const uid = execFileSync('sqlite3', [path.join(DEV, 'financas.sqlite'), "SELECT id FROM usuarios WHERE email = '" + EMAIL + "'"]).toString().trim();
+  const ticket = () => phpCom('echo assinar(["u" => "' + uid + '", "a" => "2fa"], 300);');
+  const viaCookie = (tk, codigo) => fetch(BASE + '?a=entrar_2fa', { method: 'POST', headers: { ...H, Cookie: 'lf_2fa=' + tk }, body: JSON.stringify({ codigo }) });
+
+  const semCookie = await fetch(BASE + '?a=entrar_2fa', { method: 'POST', headers: H, body: JSON.stringify({ codigo: cod(ini.segredo, 1) }) });
+  assert.strictEqual(semCookie.status, 401, 'sem ticket nada abre'); assert.ok(!(semCookie.headers.get('set-cookie') || '').includes('lf_sessao=') || /lf_sessao=;/.test(semCookie.headers.get('set-cookie')));
+  assert.strictEqual((await viaCookie('ticket.falso', cod(ini.segredo, 1))).status, 401, 'ticket falso');
+  const errado = await viaCookie(ticket(), '000000'); assert.strictEqual(errado.status, 401, 'código errado'); assert.ok(!(errado.headers.get('set-cookie') || '').includes('lf_sessao=ey') && !/lf_sessao=[A-Za-z0-9_-]{20,}/.test(errado.headers.get('set-cookie') || ''), 'código errado não abre sessão');
+  const ok = await viaCookie(ticket(), cod(ini.segredo, 1));
+  assert.strictEqual(ok.status, 200, 'ticket do Google + código certo entra');
+  assert.match(ok.headers.get('set-cookie') || '', /lf_sessao=[A-Za-z0-9_-]{20,}/, 'abriu a sessão');
+  assert.match(ok.headers.get('set-cookie') || '', /lf_2fa=(deleted|;)/, 'o ticket é apagado depois de usar');
+
+  const off = await chamar('totp_gerenciar', { acao: 'desativar', senha: SENHA_ATUAL, codigo: at.json.reservas[0] }, { semCookie: false });
+  if (off.status !== 200) { await chamar('entrar', { email: EMAIL, senha: SENHA_ATUAL }, { semCookie: true }); }
 });
 
 test('cadastro fechado por padrão: sem a chave de abrir, ninguém cria conta (e-mail nem Google/Microsoft) e a tela esconde o convite', async () => {

@@ -41,8 +41,11 @@ try {
     $r = oauth_resolver($p, $claims);
     if (isset($r['erro'])) $volta('oauth=erro-' . $r['erro']);
     if ($r['acao'] === 'login') {
-        // quem ativou os dois passos entra só com e-mail, senha e código (o Google/Microsoft não substituem o código)
-        if (($uu = totp_usuario((string) $r['usuario']['id'])) && totp_ativo($uu)) $volta('oauth=erro-2fa');
+        // quem ativou os dois passos: o Google/Microsoft só confirmam quem é; a sessão NÃO abre antes do código do app (ticket assinado, 5 min, em cookie)
+        if (($uu = totp_usuario((string) $r['usuario']['id'])) && totp_ativo($uu)) {
+            setcookie('lf_2fa', assinar(['u' => $uu['id'], 'a' => '2fa'], 300), $opcoes(agora() + 300));
+            $volta('oauth=2fa');
+        }
         db()->prepare('UPDATE usuarios SET ultimo_login = ? WHERE id = ?')->execute([agora(), $r['usuario']['id']]);
         abrir_sessao($r['usuario']['id']);
         $volta('oauth=ok');

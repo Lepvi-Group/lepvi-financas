@@ -154,13 +154,15 @@ try {
             resp(['usuario' => usuario_publico($u)]);
         }
         case 'entrar_2fa': {
-            $t = ler_assinado((string) ($b['ticket'] ?? ''));
+            $bruto = (string) ($b['ticket'] ?? ''); if ($bruto === '') $bruto = (string) ($_COOKIE['lf_2fa'] ?? ''); // entrada pelo Google/Microsoft deixa o ticket em cookie
+            $t = ler_assinado($bruto);
             if (!$t || ($t['a'] ?? '') !== '2fa') erro('O tempo acabou. Entre de novo com e-mail e senha.', 401);
             $kU = '2fa:u:' . $t['u']; $kI = '2fa:i:' . ip_hash();
             if (limite_estourou($kU, 5, 900) || limite_estourou($kI, 30, 900)) erro('Muitas tentativas. Espere 15 minutos e tente de novo.', 429);
             $usr = totp_usuario((string) $t['u']);
             if (!$usr || !totp_ativo($usr) || !totp_validar_usuario($usr, (string) ($b['codigo'] ?? ''))) { registrar_tentativa($kU); registrar_tentativa($kI); erro('Código incorreto ou vencido. Confira o código do app e tente de novo.', 401); }
             db()->prepare('UPDATE usuarios SET ultimo_login = ? WHERE id = ?')->execute([agora(), $usr['id']]);
+            setcookie('lf_2fa', '', ['expires' => 1, 'path' => '/', 'secure' => (bool) cfg()['cookie_seguro'], 'httponly' => true, 'samesite' => 'Lax']);
             abrir_sessao($usr['id']);
             resp(['usuario' => usuario_publico(totp_usuario((string) $usr['id']))]);
         }

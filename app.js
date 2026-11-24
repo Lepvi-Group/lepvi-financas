@@ -219,6 +219,7 @@
     const NOME_P = op === 'google' ? 'Google' : 'Microsoft';
     const MENS = { 'nao-configurado': `Entrar com ${NOME_P} ainda não está ativo. Use seu e-mail e senha por enquanto.`, erro: 'Não foi possível entrar. Tente de novo.', cancelado: 'Você cancelou a entrada.', muitas: 'Muitas tentativas. Espere alguns minutos.', 'erro-2fa': 'Sua conta tem verificação em dois passos. Entre com e-mail, senha e o código do app autenticador.', 'erro-cadastro-fechado': 'Novas contas estão fechadas no momento. Quem já tem conta entra normalmente.', 'erro-conta-existente': 'Já existe uma conta com este e-mail. Entre com a senha e tente de novo.', 'erro-confirme-email': 'Confirme seu e-mail pelo link que enviamos antes de entrar.', 'erro-sem-email': 'O provedor não informou seu e-mail. Use e-mail e senha.', 'erro-dados': 'Não foi possível entrar. Tente de novo.' };
     if (oa === 'aceite') { try { V.pend = await api('oauth_pendente'); V.auth = 'oauth-aceite'; } catch (e) { V.msg = e.message; V.msgErro = true; } }
+    else if (oa === '2fa') { V.auth = 'dois-passos'; V.ticket = ''; } /* Google/Microsoft confirmaram a pessoa; o ticket vem em cookie e o código do app é obrigatório */
     else if (oa && oa !== 'ok') { V.msg = MENS[oa] || MENS.erro; V.msgErro = true; }
     if (tv) { try { await api('verificar', { token: tv }); V.msg = 'E-mail confirmado! Agora é só entrar.'; } catch (e) { V.msg = e.message; } }
     if (tr) { V.auth = 'redefinir'; V.token = tr; }
