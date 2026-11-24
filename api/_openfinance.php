@@ -29,6 +29,8 @@ function of_para_captura(array $t, string $instituicao = ''): ?array
     return [
         'valor' => round(abs((float) $v), 2), 'desc' => mb_substr($desc, 0, 60), 'tipo' => $receita ? 'receita' : 'despesa',
         'final' => isset($t['final']) && preg_match('/^\d{4}$/', (string) $t['final']) ? (string) $t['final'] : null,
+        'cartao' => !empty($t['cartao']), // veio da conta de cartão de crédito: é fatura, nunca sai do saldo da conta
+        'conexao' => isset($t['conexao']) ? substr((string) $t['conexao'], 0, 64) : null,
         'data' => $data, 'texto' => mb_substr(trim($instituicao . ' ' . $desc), 0, 300), 'origem' => 'openfinance',
     ];
 }
@@ -124,7 +126,8 @@ function pluggy_sincronizar_conexao(array $cx, string $chave): int
         if (empty($conta['id'])) continue;
         // saldo de verdade do banco: só conta corrente/poupança (o "saldo" do cartão de crédito é a fatura, não dinheiro)
         if (($conta['type'] ?? '') === 'BANK' && isset($conta['balance']) && is_numeric($conta['balance'])) $saldo = ($saldo ?? 0) + (float) $conta['balance'];
-        $final = isset($conta['number']) && ($conta['type'] ?? '') === 'CREDIT' && preg_match('/(\d{4})$/', (string) $conta['number'], $m) ? $m[1] : null;
+        $credito = ($conta['type'] ?? '') === 'CREDIT';
+        $final = isset($conta['number']) && $credito && preg_match('/(\d{4})$/', (string) $conta['number'], $m) ? $m[1] : null;
         // O Pluggy aposentou o GET /transactions (responde 410): usa a versão v2, paginada por cursor ("next" já vem pronto para anexar).
         $url = '/v2/transactions?accountId=' . rawurlencode((string) $conta['id']) . '&dateFrom=' . $de;
         for ($pg = 1; $pg <= 6 && $url !== null; $pg++) {
@@ -132,7 +135,7 @@ function pluggy_sincronizar_conexao(array $cx, string $chave): int
             if ($st !== 200) throw new RuntimeException('Não consegui ler as movimentações (código ' . $st . ').');
             foreach (($j['results'] ?? []) as $t) {
                 if (!is_array($t) || ($t['status'] ?? 'POSTED') === 'PENDING' || pluggy_ignorar((string) ($t['description'] ?? ''))) continue;
-                $lista[] = ['id' => $t['id'] ?? '', 'descricao' => $t['description'] ?? '', 'valor' => $t['amount'] ?? 0, 'tipo' => $t['type'] ?? '', 'data' => $t['date'] ?? '', 'final' => $final];
+                $lista[] = ['id' => $t['id'] ?? '', 'descricao' => $t['description'] ?? '', 'valor' => $t['amount'] ?? 0, 'tipo' => $t['type'] ?? '', 'data' => $t['date'] ?? '', 'final' => $final, 'cartao' => $credito, 'conexao' => $cx['id']];
             }
             $url = !empty($j['next']) ? '/v2/transactions' . $j['next'] : null;
         }

@@ -140,6 +140,22 @@
   function acertarSaldoInicial(lancs, conta, saldoBanco) {
     return arred((Number(saldoBanco) || 0) - (saldoConta(lancs, conta) - conta.saldoInicial));
   }
+  /* Saldo de verdade vem do banco (Open Finance): a conta ligada a cada banco conectado passa a mostrar o saldo informado pelo banco.
+     Sem ligação ainda, um único banco com saldo liga sozinho à primeira conta comum (não investimento, não oculta).
+     Só o saldo inicial muda; os lançamentos ficam. Devolve quantas contas mudaram. Cartão de crédito nunca entra aqui (fatura não é saldo). */
+  function vincularSaldoBanco(dados, conexoes) {
+    const comSaldo = (conexoes || []).filter((c) => c && c.id && typeof c.saldo === 'number' && Number.isFinite(c.saldo));
+    const contas = (dados && dados.contas) || []; let mudou = 0;
+    if (comSaldo.length === 1 && !contas.some((c) => c.ofConexao)) {
+      const alvo = contas.find((c) => c.tipo !== 'investimento' && !c.fora);
+      if (alvo) { alvo.ofConexao = comSaldo[0].id; mudou++; }
+    }
+    comSaldo.forEach((cx) => {
+      const conta = contas.find((c) => c.ofConexao === cx.id); if (!conta) return;
+      if (arred(saldoConta(dados.lancs || [], conta) - cx.saldo) !== 0) { conta.saldoInicial = acertarSaldoInicial(dados.lancs || [], conta, cx.saldo); mudou++; }
+    });
+    return mudou;
+  }
   function saldoConta(lancs, conta) {
     let mov = 0;
     lancs.forEach((l) => {
@@ -487,7 +503,7 @@
     return juntar(base, local, remoto);
   }
 
-  const api = { ritmoOrcamento, decimoTerceiro, ferias, desempenho, acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  const api = { vincularSaldoBanco, ritmoOrcamento, decimoTerceiro, ferias, desempenho, acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

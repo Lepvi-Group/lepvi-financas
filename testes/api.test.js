@@ -27,9 +27,9 @@ const pluggyMock = require('node:http').createServer((req, res) => {
     return;
   }
   if (chave !== 'chave-pluggy') { res.statusCode = 403; return res.end('{}'); }
-  if (u.pathname === '/accounts') { if (u.searchParams.get('itemId') !== 'item-ok') { res.statusCode = 404; return res.end('{}'); } return res.end(JSON.stringify({ results: [{ id: 'conta-1', type: 'BANK', number: '12345', balance: 1234.56 }] })); }
+  if (u.pathname === '/accounts') { if (u.searchParams.get('itemId') !== 'item-ok') { res.statusCode = 404; return res.end('{}'); } return res.end(JSON.stringify({ results: [{ id: 'conta-1', type: 'BANK', number: '12345', balance: 1234.56 }, { id: 'cartao-1', type: 'CREDIT', number: '**** 4321', balance: 900 }] })); }
   if (u.pathname === '/transactions') { res.statusCode = 410; return res.end('{}'); } // o Pluggy aposentou a rota antiga
-  if (u.pathname === '/v2/transactions') return res.end(JSON.stringify({ results: u.searchParams.get('accountId') === 'conta-1' && u.searchParams.get('dateFrom') ? TRANSACOES : [], next: null }));
+  if (u.pathname === '/v2/transactions') return res.end(JSON.stringify({ results: !u.searchParams.get('dateFrom') ? [] : u.searchParams.get('accountId') === 'conta-1' ? TRANSACOES : u.searchParams.get('accountId') === 'cartao-1' ? [{ id: 'k1', description: 'LOJA NO CREDITO', amount: 59.9, type: 'DEBIT', date: '2026-11-20T12:00:00.000Z', status: 'POSTED' }] : [], next: null }));
   res.statusCode = 404; res.end('{}');
 });
 
@@ -222,11 +222,13 @@ test('meu pluggy: confere as chaves, traz os últimos 30 dias sem a fatura nem o
   assert.strictEqual((await chamar('conexoes', null, { metodo: 'GET' })).json.tem_credencial, false, 'chave errada não fica guardada');
   const antes = (await chamar('capturas', null, { metodo: 'GET' })).json.capturas.length;
   const ok = await chamar('pluggy_conectar', { instituicao: 'Nubank', item_id: 'item-ok', client_id: 'cid-ok', client_secret: 'sec-ok' });
-  assert.strictEqual(ok.status, 200, JSON.stringify(ok.json)); assert.strictEqual(ok.json.novas, 2, 'só compra e pix: sem fatura e sem pendente');
+  assert.strictEqual(ok.status, 200, JSON.stringify(ok.json)); assert.strictEqual(ok.json.novas, 3, 'compra, pix e compra no crédito: sem fatura e sem pendente');
   const caps = (await chamar('capturas', null, { metodo: 'GET' })).json.capturas.filter((c) => c.origem === 'openfinance');
   assert.strictEqual(caps.length + 0, (await chamar('capturas', null, { metodo: 'GET' })).json.capturas.length - antes);
   const mercado = caps.find((c) => c.desc === 'MERCADO SOL'); assert.deepStrictEqual([mercado.tipo, mercado.valor, mercado.data], ['despesa', 89.9, '2026-11-20']);
   assert.deepStrictEqual([caps.find((c) => c.desc.startsWith('Pix')).tipo], ['receita']);
+  const credito = caps.find((c) => c.desc === 'LOJA NO CREDITO'); assert.deepStrictEqual([credito.cartao, credito.final, mercado.cartao], [true, '4321', false], 'compra no crédito vem marcada como cartão (fatura, não saldo)');
+  assert.ok(mercado.conexao, 'sabe de qual banco veio');
   assert.strictEqual((await chamar('pluggy_conectar', { instituicao: 'Nubank 2', item_id: 'item-ok' })).status, 422, 'mesmo banco duas vezes');
   const sync = await chamar('conexao_sincronizar', {}); assert.strictEqual(sync.status, 200); assert.strictEqual(sync.json.novas, 0, 'atualizar não duplica');
   const lista = (await chamar('conexoes', null, { metodo: 'GET' })).json; assert.strictEqual(lista.tem_credencial, true); assert.strictEqual(lista.conexoes[0].provedor, 'meupluggy'); assert.strictEqual(lista.conexoes[0].saldo, 1234.56, 'guarda o saldo real do banco'); assert.ok(lista.conexoes[0].saldo_em);

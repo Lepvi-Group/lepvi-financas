@@ -240,7 +240,7 @@
     else { try { await api('sair', {}); } catch (e) { /* já estava fora */ } } // abriu o app de novo: encerra a sessão guardada e pede login
     if (!USER.logado) await carregarTurnstile();
     render();
-    if (USER.logado) { carregarCapturas(); carregarConexoes(); carregarEspaco(); travar(); aceitarConvite(); }
+    if (USER.logado) { carregarCapturas(); carregarConexoes().then(atualizarBancoSeAntigo); carregarEspaco(); travar(); aceitarConvite(); }
   }
 
   /* ---------- compras automáticas (avisos do banco) ---------- */
@@ -255,10 +255,16 @@
       abrir('Para revisar', '<p class="mut">Nada para revisar agora. Quando o banco avisar uma compra, ela aparece aqui para você conferir e lançar com um toque.</p><div class="botoes rodape-form"><button class="btn sec" type="button" data-acao="captura-config">Configurar avisos automáticos</button></div>');
       return;
     }
-    const opcConta = (tipo, sel) => (tipo === 'receita' ? d.contas.map((c) => [c.id, c.nome]) : d.contas.map((c) => [c.id, c.nome]).concat(d.cartoes.map((c) => ['c:' + c.id, '💳 ' + c.nome])))
+    const ehCredito = (l) => !!(l.cartao || l.final);
+    if (lista.some(ehCredito) && !d.cartoes.length) { // compra no crédito precisa de um cartão: cria um para não cair no saldo da conta
+      const fin = (lista.find((l) => l.final) || {}).final || '';
+      d.cartoes.push({ id: uid(), nome: 'Cartão do banco', limite: 0, fechamento: 1, vencimento: 10, cor: '#8A3DFF', final: fin }); salvar();
+      aviso('Criamos o "Cartão do banco" para as compras no crédito. Confira o fechamento e o vencimento em Cartões.');
+    }
+    const opcConta = (tipo, sel, credito) => (tipo === 'receita' && !credito ? d.contas.map((c) => [c.id, c.nome]) : d.contas.map((c) => [c.id, c.nome]).concat(d.cartoes.map((c) => ['c:' + c.id, '💳 ' + c.nome])))
       .map(([v, t]) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(t)}</option>`).join('');
-    const contaPadrao = (l) => { if (l.tipo === 'receita' || !d.cartoes.length || !l.final) return d.contas[0].id; const c = d.cartoes.find((x) => x.final && x.final === l.final); return 'c:' + (c || d.cartoes[0]).id; };
-    const linhas = lista.map((l, i) => `<div class="imp-lin rev-lin"><label class="imp-sel"><input type="checkbox" name="sel-${i}" checked aria-label="Lançar ${esc(l.desc)}"><span class="imp-d"><b>${esc(l.desc)}</b><small>${new Date(l.data + 'T12:00:00').toLocaleDateString('pt-BR')} · <span class="num ${l.tipo === 'receita' ? 'pos' : 'neg'}">${l.tipo === 'receita' ? '+' : '−'} ${F.brl(l.valor)}</span></small></span></label><span class="rev-sel"><select name="cat-${i}" aria-label="Categoria de ${esc(l.desc)}">${catOpts(l.tipo, F.sugerirCategoria(l.desc, l.tipo, d.lancs))}</select><select name="conta-${i}" aria-label="Conta de ${esc(l.desc)}">${opcConta(l.tipo, contaPadrao(l))}</select></span></div>`).join('');
+    const contaPadrao = (l) => { if (!ehCredito(l) || !d.cartoes.length) { const cb = contaDoBanco(l.conexao); return (cb || d.contas[0]).id; } const c = d.cartoes.find((x) => x.final && x.final === l.final); return 'c:' + (c || d.cartoes[0]).id; };
+    const linhas = lista.map((l, i) => `<div class="imp-lin rev-lin"><label class="imp-sel"><input type="checkbox" name="sel-${i}" checked aria-label="Lançar ${esc(l.desc)}"><span class="imp-d"><b>${esc(l.desc)}</b><small>${new Date(l.data + 'T12:00:00').toLocaleDateString('pt-BR')} · <span class="num ${l.tipo === 'receita' ? 'pos' : 'neg'}">${l.tipo === 'receita' ? '+' : '−'} ${F.brl(l.valor)}</span></small></span></label><span class="rev-sel"><select name="cat-${i}" aria-label="Categoria de ${esc(l.desc)}">${catOpts(l.tipo, F.sugerirCategoria(l.desc, l.tipo, d.lancs))}</select><select name="conta-${i}" aria-label="Conta de ${esc(l.desc)}">${opcConta(l.tipo, contaPadrao(l), ehCredito(l))}</select></span></div>`).join('');
     abrir('Para revisar', `<p class="mut">Estes avisos vieram do seu banco. Confira a categoria e a conta e lance as que estão certas.</p><div class="card imp-lista">${linhas}</div>
       <div class="botoes rodape-form"><button class="btn sec" type="button" id="rev-descartar">Descartar marcadas</button><button class="btn" type="submit">Lançar marcadas</button></div>`,
     (fd) => {
@@ -314,13 +320,27 @@
   /* ---------- Open Finance pelo Meu Pluggy (grátis, uso pessoal) ---------- */
   async function carregarConexoes() {
     try { V.of = await api('conexoes'); } catch (e) { V.of = V.of || { ativo: true, tem_credencial: false, conexoes: [] }; }
+    if (USER.logado && aplicarSaldoBanco() && !dlg.open) render();
     return V.of;
   }
+  /* O saldo da conta ligada ao banco é o saldo real informado pelo banco (Open Finance). Fatura de cartão nunca entra no saldo. */
+  const quandoFoi = (t) => { const min = Math.max(0, Math.round((Date.now() / 1000 - t) / 60)); return min < 1 ? 'atualizado agora' : min < 60 ? `atualizado há ${min} min` : min < 1440 ? `atualizado há ${Math.round(min / 60)} h` : `atualizado há ${Math.round(min / 1440)} dia(s)`; };
+  function aplicarSaldoBanco() {
+    if (!USER.logado || !V.of || !Array.isArray(V.of.conexoes)) return 0;
+    const n = F.vincularSaldoBanco(D(), V.of.conexoes); if (n) salvar(); return n;
+  }
+  /* Ao abrir o app: se o banco não foi lido nas últimas 6 horas, busca saldo e movimentações em segundo plano (sem aviso; o horário aparece no Início). */
+  async function atualizarBancoSeAntigo() {
+    const cxs = (V.of && V.of.conexoes) || []; const seis = Date.now() / 1000 - 6 * 3600;
+    if (!USER.logado || !cxs.length || !cxs.some((c) => !c.ultima_sync || c.ultima_sync < seis)) return;
+    try { await api('conexao_sincronizar', {}); await carregarConexoes(); await carregarCapturas(); if (!dlg.open) render(); } catch (e) { /* tenta de novo na próxima abertura */ }
+  }
+  const contaDoBanco = (cxId) => D().contas.find((c) => cxId && c.ofConexao === cxId);
   async function formOpenFinance() {
     const of = V.of || await carregarConexoes();
     const quando = (t) => { if (!t) return 'ainda não sincronizou'; const min = Math.max(0, Math.round((Date.now() / 1000 - t) / 60)); return min < 1 ? 'atualizado agora há pouco' : min < 60 ? `atualizado há ${min} min` : min < 1440 ? `atualizado há ${Math.round(min / 60)} h` : `atualizado há ${Math.round(min / 1440)} dia(s)`; };
     const renova = of.conexoes.length ? new Date(Math.min(...of.conexoes.map((c) => c.criado_em)) * 1000 + 365 * 86400000).toLocaleDateString('pt-BR') : '';
-    const lista = of.conexoes.map((c) => `<div class="of-cx"><span class="of-ic" aria-hidden="true">🏦</span><span class="of-t"><b>${esc(c.instituicao)}</b><small>${c.status === 'erro' ? '⚠️ precisa de atenção, toque em Atualizar agora' : esc(quando(c.ultima_sync))}</small>${c.saldo != null ? `<small>Saldo no banco: <b class="num">${F.brl(c.saldo)}</b></small><button class="link" type="button" data-of-saldo="${esc(c.id)}">Usar como saldo do app</button>` : ''}</span><button class="btn sec mini" type="button" data-of-sair="${esc(c.id)}" aria-label="Desconectar ${esc(c.instituicao)}">Desconectar</button></div>`).join('');
+    const lista = of.conexoes.map((c) => `<div class="of-cx"><span class="of-ic" aria-hidden="true">🏦</span><span class="of-t"><b>${esc(c.instituicao)}</b><small>${c.status === 'erro' ? '⚠️ precisa de atenção, toque em Atualizar agora' : esc(quando(c.ultima_sync))}</small>${c.saldo != null ? `<small>Saldo no banco: <b class="num">${F.brl(c.saldo)}</b></small><small>${contaDoBanco(c.id) ? `Vai sozinho para <b>${esc(contaDoBanco(c.id).nome)}</b>` : 'Ainda não ligado a uma conta do app'}</small><button class="link" type="button" data-of-saldo="${esc(c.id)}">${contaDoBanco(c.id) ? 'Trocar conta' : 'Escolher conta'}</button>` : ''}</span><button class="btn sec mini" type="button" data-of-sair="${esc(c.id)}" aria-label="Desconectar ${esc(c.instituicao)}">Desconectar</button></div>`).join('');
     const campoCred = of.tem_credencial ? '' : `<label class="campo"><span>Client ID</span><input name="client_id" autocomplete="off" autocapitalize="off" spellcheck="false" required></label><label class="campo"><span>Client Secret</span><input name="client_secret" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>`;
     const formulario = of.conexoes.length < 5 ? `<section class="card cap-passo"><h3>${of.conexoes.length ? 'Adicionar outro banco' : '3. Cole os códigos aqui'}</h3>
         <label class="campo"><span>Nome do banco (como você quer ver)</span><input name="instituicao" maxlength="60" placeholder="Ex.: Nubank" required></label>
@@ -356,13 +376,15 @@
   function formAcertarSaldo(c) {
     if (!c) return;
     const d = D();
-    abrir('Usar o saldo do banco', `<p class="mut">Saldo de <b>${esc(c.instituicao)}</b> no banco: <b class="num">${F.brl(c.saldo)}</b>. Escolha qual conta do app deve mostrar esse valor.</p>
-      <label class="campo"><span>Conta do app</span><select name="conta">${d.contas.map((x) => `<option value="${esc(x.id)}">${esc(x.nome)} (hoje ${F.brl(F.saldoConta(d.lancs, x))})</option>`).join('')}</select></label>
-      <p class="mut">Dica: antes, aprove ou descarte tudo em <b>Para revisar</b>, porque o saldo do banco já inclui essas compras. Os lançamentos continuam; só o saldo inicial da conta é ajustado.</p>
-      <div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn" type="submit">Acertar saldo</button></div>`, (fd) => {
+    const atual = contaDoBanco(c.id);
+    abrir('Saldo do banco', `<p class="mut">Saldo de <b>${esc(c.instituicao)}</b> no banco: <b class="num">${F.brl(c.saldo)}</b>. Escolha a conta do app que mostra esse saldo. Ela passa a acompanhar o banco sozinha a cada atualização.</p>
+      <label class="campo"><span>Conta do app</span><select name="conta">${d.contas.filter((x) => x.tipo !== 'investimento').map((x) => `<option value="${esc(x.id)}" ${atual && atual.id === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>
+      <p class="mut">Compras no cartão de crédito ficam na fatura do cartão e não mexem nesse saldo. Os lançamentos continuam; só o ponto de partida da conta é ajustado.</p>
+      <div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn" type="submit">Ligar conta</button></div>`, (fd) => {
       const conta = d.contas.find((x) => x.id === fd.get('conta')); if (!conta) return false;
-      conta.saldoInicial = F.acertarSaldoInicial(d.lancs, conta, c.saldo);
-      salvar(); render(); aviso(`${conta.nome} agora mostra ${F.brl(c.saldo)}.`);
+      d.contas.forEach((x) => { if (x.ofConexao === c.id) delete x.ofConexao; });
+      conta.ofConexao = c.id; conta.saldoInicial = F.acertarSaldoInicial(d.lancs, conta, c.saldo);
+      salvar(); render(); aviso(`${conta.nome} agora acompanha o saldo do banco.`);
     });
   }
   /* Saldo diferente do banco: a pessoa digita o saldo real de hoje de cada conta (ou usa o que o banco conectado informou). Os lançamentos ficam; só o saldo inicial muda. */
@@ -371,11 +393,11 @@
     const banco = ((V.of && V.of.conexoes) || []).filter((c) => c.saldo != null);
     const dica = banco.length ? `<p class="mut">Seu banco conectado informou: ${banco.map((c) => `<b>${esc(c.instituicao)}</b> <b class="num">${F.brl(c.saldo)}</b>`).join(', ')}.</p>` : '';
     abrir('Corrigir saldo', `<p class="mut">Abra o app do banco e digite quanto tem <b>hoje</b> em cada conta. Os lançamentos continuam iguais; o app só acerta o ponto de partida para o saldo bater.</p>${dica}
-      ${d.contas.map((x) => { const sug = d.contas.length === 1 && banco.length === 1 ? banco[0].saldo : F.saldoConta(d.lancs, x); return `<label class="campo"><span>${esc(x.nome)} (hoje no app ${F.brl(F.saldoConta(d.lancs, x))})</span><input name="s-${esc(x.id)}" inputmode="decimal" value="${esc(String(sug).replace('.', ','))}" required></label>`; }).join('')}
+      ${d.contas.filter((x) => !(x.ofConexao && contaDoBanco(x.ofConexao) && ((V.of && V.of.conexoes) || []).some((c) => c.id === x.ofConexao && c.saldo != null))).map((x) => { const sug = d.contas.length === 1 && banco.length === 1 ? banco[0].saldo : F.saldoConta(d.lancs, x); return `<label class="campo"><span>${esc(x.nome)} (hoje no app ${F.brl(F.saldoConta(d.lancs, x))})</span><input name="s-${esc(x.id)}" inputmode="decimal" value="${esc(String(sug).replace('.', ','))}" required></label>`; }).join('')}
       <p class="mut">Tem compra em <b>Para revisar</b>? Aprove ou descarte antes, porque o saldo do banco já inclui essas compras.</p>
       <div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn" type="submit">Corrigir saldo</button></div>`, (fd) => {
       let mudou = 0;
-      d.contas.forEach((x) => { const v = F.numeroBR(String(fd.get('s-' + x.id) || '')); if (!Number.isFinite(v)) return; if (F.arred(v - F.saldoConta(d.lancs, x)) !== 0) { x.saldoInicial = F.acertarSaldoInicial(d.lancs, x, v); mudou++; } });
+      d.contas.forEach((x) => { if (fd.get('s-' + x.id) === null) return; const v = F.numeroBR(String(fd.get('s-' + x.id) || '')); if (!Number.isFinite(v)) return; if (F.arred(v - F.saldoConta(d.lancs, x)) !== 0) { x.saldoInicial = F.acertarSaldoInicial(d.lancs, x, v); mudou++; } });
       salvar(); render(); aviso(mudou ? 'Saldo corrigido.' : 'Nada mudou: o saldo já batia.');
     });
   }
@@ -509,6 +531,7 @@
   /* ---------- telas ---------- */
   function telaInicio() {
     const d = D();
+    aplicarSaldoBanco();
     const somaContas = (f) => F.arred(d.contas.filter((c) => !c.fora && f(c)).reduce((t, c) => t + F.saldoConta(d.lancs, c), 0));
     const saldo = somaContas((c) => c.tipo !== 'investimento'); const investido = somaContas((c) => c.tipo === 'investimento');
     const r = F.resumoMes(d.lancs, V.mes);
@@ -524,7 +547,7 @@
     const hora = new Date().getHours(); const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
     const vazio = (ic, tit, txt, acao, bt, bloco) => `<section class="card vazio"${bloco ? ` data-bloco="${bloco}"` : ''}><span class="vazio-ic" aria-hidden="true">${ic}</span><h2 class="secao">${tit}</h2><p class="mut">${txt}</p><button class="btn sec" type="button" data-acao="${acao}">${bt}</button></section>`;
     const contasVazio = d.contas.length === 1 && d.contas[0].saldoInicial === 0 && !d.lancs.length;
-    return `<p class="saudacao">${saud},<br><b>${esc(String((USER.info && USER.info.nome) || '').split(' ')[0])}</b> 👋</p><div class="hero"><small>Saldo geral</small><span class="grande num" data-v="${saldo}">${m(saldo)}</span><button class="link hero-corrigir" type="button" data-acao="corrigir-saldo">${saldo < 0 ? 'Saldo negativo? Se no banco está diferente, corrija aqui' : 'Saldo diferente do banco? Corrigir'}</button>${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
+    return `<p class="saudacao">${saud},<br><b>${esc(String((USER.info && USER.info.nome) || '').split(' ')[0])}</b> 👋</p><div class="hero"><small>Saldo geral</small><span class="grande num" data-v="${saldo}">${m(saldo)}</span>${(() => { const cxs = (V.of && V.of.conexoes) || []; const lig = cxs.filter((c) => c.saldo != null && contaDoBanco(c.id)); if (lig.length) { const t = Math.max(...lig.map((c) => c.saldo_em || 0)); return `<button class="link hero-corrigir" type="button" data-acao="openfinance">🏦 Saldo real do banco${t ? ', ' + quandoFoi(t) : ''}</button>`; } if (cxs.length) return '<button class="link hero-corrigir" type="button" data-acao="openfinance">O banco ainda não informou o saldo: toque para atualizar</button>'; return `<button class="link hero-corrigir" type="button" data-acao="corrigir-saldo">${saldo < 0 ? 'Saldo negativo? Se no banco está diferente, corrija aqui' : 'Saldo diferente do banco? Corrigir'}</button>`; })()}${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
       <div class="duo"><div><small>Receitas do mês</small><b class="verde num">${m(r.receitas)}</b></div><div><small>Despesas do mês</small><b class="verm num">${m(r.despesas)}</b></div></div></div>
     <div class="contas" aria-label="Seus bancos e carteiras">${d.contas.map((c) => `<button class="conta" type="button" data-acao="editar-conta" data-id="${c.id}"><span class="mut"><i style="background:${c.cor}"></i>${esc(c.nome)}</span><b class="num">${m(F.saldoConta(d.lancs, c))}</b></button>`).join('')}<button class="conta nova" type="button" data-acao="nova-conta">+ Banco ou carteira</button></div>
     <div class="rapidas" role="group" aria-label="Ações rápidas">${[['rap-despesa', '🔻', 'Despesa'], ['rap-receita', '🔺', 'Receita'], ['rap-transf', '🔁', 'Transferir'], ['rap-fatura', '💳', 'Pagar fatura']].map(([a, i, t]) => `<button type="button" class="rap" data-acao="${a}"><span aria-hidden="true">${i}</span><b>${t}</b></button>`).join('')}</div>

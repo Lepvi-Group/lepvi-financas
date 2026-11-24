@@ -299,3 +299,19 @@ test('número em formato brasileiro: ponto de milhar sem vírgula vale mil', () 
   assert.strictEqual(F.numeroBR('12.5'), 12.5);
   assert.strictEqual(F.numeroBR('3454,56'), 3454.56);
 });
+
+test('saldo do banco conectado vira o saldo da conta sozinho; cartão e investimento ficam de fora', () => {
+  const dados = { contas: [{ id: 'inv', nome: 'CDB', tipo: 'investimento', saldoInicial: 5000 }, { id: 'cc', nome: 'Conta', saldoInicial: 0 }], cartoes: [{ id: 'k' }],
+    lancs: [{ tipo: 'despesa', valor: 3000, conta: 'cc', pago: true }, { tipo: 'receita', valor: 500, conta: 'cc', pago: true }, { tipo: 'despesa', valor: 900, conta: 'c:k', pago: false }] };
+  assert.strictEqual(F.saldoConta(dados.lancs, dados.contas[1]), -2500);
+  assert.strictEqual(F.vincularSaldoBanco(dados, [{ id: 'x1', saldo: 1834.2 }]), 2, 'liga e acerta');
+  assert.strictEqual(dados.contas[1].ofConexao, 'x1');
+  assert.strictEqual(F.saldoConta(dados.lancs, dados.contas[1]), 1834.2);
+  assert.strictEqual(dados.contas[0].saldoInicial, 5000, 'investimento não muda');
+  assert.strictEqual(F.vincularSaldoBanco(dados, [{ id: 'x1', saldo: 1834.2 }]), 0, 'sem mudança não salva de novo');
+  dados.lancs.push({ tipo: 'despesa', valor: 34.2, conta: 'cc', pago: true });
+  assert.strictEqual(F.vincularSaldoBanco(dados, [{ id: 'x1', saldo: 1800 }]), 0, 'gasto já lançado e já no banco: bate sem mexer');
+  assert.strictEqual(F.vincularSaldoBanco(dados, [{ id: 'x1', saldo: 1650.75 }]), 1, 'banco mudou: acompanha');
+  assert.strictEqual(F.saldoConta(dados.lancs, dados.contas[1]), 1650.75);
+  assert.strictEqual(F.vincularSaldoBanco(dados, [{ id: 'x1', saldo: null }]), 0, 'banco sem saldo não mexe');
+});
