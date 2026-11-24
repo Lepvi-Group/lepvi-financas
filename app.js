@@ -61,7 +61,7 @@
   }
   let versaoServidor = 0; let enviando = false; let precisaEnviar = false; let tmr = null;
   function limparMemoria() { status(''); const n = norm({ perfil: 'pessoal', dados: {} }); S.dados = n.dados; S.perfil = 'pessoal'; S.guia = false; versaoServidor = 0; V.cartao = null; V.fmes = null; V.tela = 'inicio'; V.esp = null; baseDados = null; }
-  async function sessaoExpirou() { USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua sessão terminou. Entre de novo.'; await carregarTurnstile(); render(); }
+  async function sessaoExpirou() { aba.limpar(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Sua sessão terminou. Entre de novo.'; await carregarTurnstile(); render(); }
   function salvar() {
     try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, escala: S.escala, tema: S.tema, semMovimento: S.semMovimento, destacar: S.destacar, contraste: S.contraste, oculto: S.oculto, ordem: S.ordem, saldoDiario: S.saldoDiario, sugestoes: S.sugestoes, dispensados: (S.dispensados || []).slice(-200) })); } catch (e) { /* sem armazenamento */ }
     if (!USER.logado) return;
@@ -102,6 +102,14 @@
   }
 
   /* ---------- entrar, criar conta, esqueci a senha ---------- */
+  /* Regra: abrir o app (aba nova, endereço digitado, app instalado) sempre pede login. Só esta aba, depois de entrar, continua logada ao recarregar. */
+  const ABA = 'lf-aba'; const IDA_OAUTH = 'lf-oauth';
+  const aba = {
+    marcar() { try { sessionStorage.setItem(ABA, '1'); } catch (e) { /* sem armazenamento */ } },
+    tem() { try { return sessionStorage.getItem(ABA) === '1'; } catch (e) { return false; } },
+    limpar() { try { sessionStorage.removeItem(ABA); } catch (e) { /* sem armazenamento */ } },
+  };
+  function voltouDoOauth() { try { const v = sessionStorage.getItem(IDA_OAUTH); sessionStorage.removeItem(IDA_OAUTH); return v === '1'; } catch (e) { return false; } }
   let tsId = null;
   async function carregarTurnstile() {
     try { const cf = await api('config'); V.ts = cf.turnstile || null; V.cadastro = cf.cadastro !== false; } catch (e) { V.ts = null; }
@@ -180,10 +188,10 @@
     if (V.ts && ['entrar', 'cadastro', 'esqueci'].includes(V.auth) && !V.tsTok) { er.textContent = 'Confirme que você não é um robô (marque a caixa acima do botão).'; er.hidden = false; er.focus(); return; }
     const v = Object.fromEntries(new FormData(f)); const rotulo = btn.textContent; btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = V.auth === 'entrar' ? 'Entrando…' : 'Enviando…';
     try {
-      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha, turnstile: V.tsTok }); if (r.passo2) { V.auth = 'dois-passos'; V.ticket = r.ticket; V.msg = ''; render(); return; } USER.logado = true; USER.info = r.usuario; await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
-      else if (V.auth === 'dois-passos') { const r = await api('entrar_2fa', { ticket: V.ticket, codigo: v.codigo }); V.ticket = ''; USER.logado = true; USER.info = r.usuario; await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.auth = 'entrar'; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
+      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha, turnstile: V.tsTok }); if (r.passo2) { V.auth = 'dois-passos'; V.ticket = r.ticket; V.msg = ''; render(); return; } USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
+      else if (V.auth === 'dois-passos') { const r = await api('entrar_2fa', { ticket: V.ticket, codigo: v.codigo }); V.ticket = ''; USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.auth = 'entrar'; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
       else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: !!v.aceite, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
-      else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: !!v.aceite }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
+      else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: !!v.aceite }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
       else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'redefinir') { await api('redefinir', { token: V.token, senha: v.senha }); V.auth = 'entrar'; V.token = ''; V.msg = 'Senha alterada. Entre com a nova senha.'; render(); }
     } catch (e) { er.textContent = e.message + (V.auth === 'entrar' && /incorretos/.test(e.message) ? ' O navegador pode ter preenchido uma senha antiga: apague o campo, marque "Mostrar senha" e digite de novo.' : ''); er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; if (window.turnstile && tsId !== null) { window.turnstile.reset(tsId); V.tsTok = ''; } }
@@ -227,7 +235,9 @@
     if (cv) { history.replaceState(null, '', location.pathname); try { localStorage.setItem(CONVITE, cv); } catch (e) { /* sem armazenamento */ } }
     if (cv && !V.msg) V.msg = 'Você recebeu um convite para compartilhar um espaço. Entre ou crie a sua conta para aceitar.';
     /* Link de "criar nova senha" do e-mail: mostra o formulário mesmo que este navegador ainda tenha uma sessão aberta (senão o app abria direto e o link se perdia). */
-    if (!tr) { try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ } }
+    const doOauth = voltouDoOauth();
+    if (!tr && (aba.tem() || (oa === 'ok' && doOauth))) { try { const r = await api('eu'); USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); } catch (e) { /* sem sessão: mostra a entrada */ } }
+    else { try { await api('sair', {}); } catch (e) { /* já estava fora */ } } // abriu o app de novo: encerra a sessão guardada e pede login
     if (!USER.logado) await carregarTurnstile();
     render();
     if (USER.logado) { carregarCapturas(); carregarConexoes(); carregarEspaco(); travar(); aceitarConvite(); }
@@ -795,7 +805,7 @@
       f.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => { const a = b.dataset.sheet; dlg.close(); if (a === 'perfil' || a === 'mais') ir(a); else if (a === 'acess') formAcess(); else if (a === 'busca') formBusca(); else if (a === 'senha') formSenha(); else if (a === 'dois') formDoisPassos(); else sair(); }));
     });
   }
-  async function sair() { try { await api('sair', {}); } catch (e) { /* já saiu */ } PIN.remover(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Você saiu. Até logo!'; await carregarTurnstile(); render(); window.scrollTo(0, 0); }
+  async function sair() { try { await api('sair', {}); } catch (e) { /* já saiu */ } aba.limpar(); PIN.remover(); USER.logado = false; limparMemoria(); V.auth = 'entrar'; V.msg = 'Você saiu. Até logo!'; await carregarTurnstile(); render(); window.scrollTo(0, 0); }
   async function processarFoto(arq) {
     if (!arq || !/^image\//.test(arq.type)) { aviso('Escolha um arquivo de imagem (JPG, PNG ou WebP).'); return; }
     try {
@@ -1633,7 +1643,7 @@
       'dois-passos': () => formDoisPassos(),
       personalizar: () => formPersonalizar(),
       categorias: () => formCategorias(),
-      oauth: () => { window.location.href = 'api/oauth.php?a=iniciar&p=' + encodeURIComponent(t.dataset.p); },
+      oauth: () => { try { sessionStorage.setItem(IDA_OAUTH, '1'); } catch (e) { /* sem armazenamento */ } window.location.href = 'api/oauth.php?a=iniciar&p=' + encodeURIComponent(t.dataset.p); },
       'excluir-conta': () => formExcluirConta(),
       'auth-entrar': () => { V.auth = 'entrar'; V.msg = ''; render(); },
       'auth-esqueci': () => { V.auth = 'esqueci'; V.msg = ''; render(); },
