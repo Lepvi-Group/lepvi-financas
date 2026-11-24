@@ -64,6 +64,14 @@ test('lê OFX de banco', () => {
   assert.deepStrictEqual([r[0].tipo, r[0].valor, r[0].data], ['despesa', 45.9, '2026-11-05']);
   assert.strictEqual(r[1].tipo, 'receita');
 });
+test('acertar saldo: o saldo do app passa a bater com o do banco sem apagar lançamentos', () => {
+  const lancs = [{ tipo: 'despesa', valor: 300, conta: 'a', data: '2026-11-03', pago: true }, { tipo: 'receita', valor: 100, conta: 'a', data: '2026-11-04', pago: true }];
+  const conta = { id: 'a', saldoInicial: 0 };
+  assert.strictEqual(F.saldoConta(lancs, conta), -200);
+  conta.saldoInicial = F.acertarSaldoInicial(lancs, conta, 1234.56);
+  assert.strictEqual(F.saldoConta(lancs, conta), 1234.56);
+  assert.strictEqual(F.acertarSaldoInicial(lancs, conta, 1234.56), conta.saldoInicial, 'repetir não muda nada');
+});
 test('transferência move saldo entre contas e fica fora do resumo', () => {
   const l = [{ tipo: 'transf', valor: 200, conta: 'a', destino: 'b', data: '2026-11-03', pago: true }];
   assert.strictEqual(F.saldoConta(l, { id: 'a', saldoInicial: 500 }), 300);

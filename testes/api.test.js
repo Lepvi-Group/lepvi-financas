@@ -27,7 +27,7 @@ const pluggyMock = require('node:http').createServer((req, res) => {
     return;
   }
   if (chave !== 'chave-pluggy') { res.statusCode = 403; return res.end('{}'); }
-  if (u.pathname === '/accounts') { if (u.searchParams.get('itemId') !== 'item-ok') { res.statusCode = 404; return res.end('{}'); } return res.end(JSON.stringify({ results: [{ id: 'conta-1', type: 'BANK', number: '12345' }] })); }
+  if (u.pathname === '/accounts') { if (u.searchParams.get('itemId') !== 'item-ok') { res.statusCode = 404; return res.end('{}'); } return res.end(JSON.stringify({ results: [{ id: 'conta-1', type: 'BANK', number: '12345', balance: 1234.56 }] })); }
   if (u.pathname === '/transactions') { res.statusCode = 410; return res.end('{}'); } // o Pluggy aposentou a rota antiga
   if (u.pathname === '/v2/transactions') return res.end(JSON.stringify({ results: u.searchParams.get('accountId') === 'conta-1' && u.searchParams.get('dateFrom') ? TRANSACOES : [], next: null }));
   res.statusCode = 404; res.end('{}');
@@ -229,7 +229,7 @@ test('meu pluggy: confere as chaves, traz os últimos 30 dias sem a fatura nem o
   assert.deepStrictEqual([caps.find((c) => c.desc.startsWith('Pix')).tipo], ['receita']);
   assert.strictEqual((await chamar('pluggy_conectar', { instituicao: 'Nubank 2', item_id: 'item-ok' })).status, 422, 'mesmo banco duas vezes');
   const sync = await chamar('conexao_sincronizar', {}); assert.strictEqual(sync.status, 200); assert.strictEqual(sync.json.novas, 0, 'atualizar não duplica');
-  const lista = (await chamar('conexoes', null, { metodo: 'GET' })).json; assert.strictEqual(lista.tem_credencial, true); assert.strictEqual(lista.conexoes[0].provedor, 'meupluggy');
+  const lista = (await chamar('conexoes', null, { metodo: 'GET' })).json; assert.strictEqual(lista.tem_credencial, true); assert.strictEqual(lista.conexoes[0].provedor, 'meupluggy'); assert.strictEqual(lista.conexoes[0].saldo, 1234.56, 'guarda o saldo real do banco'); assert.ok(lista.conexoes[0].saldo_em);
   const bruto = execFileSync('sqlite3', [path.join(DEV, 'financas.sqlite'), 'SELECT conteudo FROM of_pluggy']).toString();
   assert.ok(bruto.length > 20 && !bruto.includes('sec-ok') && !bruto.includes('cid-ok'), 'chaves guardadas cifradas');
   await chamar('capturas_resolver', { ids: caps.map((c) => c.id) });

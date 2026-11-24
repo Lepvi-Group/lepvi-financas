@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS conexoes (
   instituicao VARCHAR(80) NOT NULL,
   status VARCHAR(20) NOT NULL,
   ultima_sync INTEGER NULL,
+  saldo DOUBLE NULL,
+  saldo_em INTEGER NULL,
   criado_em INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS of_pluggy (

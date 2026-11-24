@@ -35,10 +35,10 @@ function of_para_captura(array $t, string $instituicao = ''): ?array
 
 function of_conexoes(string $dono): array
 {
-    $s = db()->prepare('SELECT id, provedor, instituicao, status, ultima_sync, criado_em FROM conexoes WHERE usuario_id = ? ORDER BY criado_em DESC');
+    $s = db()->prepare('SELECT id, provedor, instituicao, status, ultima_sync, saldo, saldo_em, criado_em FROM conexoes WHERE usuario_id = ? ORDER BY criado_em DESC');
     $s->execute([$dono]);
     return array_map(fn($r) => ['id' => $r['id'], 'provedor' => $r['provedor'], 'instituicao' => $r['instituicao'], 'status' => $r['status'],
-        'ultima_sync' => $r['ultima_sync'] !== null ? (int) $r['ultima_sync'] : null, 'criado_em' => (int) $r['criado_em']], $s->fetchAll());
+        'ultima_sync' => $r['ultima_sync'] !== null ? (int) $r['ultima_sync'] : null, 'saldo' => $r['saldo'] !== null ? (float) $r['saldo'] : null, 'saldo_em' => $r['saldo_em'] !== null ? (int) $r['saldo_em'] : null, 'criado_em' => (int) $r['criado_em']], $s->fetchAll());
 }
 
 /* Recebe as movimentações de uma conexão (aviso do agregador). */
@@ -119,9 +119,11 @@ function pluggy_sincronizar_conexao(array $cx, string $chave): int
 {
     $contas = pluggy_contas($chave, (string) $cx['item_id']);
     $de = date('Y-m-d', ($cx['ultima_sync'] !== null ? (int) $cx['ultima_sync'] - 4 * 86400 : agora() - 30 * 86400));
-    $lista = [];
+    $lista = []; $saldo = null;
     foreach (array_slice($contas, 0, 10) as $conta) {
         if (empty($conta['id'])) continue;
+        // saldo de verdade do banco: só conta corrente/poupança (o "saldo" do cartão de crédito é a fatura, não dinheiro)
+        if (($conta['type'] ?? '') === 'BANK' && isset($conta['balance']) && is_numeric($conta['balance'])) $saldo = ($saldo ?? 0) + (float) $conta['balance'];
         $final = isset($conta['number']) && ($conta['type'] ?? '') === 'CREDIT' && preg_match('/(\d{4})$/', (string) $conta['number'], $m) ? $m[1] : null;
         // O Pluggy aposentou o GET /transactions (responde 410): usa a versão v2, paginada por cursor ("next" já vem pronto para anexar).
         $url = '/v2/transactions?accountId=' . rawurlencode((string) $conta['id']) . '&dateFrom=' . $de;
@@ -135,6 +137,7 @@ function pluggy_sincronizar_conexao(array $cx, string $chave): int
             $url = !empty($j['next']) ? '/v2/transactions' . $j['next'] : null;
         }
     }
+    if ($saldo !== null) db()->prepare('UPDATE conexoes SET saldo = ?, saldo_em = ? WHERE id = ?')->execute([round($saldo, 2), agora(), $cx['id']]);
     return of_importar_conexao($cx, $lista);
 }
 

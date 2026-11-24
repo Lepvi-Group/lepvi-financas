@@ -106,6 +106,10 @@
   }
 
   /* Saldo de uma conta: saldo inicial + receitas pagas - despesas pagas (fora de cartão). */
+  /* Saldo inicial que faz a conta do app bater com o saldo real do banco (o que já foi lançado continua valendo). */
+  function acertarSaldoInicial(lancs, conta, saldoBanco) {
+    return arred((Number(saldoBanco) || 0) - (saldoConta(lancs, conta) - conta.saldoInicial));
+  }
   function saldoConta(lancs, conta) {
     let mov = 0;
     lancs.forEach((l) => {
@@ -452,7 +456,7 @@
     return juntar(base, local, remoto);
   }
 
-  const api = { saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  const api = { acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

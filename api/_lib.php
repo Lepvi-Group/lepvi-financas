@@ -89,6 +89,7 @@ function db(): PDO
     try { $pdo->query('SELECT resumo FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN resumo INTEGER NOT NULL DEFAULT 1'); } catch (Throwable $e2) { /* já existe */ } }
     try { $pdo->query('SELECT lembrete FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN lembrete INTEGER NOT NULL DEFAULT 0'); } catch (Throwable $e2) { /* já existe */ } }
     try { $pdo->query('SELECT foto FROM usuarios LIMIT 1'); } catch (Throwable $e) { try { $pdo->exec('ALTER TABLE usuarios ADD COLUMN foto LONGTEXT NULL'); } catch (Throwable $e2) { /* já existe */ } }
+    try { $pdo->query('SELECT saldo FROM conexoes LIMIT 1'); } catch (Throwable $e) { foreach (['ALTER TABLE conexoes ADD COLUMN saldo DOUBLE NULL', 'ALTER TABLE conexoes ADD COLUMN saldo_em INTEGER NULL'] as $q) { try { $pdo->exec($q); } catch (Throwable $e2) { /* já existe */ } } }
     return $pdo;
 }
 

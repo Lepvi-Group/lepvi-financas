@@ -310,7 +310,7 @@
     const of = V.of || await carregarConexoes();
     const quando = (t) => { if (!t) return 'ainda não sincronizou'; const min = Math.max(0, Math.round((Date.now() / 1000 - t) / 60)); return min < 1 ? 'atualizado agora há pouco' : min < 60 ? `atualizado há ${min} min` : min < 1440 ? `atualizado há ${Math.round(min / 60)} h` : `atualizado há ${Math.round(min / 1440)} dia(s)`; };
     const renova = of.conexoes.length ? new Date(Math.min(...of.conexoes.map((c) => c.criado_em)) * 1000 + 365 * 86400000).toLocaleDateString('pt-BR') : '';
-    const lista = of.conexoes.map((c) => `<div class="of-cx"><span class="of-ic" aria-hidden="true">🏦</span><span class="of-t"><b>${esc(c.instituicao)}</b><small>${c.status === 'erro' ? '⚠️ precisa de atenção, toque em Atualizar agora' : esc(quando(c.ultima_sync))}</small></span><button class="btn sec mini" type="button" data-of-sair="${esc(c.id)}" aria-label="Desconectar ${esc(c.instituicao)}">Desconectar</button></div>`).join('');
+    const lista = of.conexoes.map((c) => `<div class="of-cx"><span class="of-ic" aria-hidden="true">🏦</span><span class="of-t"><b>${esc(c.instituicao)}</b><small>${c.status === 'erro' ? '⚠️ precisa de atenção, toque em Atualizar agora' : esc(quando(c.ultima_sync))}</small>${c.saldo != null ? `<small>Saldo no banco: <b class="num">${F.brl(c.saldo)}</b></small><button class="link" type="button" data-of-saldo="${esc(c.id)}">Usar como saldo do app</button>` : ''}</span><button class="btn sec mini" type="button" data-of-sair="${esc(c.id)}" aria-label="Desconectar ${esc(c.instituicao)}">Desconectar</button></div>`).join('');
     const campoCred = of.tem_credencial ? '' : `<label class="campo"><span>Client ID</span><input name="client_id" autocomplete="off" autocapitalize="off" spellcheck="false" required></label><label class="campo"><span>Client Secret</span><input name="client_secret" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>`;
     const formulario = of.conexoes.length < 5 ? `<section class="card cap-passo"><h3>${of.conexoes.length ? 'Adicionar outro banco' : '3. Cole os códigos aqui'}</h3>
         <label class="campo"><span>Nome do banco (como você quer ver)</span><input name="instituicao" maxlength="60" placeholder="Ex.: Nubank" required></label>
@@ -333,12 +333,26 @@
     }, (f) => {
       const at = $('#of-atualizar', f);
       if (at) at.onclick = async () => { at.disabled = true; at.textContent = 'Atualizando…'; try { const r = await api('conexao_sincronizar', {}); await carregarConexoes(); await carregarCapturas(); dlg.close(); render(); aviso(r.aviso ? r.aviso : `${r.novas} movimentação(ões) nova(s) em Para revisar.`); } catch (e) { aviso(e.message); at.disabled = false; at.textContent = 'Atualizar agora'; } };
+      f.querySelectorAll('[data-of-saldo]').forEach((b) => b.addEventListener('click', () => formAcertarSaldo(of.conexoes.find((c) => c.id === b.dataset.ofSaldo))));
       f.querySelectorAll('[data-of-sair]').forEach((b) => b.addEventListener('click', async () => {
         if (!(await confirmar('Desconectar este banco?', 'Os lançamentos já feitos continuam. Novas movimentações deixam de chegar.', 'Desconectar'))) return;
         try { await api('conexao_remover', { id: b.dataset.ofSair }); await carregarConexoes(); dlg.close(); render(); aviso('Banco desconectado.'); } catch (e) { aviso(e.message); }
       }));
       const es = $('#of-esquecer', f);
       if (es) es.onclick = async () => { if (!(await confirmar('Apagar os códigos do Pluggy?', 'Os bancos conectados por eles também saem daqui. Os lançamentos já feitos continuam.', 'Apagar'))) return; try { await api('pluggy_esquecer', {}); await carregarConexoes(); dlg.close(); render(); aviso('Códigos apagados.'); } catch (e) { aviso(e.message); } };
+    });
+  }
+  /* Faz o saldo do app bater com o saldo real do banco (guardado pelo Pluggy na última atualização). */
+  function formAcertarSaldo(c) {
+    if (!c) return;
+    const d = D();
+    abrir('Usar o saldo do banco', `<p class="mut">Saldo de <b>${esc(c.instituicao)}</b> no banco: <b class="num">${F.brl(c.saldo)}</b>. Escolha qual conta do app deve mostrar esse valor.</p>
+      <label class="campo"><span>Conta do app</span><select name="conta">${d.contas.map((x) => `<option value="${esc(x.id)}">${esc(x.nome)} (hoje ${F.brl(F.saldoConta(d.lancs, x))})</option>`).join('')}</select></label>
+      <p class="mut">Dica: antes, aprove ou descarte tudo em <b>Para revisar</b>, porque o saldo do banco já inclui essas compras. Os lançamentos continuam; só o saldo inicial da conta é ajustado.</p>
+      <div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn" type="submit">Acertar saldo</button></div>`, (fd) => {
+      const conta = d.contas.find((x) => x.id === fd.get('conta')); if (!conta) return false;
+      conta.saldoInicial = F.acertarSaldoInicial(d.lancs, conta, c.saldo);
+      salvar(); render(); aviso(`${conta.nome} agora mostra ${F.brl(c.saldo)}.`);
     });
   }
   /* ---------- divisão de despesas e meta mensal ---------- */
