@@ -1202,9 +1202,21 @@
       f.querySelectorAll('[data-ex]').forEach((b) => b.addEventListener('click', () => { const m = b.dataset.ex; soltarAnexos(d.lancs.filter((x) => x.id === base.id || (x.serie === base.serie && (m === 'todos' || (m === 'proximos' && x.data >= base.data))))); d.lancs = d.lancs.filter((x) => !(x.id === base.id || (x.serie === base.serie && (m === 'todos' || (m === 'proximos' && x.data >= base.data))))); salvar(); dlg.close(); render(); aviso('Excluído.'); }));
     });
   }
+  /* ao digitar o nome do banco: mostra o ícone reconhecido e já escolhe a cor dele */
+  function reconhecerBanco(f, novo) {
+      const nomeI = f.elements.nome; const prev = $('#banco-prev', f); let corMexida = !novo; if (!prev) return;
+      f.querySelectorAll('input[name=cor]').forEach((r) => r.addEventListener('change', () => { corMexida = true; }));
+      const detecta = () => {
+        const b = F.bancoVisual(nomeI.value);
+        prev.innerHTML = b ? `${seloBanco(nomeI.value, '', 'med')}<span>Reconhecemos o <b>${esc(b.nome)}</b>. O ícone e a cor ficam no app.</span>` : (nomeI.value.trim().length > 1 ? `${seloBanco(nomeI.value, f.querySelector('input[name=cor]:checked') ? f.querySelector('input[name=cor]:checked').value : '', 'med')}<span>Banco não reconhecido: usamos as iniciais.</span>` : '');
+        if (b && !corMexida) { const r = [...f.querySelectorAll('input[name=cor]')].find((x) => x.value.toLowerCase() === b.cor.toLowerCase()); if (r) r.checked = true; }
+      };
+      nomeI.addEventListener('input', detecta); detecta();
+  }
   function formCartao(c = {}) {
     const novo = !c.id;
     abrir(novo ? 'Novo cartão' : 'Editar cartão', `${campo('Nome do cartão', `<input name="nome" required maxlength="30" value="${esc(c.nome || '')}" placeholder="Ex.: Nubank, Itaú Empresa">`)}
+      <div class="banco-prev" id="banco-prev"></div>
       ${campo('Limite (R$)', `<input name="limite" required inputmode="decimal" value="${val2(c.limite)}" placeholder="0,00">`)}
       <p class="rep-resumo"><b>Para que serve:</b> o app monta a fatura sozinho, avisa quando ela vence e mostra quanto do limite você já usou. A compra no crédito não tira dinheiro da sua conta antes da hora: só sai quando você paga a fatura. <b>Não usa cartão de crédito? Não precisa cadastrar.</b><br><b>Segurança:</b> não pedimos número do cartão, validade nem código de segurança. Só o nome, o limite e os dias da fatura, e tudo fica cifrado.<br>Compras até o <b>dia do fechamento</b> entram na fatura que vence neste mês; as feitas depois vão para a do mês seguinte. Os dois dias estão no app do seu banco, na tela do cartão.</p>
       <div class="dupla">${campo('Dia do fechamento', `<input name="fechamento" type="number" min="1" max="31" required value="${c.fechamento || ''}" placeholder="Ex.: 5"><small class="mut">Dia em que a fatura fecha.</small>`)}${campo('Dia do vencimento', `<input name="vencimento" type="number" min="1" max="31" required value="${c.vencimento || ''}" placeholder="Ex.: 12"><small class="mut">Dia de pagar a fatura.</small>`)}</div>
@@ -1218,14 +1230,7 @@
       salvar(); render(); aviso('Cartão salvo.');
     }, (f) => {
       f.querySelectorAll('.cores span').forEach((s) => { s.style.background = s.previousElementSibling.value; });
-      const nomeI = f.elements.nome; const prev = $('#banco-prev', f); let corMexida = !novo;
-      f.querySelectorAll('input[name=cor]').forEach((r) => r.addEventListener('change', () => { corMexida = true; }));
-      const detecta = () => {
-        const b = F.bancoVisual(nomeI.value);
-        prev.innerHTML = b ? `${seloBanco(nomeI.value, '', 'med')}<span>Reconhecemos o <b>${esc(b.nome)}</b>. O ícone e a cor ficam no app.</span>` : (nomeI.value.trim().length > 1 ? `${seloBanco(nomeI.value, f.querySelector('input[name=cor]:checked') ? f.querySelector('input[name=cor]:checked').value : '', 'med')}<span>Banco não reconhecido: usamos as iniciais.</span>` : '');
-        if (b && !corMexida) { const r = [...f.querySelectorAll('input[name=cor]')].find((x) => x.value.toLowerCase() === b.cor.toLowerCase()); if (r) r.checked = true; }
-      };
-      nomeI.addEventListener('input', detecta); detecta();
+      reconhecerBanco(f, novo);
       const exc = $('#exc', f); if (exc) exc.onclick = async () => { if (!(await confirmar('Excluir este cartão?', 'O cartão e todas as compras dele serão apagados. Não dá para desfazer.', 'Excluir'))) return; const d = D(); soltarAnexos(d.lancs.filter((l) => l.conta === 'c:' + c.id)); d.cartoes = d.cartoes.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== 'c:' + c.id); V.cartao = null; salvar(); dlg.close(); render(); aviso('Cartão excluído.'); };
     });
   }
@@ -1251,6 +1256,7 @@
       salvar(); render(); aviso('Conta salva.');
     }, (f) => {
       f.querySelectorAll('.cores span').forEach((s) => { s.style.background = s.previousElementSibling.value; });
+      reconhecerBanco(f, novo);
       const exc = $('#exc', f); if (exc) exc.onclick = async () => { if (!(await confirmar('Excluir este banco ou carteira?', 'Os lançamentos dele também serão apagados. Não dá para desfazer.', 'Excluir'))) return; const d = D(); soltarAnexos(d.lancs.filter((l) => l.conta === c.id || l.destino === c.id)); d.contas = d.contas.filter((x) => x.id !== c.id); d.lancs = d.lancs.filter((l) => l.conta !== c.id && l.destino !== c.id); salvar(); dlg.close(); render(); aviso('Conta excluída.'); };
     });
   }
