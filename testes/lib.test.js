@@ -278,3 +278,16 @@ test('saldo ao fim do dia soma só o que já foi pago até aquele dia', () => {
   const l = [{ id: '1', tipo: 'receita', valor: 50, data: '2026-11-02', conta: 'c', pago: true, categoria: 'x' }, { id: '2', tipo: 'despesa', valor: 30, data: '2026-11-05', conta: 'c', pago: true, categoria: 'x' }, { id: '3', tipo: 'despesa', valor: 999, data: '2026-11-03', conta: 'c', pago: false, categoria: 'x' }];
   assert.deepStrictEqual(['2026-11-01', '2026-11-04', '2026-11-05'].map((d) => F.saldoAteDia(l, contas, d)), [100, 150, 120]);
 });
+
+test('ritmo do orçamento, 13º, férias e desempenho', () => {
+  const o = { categoria: 'x', limite: 300, gasto: 200, pct: 67 };
+  const r = F.ritmoOrcamento(o, '2026-11', '2026-11-15');
+  assert.deepStrictEqual([r.esperado, r.projecao, r.adiantado], [150, 400, true]);
+  assert.strictEqual(F.ritmoOrcamento(o, '2026-10', '2026-11-15'), null);
+  assert.deepStrictEqual(F.decimoTerceiro(3000, 6), { total: 1500, primeira: 750, segunda: 750 });
+  assert.deepStrictEqual(F.ferias(3000, 30, false), { gozo: 30, base: 3000, terco: 1000, abono: 0, total: 4000 });
+  assert.strictEqual(F.ferias(3000, 30, true).total, 3000 / 30 * 20 * 4 / 3 + 3000 / 30 * 10 * 4 / 3);
+  const l = [{ id: '1', tipo: 'receita', valor: 1000, data: '2026-11-22', conta: 'c', pago: true, categoria: 'x' }, { id: '2', tipo: 'despesa', valor: 800, data: '2026-11-23', conta: 'c', pago: true, categoria: 'x' }];
+  const d = F.desempenho(l, '2026-11', '2026-11-23');
+  assert.deepStrictEqual([d.taxa, d.sequencia, d.nota], [20, 2, 'ótimo']);
+});

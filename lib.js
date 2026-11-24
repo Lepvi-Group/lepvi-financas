@@ -70,6 +70,36 @@
     }).sort((a, b) => b.pct - a.pct);
   }
 
+
+  /* Ritmo do orçamento (só no mês corrente): quanto já devia ter gasto e para onde caminha. */
+  function ritmoOrcamento(o, mes, hoje) {
+    if (mesDe(hoje) !== mes) return null;
+    const [a, m] = mes.split('-').map(Number); const dias = new Date(a, m, 0).getDate(); const dia = Math.min(dias, Number(hoje.slice(8, 10)));
+    const esperado = arred(o.limite * dia / dias); const projecao = arred(o.gasto / dia * dias);
+    return { esperado, projecao, adiantado: o.pct < 100 && projecao > o.limite };
+  }
+  /* 13º salário e férias, valores brutos (antes de INSS e IR). */
+  function decimoTerceiro(salario, meses) {
+    const m = Math.max(0, Math.min(12, Math.floor(meses))); const total = arred(salario * m / 12);
+    const primeira = arred(total / 2); return { total, primeira, segunda: arred(total - primeira) };
+  }
+  function ferias(salario, dias, vender) {
+    const gozo = vender ? Math.min(dias, 30) - 10 : Math.min(dias, 30);
+    const base = arred(salario / 30 * Math.max(0, gozo)); const terco = arred(base / 3);
+    const abono = vender ? arred(salario / 30 * 10 * 4 / 3) : 0;
+    return { gozo: Math.max(0, gozo), base, terco, abono, total: arred(base + terco + abono) };
+  }
+  /* Meu desempenho do mês: quanto sobrou da renda e há quantos dias seguidos você lança. */
+  function desempenho(lancs, mes, hoje) {
+    const r = resumoMes(lancs, mes);
+    const taxa = r.receitas > 0 ? Math.round((r.saldo / r.receitas) * 100) : null;
+    const dias = new Set(lancs.map((l) => l.data)); let seq = 0; const d = new Date(hoje + 'T12:00:00');
+    if (!dias.has(hoje)) d.setDate(d.getDate() - 1);
+    while (dias.has(d.toISOString().slice(0, 10))) { seq++; d.setDate(d.getDate() - 1); }
+    const nota = taxa === null ? null : taxa >= 20 ? 'ótimo' : taxa >= 10 ? 'bom' : taxa >= 0 ? 'atenção' : 'no vermelho';
+    return { receitas: r.receitas, despesas: r.despesas, saldo: r.saldo, taxa, sequencia: seq, nota };
+  }
+
   /* Faturas de cartão, agrupadas por cartão e mês de vencimento. */
   function faturas(lancs, cartoes) {
     const mapa = {};
@@ -456,7 +486,7 @@
     return juntar(base, local, remoto);
   }
 
-  const api = { acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  const api = { ritmoOrcamento, decimoTerceiro, ferias, desempenho, acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

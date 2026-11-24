@@ -609,9 +609,13 @@
     ${itens.length ? `<div class="card" style="padding:4px 14px"><ul class="lista">${itens.map(itemLanc).join('')}</ul></div>` : ''}`;
   }
 
+  function ritmoTxt(o) {
+    const r = F.ritmoOrcamento(o, V.mes, F.hojeISO()); if (!r || o.pct >= 100) return '';
+    return r.adiantado ? `<small class="neg">Neste ritmo você chega a ${m(r.projecao)} no fim do mês (limite ${m(o.limite)}).</small>` : `<small class="mut">Até hoje o esperado era ${m(r.esperado)}. Você está dentro do ritmo.</small>`;
+  }
   function rowOrc(o) {
     const info = catInfo(o.categoria, 'despesa'); const cls = o.pct >= 100 ? 'estourou' : o.pct >= 80 ? 'alerta' : 'ok';
-    return `<li><button class="item" type="button" data-acao="editar-orc" data-id="${esc(o.categoria)}"><span class="ic" style="background:${info.cor}22">${info.icone}</span><span class="txt"><strong>${esc(o.categoria)}</strong><span class="num">${m(o.gasto)} de ${m(o.limite)}</span><div class="barra ${cls}" style="margin-top:6px"><i style="width:${Math.min(100, o.pct)}%"></i></div></span><span class="val num ${o.restante < 0 ? 'neg' : ''}">${o.pct}%<small>${o.restante >= 0 ? 'faltam ' + m(o.restante) : 'acima ' + m(-o.restante)}</small></span></button></li>`;
+    return `<li><button class="item" type="button" data-acao="editar-orc" data-id="${esc(o.categoria)}"><span class="ic" style="background:${info.cor}22">${info.icone}</span><span class="txt"><strong>${esc(o.categoria)}</strong><span class="num">${m(o.gasto)} de ${m(o.limite)}</span><div class="barra ${cls}" style="margin-top:6px"><i style="width:${Math.min(100, o.pct)}%"></i></div>${ritmoTxt(o)}</span><span class="val num ${o.restante < 0 ? 'neg' : ''}">${o.pct}%<small>${o.restante >= 0 ? 'faltam ' + m(o.restante) : 'acima ' + m(-o.restante)}</small></span></button></li>`;
   }
   function telaPlanejar() {
     const d = D();
@@ -724,6 +728,8 @@
       linha({ icone: LI.user, titulo: 'Contas a receber', desc: (() => { const r = F.aReceber(d.lancs); return r.itens.length ? `${r.itens.length} a receber · ${m(r.total)}` : 'Clientes que ainda vão pagar'; })(), attrs: 'data-acao="receber"' })
       + linha({ icone: LI.brilho, titulo: 'Projeção de saldo', desc: 'Como ficam os próximos 6 meses', attrs: 'data-acao="projecao"' })
       + linha({ icone: LI.escudo, titulo: 'Reserva de emergência', desc: 'Quantos meses você aguenta sem renda', attrs: 'data-acao="reserva"' })
+      + linha({ icone: LI.brilho, titulo: 'Meu desempenho', desc: 'Quanto da renda sobrou e dias seguidos lançando', attrs: 'data-acao="desempenho"' })
+      + linha({ icone: LI.arquivo, titulo: '13º e férias', desc: 'Quanto você recebe, antes dos descontos', attrs: 'data-acao="calc-trabalho"' })
       + linha({ icone: LI.lixo, titulo: 'Simulador de dívidas', desc: 'Qual dívida pagar primeiro', attrs: 'data-acao="dividas"' })
       + linha({ icone: LI.arquivo, titulo: 'MEI: limite e DAS', desc: 'Faturamento do ano e lembrete do imposto', attrs: 'data-acao="mei"' })
       + linha({ icone: LI.copia, titulo: 'Modelos de lançamento', desc: `${(d.modelos || []).length} salvo(s)`, attrs: 'data-acao="modelos"' })
@@ -1240,6 +1246,31 @@
       ${neg ? `<p class="rep-resumo" role="alert"><b>Atenção:</b> o saldo fica negativo em <b>${esc(nomeMes(neg.mes))}</b>. Dá tempo de ajustar.</p>` : '<p class="rep-resumo"><b>Tudo certo:</b> o saldo não fica negativo nos próximos 6 meses.</p>'}
       <div class="tabela-rolagem"><table class="tab"><thead><tr><th scope="col">Mês</th><th scope="col">Entra</th><th scope="col">Sai</th><th scope="col">Saldo no fim</th></tr></thead><tbody>${p.map((x) => `<tr><th scope="row">${esc(nomeMes(x.mes))}</th><td class="num pos">${m(x.entradas)}</td><td class="num neg">${m(x.saidas)}</td><td class="num ${x.saldoFim < 0 ? 'neg' : ''}"><b>${m(x.saldoFim)}</b></td></tr>`).join('')}</tbody></table></div>`, null);
   }
+  function formCalcTrabalho() {
+    abrir('13º e férias', `<p class="mut">Valores brutos, antes de INSS e Imposto de Renda.</p>
+      ${campo('Salário mensal (R$)', '<input name="sal" inputmode="decimal" placeholder="3000,00">')}
+      ${campo('Meses trabalhados no ano (para o 13º)', '<input name="mes" inputmode="numeric" value="12">')}
+      ${campo('Dias de férias', '<input name="dias" inputmode="numeric" value="30">')}
+      ${troca('vender', 'Vender 10 dias (abono)', false)}
+      <div class="card" id="ct-res" role="status" aria-live="polite"></div>`, null, (f) => {
+      const calc = () => {
+        const sal = F.numeroBR(f.sal.value || '0') || 0; const alvo = $('#ct-res', f);
+        if (sal <= 0) { alvo.innerHTML = '<small class="mut">Informe o salário para calcular.</small>'; return; }
+        const dt = F.decimoTerceiro(sal, +f.mes.value || 0); const fe = F.ferias(sal, +f.dias.value || 0, f.vender.checked);
+        alvo.innerHTML = `<b>13º salário: <span class="num">${F.brl(dt.total)}</span></b><br><small class="mut">1ª parcela (até 30/11): ${F.brl(dt.primeira)} · 2ª parcela (até 20/12): ${F.brl(dt.segunda)}</small>
+          <hr><b>Férias: <span class="num">${F.brl(fe.total)}</span></b><br><small class="mut">${fe.gozo} dias: ${F.brl(fe.base)} + 1/3: ${F.brl(fe.terco)}${fe.abono ? ` + abono: ${F.brl(fe.abono)}` : ''}</small>`;
+      };
+      f.addEventListener('input', calc); f.addEventListener('change', calc); calc();
+    });
+  }
+  function formDesempenho() {
+    const d = D(); const r = F.desempenho(d.lancs, V.mes, F.hojeISO());
+    const msg = { ótimo: 'Você guardou 20% ou mais da renda. 🎉', bom: 'Você guardou de 10% a 20% da renda.', atenção: 'Sobrou pouco. Veja onde dá para cortar.', 'no vermelho': 'Você gastou mais do que ganhou neste mês.' };
+    abrir('Meu desempenho', r.taxa === null ? '<p class="mut">Ainda não há receitas neste mês para calcular. Lance suas entradas e volte aqui.</p>'
+      : `<p class="mut">${esc(NOME_MES(V.mes))}</p><div class="card"><small>Quanto da renda sobrou</small><b class="num ${r.taxa < 0 ? 'neg' : 'pos'}" style="font-size:28px;display:block">${r.taxa}%</b><small>${msg[r.nota]}</small></div>
+        <p>Entrou <b class="num">${F.brl(r.receitas)}</b>, saiu <b class="num">${F.brl(r.despesas)}</b>, ficou <b class="num">${F.brl(r.saldo)}</b>.</p>
+        <p class="mut">Dias seguidos lançando: <b>${r.sequencia}</b>${r.sequencia >= 3 ? ' 🔥' : ''}</p>`, null);
+  }
   function formReserva() {
     const d = D(); const r = F.reservaEmergencia(d.lancs, d.contas);
     abrir('Reserva de emergência', r.meses === null ? '<p class="mut">Ainda não há três meses de despesas para calcular a sua média. Continue lançando e volte aqui.</p>'
@@ -1420,6 +1451,8 @@
     ['Inteligências', 'Projeção de saldo', 'Como ficam os próximos 6 meses', 'data-acao="projecao"', 'previsao futuro saldo negativo meses'],
     ['Inteligências', 'Assinaturas', 'Cobranças que se repetem todo mês', 'data-acao="assinaturas"', 'recorrente mensal streaming'],
     ['Inteligências', 'Reserva de emergência', 'Quantos meses você aguenta sem renda', 'data-acao="reserva"', 'poupanca emergencia'],
+    ['Inteligências', 'Meu desempenho', 'Quanto da renda sobrou e dias seguidos lançando', 'data-acao="desempenho"', 'desempenho taxa poupanca sobrou sequencia'],
+    ['Inteligências', '13º e férias', 'Quanto você recebe, antes dos descontos', 'data-acao="calc-trabalho"', 'decimo terceiro 13 ferias abono calculadora salario'],
     ['Inteligências', 'Simulador de dívidas', 'Qual dívida pagar primeiro', 'data-acao="dividas"', 'divida juros quitar'],
     ['Inteligências', 'Simulador de juros e metas', 'Quanto vira se guardar todo mês', 'data-acao="simulador"', 'investir guardar juros compostos meta'],
     ['Inteligências', 'MEI: limite e DAS', 'Faturamento do ano e lembrete do imposto', 'data-acao="mei"', 'mei das imposto faturamento limite'],
@@ -1578,6 +1611,8 @@
       receber: () => formReceber(),
       projecao: () => formProjecao(),
       reserva: () => formReserva(),
+      'calc-trabalho': () => formCalcTrabalho(),
+      desempenho: () => formDesempenho(),
       dividas: () => formDividas(),
       mei: () => formMei(),
       modelos: () => formModelos(),
