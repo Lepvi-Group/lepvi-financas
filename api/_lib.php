@@ -246,8 +246,10 @@ function consumir_token(string $t, string $tipo): ?string
     $s->execute([hash_token($t), $tipo, agora()]);
     $uid = $s->fetchColumn();
     if ($uid === false) return null;
-    db()->prepare('DELETE FROM tokens WHERE hash = ?')->execute([hash_token($t)]);
-    return (string) $uid;
+    // Uso único de verdade: só vale para quem conseguiu apagar o link (dois pedidos ao mesmo tempo não usam o mesmo link).
+    $d = db()->prepare('DELETE FROM tokens WHERE hash = ? AND tipo = ?');
+    $d->execute([hash_token($t), $tipo]);
+    return $d->rowCount() === 1 ? (string) $uid : null;
 }
 
 /* ---------- dados financeiros cifrados (AES-256-GCM, do OpenSSL: existe em qualquer hospedagem PHP) ---------- */

@@ -509,3 +509,19 @@ test('limite de tentativas de entrada', async () => {
   for (let i = 0; i < 7; i++) ultimo = await chamar('entrar', { email: 'alvo@example.com', senha: 'senha-errada-' + i });
   assert.strictEqual(ultimo.status, 429);
 });
+
+test('segurança: dois pedidos ao mesmo tempo não usam duas vezes o mesmo código do app, a mesma reserva nem o mesmo link', () => {
+  const codigo = `$pdo = db();
+$pdo->prepare("INSERT INTO usuarios (id,email,nome,senha_hash,email_verificado,avisos,aceite_versao,aceite_em,criado_em) VALUES ('u1','a@b.c','A','x',1,0,'v',1,1)")->execute();
+$seg = totp_novo_segredo();
+$pdo->prepare("UPDATE usuarios SET totp_segredo = ?, totp_ativo = 1, totp_passo = 0, totp_reservas = ? WHERE id = 'u1'")->execute([cifrar($seg), json_encode([hash('sha256', 'abcd1234')])]);
+$u = totp_usuario('u1');
+$c = totp_codigo($seg, intdiv(time(), 30));
+$r = [totp_validar_usuario($u, $c), totp_validar_usuario($u, $c), totp_validar_usuario($u, 'abcd-1234'), totp_validar_usuario($u, 'abcd-1234')];
+$t = criar_token('u1', 'redefinir', 3600);
+$r[] = consumir_token($t, 'redefinir'); $r[] = consumir_token($t, 'redefinir');
+echo json_encode($r);`;
+  // $u foi lido uma vez só: simula dois pedidos que leram a conta antes de qualquer um gravar
+  const r = JSON.parse(execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_2fa.php"; ' + codigo], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite::memory:', LEPVI_FINANCAS_ESTADO: DEV } }).toString());
+  assert.deepStrictEqual(r, [true, false, true, false, 'u1', null]);
+});

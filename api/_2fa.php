@@ -69,15 +69,19 @@ function totp_validar_usuario(array $u, string $codigo): bool
     if (preg_match('/^\d{6}$/', $limpo)) {
         $p = totp_conferir_passo($seg, $limpo, (int) ($u['totp_passo'] ?? 0));
         if ($p === null) return false;
-        db()->prepare('UPDATE usuarios SET totp_passo = ? WHERE id = ?')->execute([$p, $u['id']]);
-        return true;
+        // Gravação condicional: dois pedidos ao mesmo tempo com o mesmo código não entram os dois (só um avança o passo).
+        $q = db()->prepare('UPDATE usuarios SET totp_passo = ? WHERE id = ? AND totp_passo < ?');
+        $q->execute([$p, $u['id'], $p]);
+        return $q->rowCount() === 1;
     }
     if (!preg_match('/^[0-9a-f]{8}$/', $limpo)) return false;
     $lista = json_decode((string) ($u['totp_reservas'] ?? '[]'), true);
     $h = hash('sha256', $limpo);
     if (!is_array($lista) || !in_array($h, $lista, true)) return false;
-    db()->prepare('UPDATE usuarios SET totp_reservas = ? WHERE id = ?')->execute([json_encode(array_values(array_diff($lista, [$h]))), $u['id']]);
-    return true;
+    // Só consome se a lista ainda for a mesma que lemos: a mesma reserva usada duas vezes ao mesmo tempo vale uma só.
+    $q = db()->prepare('UPDATE usuarios SET totp_reservas = ? WHERE id = ? AND totp_reservas = ?');
+    $q->execute([json_encode(array_values(array_diff($lista, [$h]))), $u['id'], (string) $u['totp_reservas']]);
+    return $q->rowCount() === 1;
 }
 function totp_usuario(string $uid): ?array
 {

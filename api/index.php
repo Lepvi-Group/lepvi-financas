@@ -159,6 +159,8 @@ try {
             if (!$t || ($t['a'] ?? '') !== '2fa') erro('O tempo acabou. Entre de novo com e-mail e senha.', 401);
             $kU = '2fa:u:' . $t['u']; $kI = '2fa:i:' . ip_hash();
             if (limite_estourou($kU, 5, 900) || limite_estourou($kI, 30, 900)) erro('Muitas tentativas. Espere 15 minutos e tente de novo.', 429);
+            // Teto diário: sem ele, 5 chutes a cada 15 minutos somam quase 500 por dia e o código de 6 dígitos acaba adivinhado com o tempo.
+            if (limite_estourou($kU, 15, 86400)) erro('Muitas tentativas de código hoje. Por segurança, tente de novo amanhã.', 429);
             $usr = totp_usuario((string) $t['u']);
             if (!$usr || !totp_ativo($usr) || !totp_validar_usuario($usr, (string) ($b['codigo'] ?? ''))) { registrar_tentativa($kU); registrar_tentativa($kI); erro('Código incorreto ou vencido. Confira o código do app e tente de novo.', 401); }
             db()->prepare('UPDATE usuarios SET ultimo_login = ? WHERE id = ?')->execute([agora(), $usr['id']]);
@@ -371,6 +373,7 @@ try {
             validar_senha($nova, $u['email']);
             db()->prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?')->execute([gerar_hash($nova), $u['id']]);
             db()->prepare('DELETE FROM sessoes WHERE usuario_id = ? AND hash <> ?')->execute([$u['id'], hash_token((string) $_COOKIE['lf_sessao'])]);
+            db()->prepare("DELETE FROM tokens WHERE usuario_id = ? AND tipo = 'redefinir'")->execute([$u['id']]); // link de nova senha pedido antes não vale mais
             enviar_email($u['email'], 'Sua senha do Lepvi Finanças foi alterada', email_html('Senha alterada', '<p>A senha da sua conta foi alterada agora. Se não foi você, use "Esqueci minha senha" na tela de entrada e fale com a gente: lepvi@lepvi.com.br.</p>'));
             resp(['ok' => true]);
         }
@@ -398,8 +401,12 @@ try {
             if (count(espaco_membros($de)) >= ESPACO_MAX_MEMBROS) erro('O espaço já tem duas pessoas.', 422);
             $q = db()->prepare('SELECT nome, email FROM usuarios WHERE id = ?'); $q->execute([$de]); $o = $q->fetch();
             if (!$o) erro('Este convite não vale mais.', 422);
-            db()->prepare('INSERT INTO membros (usuario_id, dono_id, entrou_em) VALUES (?,?,?)')->execute([$u['id'], $de, agora()]);
-            db()->prepare('DELETE FROM tokens WHERE hash = ?')->execute([hash_token($t)]);
+            // O convite vale uma vez: só entra quem conseguiu apagá-lo (dois aceites ao mesmo tempo não passam do limite de pessoas).
+            $pdo = db(); $pdo->beginTransaction();
+            $del = $pdo->prepare('DELETE FROM tokens WHERE hash = ? AND tipo = ?'); $del->execute([hash_token($t), 'convite']);
+            if ($del->rowCount() !== 1) { $pdo->rollBack(); erro('Este convite não vale mais. Peça um novo link para a outra pessoa.', 422); }
+            $pdo->prepare('INSERT INTO membros (usuario_id, dono_id, entrou_em) VALUES (?,?,?)')->execute([$u['id'], $de, agora()]);
+            $pdo->commit();
             enviar_email($o['email'], $u['nome'] . ' entrou no seu espaço do Lepvi Finanças', email_html('Nova pessoa no seu espaço', '<p><b>' . htmlspecialchars($u['nome']) . '</b> aceitou o seu convite e agora vê e edita os mesmos lançamentos que você. Você pode remover essa pessoa quando quiser, em Mais opções → Compartilhar.</p>'));
             resp(['ok' => true, 'dono' => $o['nome']]);
         }
