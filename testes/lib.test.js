@@ -291,3 +291,11 @@ test('ritmo do orçamento, 13º, férias e desempenho', () => {
   const d = F.desempenho(l, '2026-11', '2026-11-23');
   assert.deepStrictEqual([d.taxa, d.sequencia, d.nota], [20, 2, 'ótimo']);
 });
+
+test('número em formato brasileiro: ponto de milhar sem vírgula vale mil', () => {
+  assert.strictEqual(F.numeroBR('R$ 1.200'), 1200);
+  assert.strictEqual(F.numeroBR('-3.454,56'), -3454.56);
+  assert.strictEqual(F.numeroBR('1.234.567'), 1234567);
+  assert.strictEqual(F.numeroBR('12.5'), 12.5);
+  assert.strictEqual(F.numeroBR('3454,56'), 3454.56);
+});

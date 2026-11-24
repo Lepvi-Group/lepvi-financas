@@ -154,6 +154,7 @@
   function numeroBR(txt) {
     let s = String(txt).trim().replace(/[R$\s]/g, '');
     if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, ''); // "1.200" é mil e duzentos, não 1,2
     return Number(s);
   }
 

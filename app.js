@@ -365,6 +365,20 @@
       salvar(); render(); aviso(`${conta.nome} agora mostra ${F.brl(c.saldo)}.`);
     });
   }
+  /* Saldo diferente do banco: a pessoa digita o saldo real de hoje de cada conta (ou usa o que o banco conectado informou). Os lançamentos ficam; só o saldo inicial muda. */
+  function formCorrigirSaldo() {
+    const d = D();
+    const banco = ((V.of && V.of.conexoes) || []).filter((c) => c.saldo != null);
+    const dica = banco.length ? `<p class="mut">Seu banco conectado informou: ${banco.map((c) => `<b>${esc(c.instituicao)}</b> <b class="num">${F.brl(c.saldo)}</b>`).join(', ')}.</p>` : '';
+    abrir('Corrigir saldo', `<p class="mut">Abra o app do banco e digite quanto tem <b>hoje</b> em cada conta. Os lançamentos continuam iguais; o app só acerta o ponto de partida para o saldo bater.</p>${dica}
+      ${d.contas.map((x) => { const sug = d.contas.length === 1 && banco.length === 1 ? banco[0].saldo : F.saldoConta(d.lancs, x); return `<label class="campo"><span>${esc(x.nome)} (hoje no app ${F.brl(F.saldoConta(d.lancs, x))})</span><input name="s-${esc(x.id)}" inputmode="decimal" value="${esc(String(sug).replace('.', ','))}" required></label>`; }).join('')}
+      <p class="mut">Tem compra em <b>Para revisar</b>? Aprove ou descarte antes, porque o saldo do banco já inclui essas compras.</p>
+      <div class="botoes"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn" type="submit">Corrigir saldo</button></div>`, (fd) => {
+      let mudou = 0;
+      d.contas.forEach((x) => { const v = F.numeroBR(String(fd.get('s-' + x.id) || '')); if (!Number.isFinite(v)) return; if (F.arred(v - F.saldoConta(d.lancs, x)) !== 0) { x.saldoInicial = F.acertarSaldoInicial(d.lancs, x, v); mudou++; } });
+      salvar(); render(); aviso(mudou ? 'Saldo corrigido.' : 'Nada mudou: o saldo já batia.');
+    });
+  }
   /* ---------- divisão de despesas e meta mensal ---------- */
   function formDivisoes() {
     const d = D(); const s = F.saldosDivisao(d.lancs);
@@ -510,7 +524,7 @@
     const hora = new Date().getHours(); const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
     const vazio = (ic, tit, txt, acao, bt, bloco) => `<section class="card vazio"${bloco ? ` data-bloco="${bloco}"` : ''}><span class="vazio-ic" aria-hidden="true">${ic}</span><h2 class="secao">${tit}</h2><p class="mut">${txt}</p><button class="btn sec" type="button" data-acao="${acao}">${bt}</button></section>`;
     const contasVazio = d.contas.length === 1 && d.contas[0].saldoInicial === 0 && !d.lancs.length;
-    return `<p class="saudacao">${saud},<br><b>${esc(String((USER.info && USER.info.nome) || '').split(' ')[0])}</b> 👋</p><div class="hero"><small>Saldo geral</small><span class="grande num" data-v="${saldo}">${m(saldo)}</span>${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
+    return `<p class="saudacao">${saud},<br><b>${esc(String((USER.info && USER.info.nome) || '').split(' ')[0])}</b> 👋</p><div class="hero"><small>Saldo geral</small><span class="grande num" data-v="${saldo}">${m(saldo)}</span><button class="link hero-corrigir" type="button" data-acao="corrigir-saldo">${saldo < 0 ? 'Saldo negativo? Se no banco está diferente, corrija aqui' : 'Saldo diferente do banco? Corrigir'}</button>${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
       <div class="duo"><div><small>Receitas do mês</small><b class="verde num">${m(r.receitas)}</b></div><div><small>Despesas do mês</small><b class="verm num">${m(r.despesas)}</b></div></div></div>
     <div class="contas" aria-label="Seus bancos e carteiras">${d.contas.map((c) => `<button class="conta" type="button" data-acao="editar-conta" data-id="${c.id}"><span class="mut"><i style="background:${c.cor}"></i>${esc(c.nome)}</span><b class="num">${m(F.saldoConta(d.lancs, c))}</b></button>`).join('')}<button class="conta nova" type="button" data-acao="nova-conta">+ Banco ou carteira</button></div>
     <div class="rapidas" role="group" aria-label="Ações rápidas">${[['rap-despesa', '🔻', 'Despesa'], ['rap-receita', '🔺', 'Receita'], ['rap-transf', '🔁', 'Transferir'], ['rap-fatura', '💳', 'Pagar fatura']].map(([a, i, t]) => `<button type="button" class="rap" data-acao="${a}"><span aria-hidden="true">${i}</span><b>${t}</b></button>`).join('')}</div>
@@ -1641,6 +1655,7 @@
       'remover-foto': async () => { try { const r = await api('preferencias', { foto: null }); USER.info = r.usuario; render(); aviso('Foto removida.'); } catch (e) { aviso(e.message); } },
       senha: () => formSenha(),
       'dois-passos': () => formDoisPassos(),
+      'corrigir-saldo': () => formCorrigirSaldo(),
       personalizar: () => formPersonalizar(),
       categorias: () => formCategorias(),
       oauth: () => { try { sessionStorage.setItem(IDA_OAUTH, '1'); } catch (e) { /* sem armazenamento */ } window.location.href = 'api/oauth.php?a=iniciar&p=' + encodeURIComponent(t.dataset.p); },
