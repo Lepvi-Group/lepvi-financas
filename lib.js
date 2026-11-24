@@ -603,7 +603,10 @@
     return R('Não entendi essa. Tente perguntar sobre saldo, gastos, receitas, PIX, fatura ou vencimentos. Diga "ajuda" para ver exemplos.');
   }
 
-  const api = { responder, bancoVisual, BANCOS, vincularSaldoBanco, ritmoOrcamento, decimoTerceiro, ferias, desempenho, acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  /* Segurança de dados que viram HTML/estilo (vêm de cópia de segurança, que pode ser de terceiros) */
+  function corSegura(cor, padrao) { return /^#[0-9a-fA-F]{6}$/.test(String(cor || '')) ? String(cor) : padrao; }
+  function iconeSeguro(icone) { return String(icone == null ? '' : icone).replace(/[<>&"'`\\]/g, '').slice(0, 8); }
+  const api = { corSegura, iconeSeguro, responder, bancoVisual, BANCOS, vincularSaldoBanco, ritmoOrcamento, decimoTerceiro, ferias, desempenho, acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

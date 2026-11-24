@@ -28,8 +28,10 @@
     s.dados = s.dados || {};
     ['pessoal', 'empresa'].forEach((p) => {
       const d = (s.dados[p] = Object.assign(vazio(), s.dados[p] || {}));
-      d.contas.forEach((c, i) => { c.cor = c.cor || CORES[i % CORES.length]; });
-      d.cartoes.forEach((c, i) => { c.cor = c.cor || CORES[(i + 1) % CORES.length]; });
+      /* cor e ícone vão para atributos/HTML: só aceita cor hexadecimal e ícone sem marcação (cópia de segurança de terceiros não injeta nada) */
+      d.contas.forEach((c, i) => { c.cor = F.corSegura(c.cor, CORES[i % CORES.length]); });
+      d.cartoes.forEach((c, i) => { c.cor = F.corSegura(c.cor, CORES[(i + 1) % CORES.length]); });
+      ['despesa', 'receita'].forEach((t) => { ((d.cats && d.cats[t]) || []).forEach((c) => { c.cor = F.corSegura(c.cor, '#94A3B8'); c.icone = F.iconeSeguro(c.icone); }); });
     });
     mesclarEmpresa(s);
     s.perfil = 'pessoal';

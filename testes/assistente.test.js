@@ -39,3 +39,11 @@ test('bancos: reconhece pelo nome mesmo sem acento e abreviado', () => {
   assert.strictEqual(F.bancoVisual('Carteira'), null);
   assert.strictEqual(F.bancoVisual('a'), null);
 });
+
+test('segurança: cor e ícone vindos de cópia de segurança não carregam código', () => {
+  assert.strictEqual(F.corSegura('#12ab9F', '#000000'), '#12ab9F');
+  assert.strictEqual(F.corSegura('red;background:url(//x)', '#000000'), '#000000');
+  assert.strictEqual(F.corSegura(undefined, '#111111'), '#111111');
+  assert.strictEqual(F.iconeSeguro('<img src=x onerror=alert(1)>'), 'img src=');
+  assert.strictEqual(F.iconeSeguro('🛒'), '🛒');
+});
