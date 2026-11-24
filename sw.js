@@ -1,6 +1,6 @@
 /* Funciona sem internet: guarda os arquivos do app e usa a rede só para atualizar. */
-const V = 'lepvi-financas-v65';
-const ARQ = ['./', 'index.html', 'styles.css', 'app.js', 'lib.js', 'qrcode.js', 'manifest.json', 'icone.svg'];
+const V = 'lepvi-financas-v66';
+const ARQ = ['./', 'index.html', 'styles.css', 'app.js', 'lib.js', 'qrcode.js', 'pdf.js', 'manifest.json', 'icone.svg'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(V).then((c) => c.addAll(ARQ))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== V).map((k) => caches.delete(k)))));

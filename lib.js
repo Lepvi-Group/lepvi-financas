@@ -503,7 +503,107 @@
     return juntar(base, local, remoto);
   }
 
-  const api = { vincularSaldoBanco, ritmoOrcamento, decimoTerceiro, ferias, desempenho, acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+
+  /* Bancos e carteiras: reconhece pelo nome (mesmo com erro de acento ou nome abreviado) e devolve cor e sigla para o selo. */
+  const BANCOS = [
+    ['mercadopago', 'Mercado Pago', /mercado ?pago|mercadopago|\bmeli\b/, '#009EE3', '#FFFFFF', 'MP'],
+    ['nubank', 'Nubank', /nubank|nu pagamentos|\bnu\b/, '#820AD1', '#FFFFFF', 'Nu'],
+    ['itau', 'Itaú', /\bita[uú]\b|itau|personnalite|uniclass/, '#EC7000', '#FFFFFF', 'itaú'],
+    ['bradesco', 'Bradesco', /bradesco|\bbrad\b|next/, '#CC092F', '#FFFFFF', 'Bd'],
+    ['santander', 'Santander', /santander/, '#EC0000', '#FFFFFF', 'S'],
+    ['bb', 'Banco do Brasil', /banco do brasil|\bbb\b|bco do brasil/, '#FCE300', '#0B3C8C', 'BB'],
+    ['caixa', 'Caixa', /caixa economica|\bcaixa\b|\bcef\b/, '#0070AF', '#FFFFFF', 'CX'],
+    ['inter', 'Inter', /banco inter|\binter\b/, '#FF7A00', '#FFFFFF', 'in'],
+    ['c6', 'C6 Bank', /\bc6\b/, '#242424', '#FFFFFF', 'C6'],
+    ['picpay', 'PicPay', /picpay|pic pay/, '#21C25E', '#FFFFFF', 'PP'],
+    ['pagbank', 'PagBank', /pagbank|pagseguro|pag seguro/, '#1FB35A', '#FFFFFF', 'PB'],
+    ['btg', 'BTG Pactual', /\bbtg\b/, '#001E62', '#FFFFFF', 'BTG'],
+    ['sicredi', 'Sicredi', /sicredi/, '#3FA110', '#FFFFFF', 'Si'],
+    ['sicoob', 'Sicoob', /sicoob/, '#003641', '#9BC53D', 'Sc'],
+    ['neon', 'Neon', /\bneon\b/, '#00DCDC', '#0D0D0F', 'Ne'],
+    ['original', 'Banco Original', /original/, '#1FA84F', '#FFFFFF', 'Or'],
+    ['safra', 'Safra', /safra/, '#00205B', '#FFFFFF', 'Sa'],
+    ['xp', 'XP', /\bxp\b|xp invest/, '#0D0D0F', '#FFD500', 'XP'],
+    ['will', 'Will Bank', /will ?bank|\bwill\b/, '#FFD000', '#0D0D0F', 'W'],
+    ['banrisul', 'Banrisul', /banrisul/, '#004B9B', '#FFFFFF', 'Ba'],
+    ['99pay', '99Pay', /99 ?pay|99pay/, '#FFC700', '#0D0D0F', '99'],
+    ['stone', 'Stone', /\bstone\b/, '#00A868', '#FFFFFF', 'St'],
+    ['infinitepay', 'InfinitePay', /infinite ?pay|infinitepay/, '#5CDB95', '#0D0D0F', 'IP'],
+    ['asaas', 'Asaas', /asaas/, '#0030B9', '#FFFFFF', 'As'],
+    ['cora', 'Cora', /\bcora\b/, '#FE3E6D', '#FFFFFF', 'Co'],
+    ['wise', 'Wise', /\bwise\b|transferwise/, '#9FE870', '#163300', 'W'],
+    ['ame', 'Ame Digital', /\bame\b|ame digital/, '#FF006E', '#FFFFFF', 'Ame'],
+    ['mercantil', 'Mercantil', /mercantil/, '#0F4C81', '#FFFFFF', 'Me'],
+    ['bnb', 'Banco do Nordeste', /nordeste|\bbnb\b/, '#C8102E', '#FFFFFF', 'BN'],
+    ['ifood', 'iFood Benefícios', /ifood/, '#EA1D2C', '#FFFFFF', 'iF'],
+    ['alelo', 'Alelo', /alelo/, '#00A859', '#FFFFFF', 'Al'],
+    ['sodexo', 'Sodexo / Pluxee', /sodexo|pluxee/, '#E8112D', '#FFFFFF', 'Sx'],
+    ['vr', 'VR Benefícios', /\bvr\b|vr beneficios/, '#00A650', '#FFFFFF', 'VR'],
+    ['ticket', 'Ticket', /ticket|edenred/, '#E2231A', '#FFFFFF', 'Tk'],
+  ];
+  const semAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  function bancoVisual(nome) {
+    const n = semAcento(nome); if (n.length < 2) return null;
+    const b = BANCOS.find((x) => x[2].test(n)); return b ? { id: b[0], nome: b[1], cor: b[3], fg: b[4], sigla: b[5] } : null;
+  }
+
+
+  /* Assistente: responde perguntas sobre a conta da própria pessoa, só com os dados que já estão no aparelho (nada sai do app).
+     ctx = { lancs, contas, cartoes, mes, hoje, conexoes, atalhos: [[grupo, titulo, desc, attrs, palavras]] } -> { texto, acoes: [{ rotulo, attrs }] } */
+  const MESES_TXT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  function periodoDe(t, ctx) {
+    const hoje = ctx.hoje || hojeISO(); const mes = ctx.mes || mesDe(hoje);
+    const mi = MESES_TXT.findIndex((n) => new RegExp('\\b' + n + '\\b').test(t));
+    if (/hoje/.test(t)) return { de: hoje, ate: hoje, rotulo: 'hoje' };
+    if (/ontem/.test(t)) { const d = new Date(hoje + 'T12:00:00'); d.setDate(d.getDate() - 1); const i = d.toISOString().slice(0, 10); return { de: i, ate: i, rotulo: 'ontem' }; }
+    if (/semana/.test(t)) { const d = new Date(hoje + 'T12:00:00'); d.setDate(d.getDate() - 6); return { de: d.toISOString().slice(0, 10), ate: hoje, rotulo: 'nos últimos 7 dias' }; }
+    if (/mes passado|ultimo mes/.test(t)) { const x = somaMes(mesDe(hoje), -1); return { de: x + '-01', ate: x + '-31', rotulo: 'no mês passado' }; }
+    if (/\bano\b/.test(t)) { const a = hoje.slice(0, 4); return { de: a + '-01-01', ate: a + '-12-31', rotulo: `em ${a}` }; }
+    if (mi >= 0) { const x = `${mes.slice(0, 4)}-${String(mi + 1).padStart(2, '0')}`; return { de: x + '-01', ate: x + '-31', rotulo: `em ${MESES_TXT[mi] === 'marco' ? 'março' : MESES_TXT[mi]}` }; }
+    return { de: mes + '-01', ate: mes + '-31', rotulo: mes === mesDe(hoje) ? 'neste mês' : 'em ' + mes.split('-').reverse().join('/') };
+  }
+  function responder(pergunta, ctx) {
+    const t = semAcento(pergunta).replace(/[?!.,]/g, ' ').replace(/\s+/g, ' ').trim(); const hoje = ctx.hoje || hojeISO();
+    const lancs = (ctx.lancs || []).filter((l) => !l.ignorar && l.tipo !== 'transf'); const per = periodoDe(t, ctx);
+    const doPer = lancs.filter((l) => l.data >= per.de && l.data <= per.ate); const soma = (arr) => arred(arr.reduce((x, l) => x + l.valor, 0));
+    const desp = doPer.filter((l) => l.tipo === 'despesa'); const rec = doPer.filter((l) => l.tipo === 'receita');
+    const top = (arr, n = 3) => arr.slice().sort((x, y) => y.valor - x.valor).slice(0, n).map((l) => `• ${l.desc || l.categoria}: ${brl(l.valor)}`).join('\n');
+    const porCat = (arr) => Object.entries(arr.reduce((o, l) => ((o[l.categoria] = arred((o[l.categoria] || 0) + l.valor)), o), {})).sort((x, y) => y[1] - x[1]);
+    const R = (texto, acoes = []) => ({ texto, acoes });
+    const atalhos = ctx.atalhos || [];
+    const acharAtalhos = () => {
+      const pal = t.split(' ').filter((w) => w.length > 3 && !/^(como|onde|posso|quero|fazer|para|isso|essa|esse|minha|meu|tenho|pode|ajuda|aplicativo|preciso)$/.test(w)); if (!pal.length) return [];
+      return atalhos.map((a) => [a, pal.filter((w) => semAcento(a.slice(1, 5).join(' ')).includes(w.replace(/s$/, ''))).length]).filter((x) => x[1] > 0).sort((x, y) => y[1] - x[1]).slice(0, 3).map((x) => ({ rotulo: x[0][1], attrs: x[0][3], desc: x[0][2] }));
+    };
+    if (/^(oi|ola|e ai|bom dia|boa tarde|boa noite)\b/.test(t)) return R('Olá! Posso responder sobre o seu saldo, quanto entrou e saiu, PIX, faturas, vencimentos e onde fica cada função do app. O que você quer saber?');
+    if (/ajuda|o que (voce|vc) (faz|sabe)|o que posso perguntar/.test(t)) return R('Pergunte coisas como:\n• Qual é o meu saldo?\n• Quanto gastei este mês?\n• Quanto entrou de PIX?\n• Quanto gastei com mercado?\n• Quando vence a fatura?\n• Quanto posso gastar por dia?\n• Onde conecto meu banco?');
+    if (/\bpix\b/.test(t)) { const px = doPer.filter((l) => /\bpix\b/i.test(l.desc || '')); const i = px.filter((l) => l.tipo === 'receita'); const o = px.filter((l) => l.tipo === 'despesa'); return R(`PIX ${per.rotulo}:\n↙ Recebido: ${brl(soma(i))} (${i.length})\n↗ Enviado: ${brl(soma(o))} (${o.length})${px.length ? '\n\nMaiores:\n' + top(px, 3) : ''}`, [{ rotulo: 'Ver extrato do banco', attrs: 'data-acao="ver-extrato" data-id="todos"' }]); }
+    if (/por dia|posso gastar|gastar por dia/.test(t)) { const r = resumoMes(ctx.lancs || [], mesDe(hoje)); const sd = sobraPorDia(r, mesDe(hoje), hoje); return R(sd ? (sd.negativo ? 'O mês está no vermelho: despesas maiores que as receitas. Hoje o ideal é não gastar mais.' : `Você pode gastar cerca de ${brl(sd.porDia)} por dia até o fim do mês (${sd.restam} dias).`) : 'Só consigo calcular isso para o mês atual.'); }
+    if (/fatura|cartao|limite/.test(t) && !/conectar|cadastr|adicion/.test(t)) {
+      const fs = faturas(ctx.lancs || [], ctx.cartoes || []).filter((f) => !f.paga); if (!(ctx.cartoes || []).length) return R('Você ainda não tem cartão cadastrado. Se o seu banco está conectado, o cartão aparece sozinho.', [{ rotulo: 'Ver bancos conectados', attrs: 'data-acao="openfinance"' }]);
+      return R(fs.length ? 'Faturas em aberto:\n' + fs.map((f) => `• ${f.cartao}: ${brl(f.total)}, vence ${f.vencimento.split('-').reverse().join('/')}`).join('\n') + '\n\n' + (ctx.cartoes || []).map((c) => `${c.nome}: limite usado ${brl(limiteUsado(ctx.lancs || [], c.id))}${c.limite ? ' de ' + brl(c.limite) : ''}`).join('\n') : 'Nenhuma fatura em aberto. 🎉', [{ rotulo: 'Abrir cartões', attrs: 'data-tela="cartoes"' }]);
+    }
+    if (/vence|vencimento|a pagar|pendente|boleto|atrasad/.test(t)) { const ap = aPagar(ctx.lancs || [], ctx.cartoes || [], hoje).slice(0, 5); return R(ap.length ? 'Próximos pagamentos:\n' + ap.map((i) => `• ${i.titulo}: ${brl(i.valor)}, ${i.atrasado ? 'ATRASADO desde ' : 'vence '}${i.vencimento.split('-').reverse().join('/')}`).join('\n') : 'Nada pendente. Tudo em dia! 🎉', [{ rotulo: 'Ver vencimentos', attrs: 'data-acao="ir-pagar"' }]); }
+    if (/maior(es)? (gasto|despesa)|gastei mais|onde gastei/.test(t)) return R(desp.length ? `Maiores gastos ${per.rotulo}:\n${top(desp, 5)}` : `Nenhuma despesa ${per.rotulo}.`);
+    if (/\bsaldo\b|quanto (eu )?tenho|dinheiro (na|em) (conta|banco)/.test(t) && !/projec|previs/.test(t)) {
+      const cs = (ctx.contas || []).filter((c) => !c.fora && c.tipo !== 'investimento'); const tot = arred(cs.reduce((x, c) => x + saldoConta(ctx.lancs || [], c), 0)); const bs = (ctx.conexoes || []).filter((c) => c.saldo != null);
+      return R(`Seu saldo geral é ${brl(tot)}.\n${cs.map((c) => `• ${c.nome}: ${brl(saldoConta(ctx.lancs || [], c))}`).join('\n')}${bs.length ? `\n\nSaldo real informado pelos bancos: ${brl(arred(bs.reduce((x, c) => x + c.saldo, 0)))}` : ''}`, [{ rotulo: 'Ver extrato do banco', attrs: 'data-acao="ver-extrato" data-id="todos"' }]);
+    }
+    if (/sobrou|sobra|economi|resultado|balanco|poupei|lucro/.test(t)) { const r = soma(rec); const d = soma(desp); return R(`${per.rotulo[0].toUpperCase() + per.rotulo.slice(1)}: entrou ${brl(r)}, saiu ${brl(d)}. Resultado: ${brl(arred(r - d))}${r - d < 0 ? ' (no vermelho)' : ''}.`); }
+    const cats = [...new Set(lancs.map((l) => l.categoria).filter(Boolean))]; const catAchada = cats.find((c) => t.includes(semAcento(c)));
+    const m1 = /(?:com|no|na|em|de|do|da)\s+([a-z0-9 ]{3,30})$/.exec(t); const termo = catAchada ? '' : (m1 ? m1[1].trim() : '');
+    if (/gast|paguei|despes|quanto/.test(t) && (catAchada || (termo && !/mes|ano|semana|hoje|ontem/.test(termo)))) {
+      const arr = desp.filter((l) => (catAchada ? l.categoria === catAchada : semAcento(l.desc).includes(termo)));
+      return R(arr.length ? `${catAchada ? 'Em ' + catAchada : 'Com "' + termo + '"'} você gastou ${brl(soma(arr))} ${per.rotulo} (${arr.length} lançamento${arr.length === 1 ? '' : 's'}).\n${top(arr, 3)}` : `Não achei despesas ${catAchada ? 'em ' + catAchada : 'com "' + termo + '"'} ${per.rotulo}.`);
+    }
+    if (/receit|entrou|entrada|recebi|ganhei|renda/.test(t)) return R(rec.length ? `Entraram ${brl(soma(rec))} ${per.rotulo} (${rec.length} lançamento${rec.length === 1 ? '' : 's'}).\n${top(rec, 3)}` : `Nenhuma receita ${per.rotulo}.`);
+    if (/despes|gast|saiu|saida|paguei/.test(t)) { const cs = porCat(desp).slice(0, 3); return R(desp.length ? `Você gastou ${brl(soma(desp))} ${per.rotulo} (${desp.length} lançamento${desp.length === 1 ? '' : 's'}).\n\nPor categoria:\n${cs.map(([n, v]) => `• ${n}: ${brl(v)}`).join('\n')}` : `Nenhuma despesa ${per.rotulo}.`); }
+    const ac = acharAtalhos();
+    if (ac.length) return R('Achei isto no app:\n' + ac.map((a) => `• ${a.rotulo}: ${a.desc}`).join('\n'), ac.map((a) => ({ rotulo: a.rotulo, attrs: a.attrs })));
+    return R('Não entendi essa. Tente perguntar sobre saldo, gastos, receitas, PIX, fatura ou vencimentos. Diga "ajuda" para ver exemplos.');
+  }
+
+  const api = { responder, bancoVisual, BANCOS, vincularSaldoBanco, ritmoOrcamento, decimoTerceiro, ferias, desempenho, acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

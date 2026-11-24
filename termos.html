@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#F2F1EE">
 <link rel="icon" href="icone.svg" type="image/svg+xml">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=56">
+<link rel="stylesheet" href="styles.css?v=66">
 </head>
 <body class="doc">
 <header class="topo"><a class="marca" href="./"><svg viewBox="0 0 100 100" aria-hidden="true" fill="currentColor"><path d="M10 24L34 0V64L46 76H90L66 100H10Z"/><path d="M60 26H84V50H60Z"/></svg><span>Lepvi <b>Finanças</b></span></a><a class="btn sec mini" href="./">Voltar ao app</a></header>
@@ -51,5 +51,18 @@
 <p>Estes Termos seguem as leis do Brasil. Dúvidas ou reclamações: <a href="mailto:lepvi@lepvi.com.br">lepvi@lepvi.com.br</a>.</p>
 </main>
 <footer class="rodape">Desenvolvido por <a href="https://lepvi.com.br" target="_blank" rel="noopener">Lepvi Group</a></footer>
+<script>
+(function () {
+  var t = document.querySelector('.texto'); if (!t) return;
+  var hs = t.querySelectorAll('h2'); if (hs.length > 3) {
+    var nav = document.createElement('nav'); nav.className = 'doc-indice'; nav.setAttribute('aria-label', 'Neste documento');
+    var h = '<b>Neste documento</b><ol>'; hs.forEach(function (e, i) { e.id = e.id || 's' + (i + 1); h += '<li><a href="#' + e.id + '">' + e.textContent.replace(/^\d+\.\s*/, '') + '</a></li>'; });
+    nav.innerHTML = h + '</ol>'; var p = t.querySelector('p.mut'); (p || t.querySelector('h1')).after(nav);
+  }
+  var b = document.createElement('button'); b.type = 'button'; b.className = 'doc-topo'; b.setAttribute('aria-label', 'Voltar ao topo'); b.textContent = '↑';
+  b.onclick = function () { window.scrollTo({ top: 0, behavior: 'smooth' }); }; document.body.appendChild(b);
+  addEventListener('scroll', function () { b.classList.toggle('on', scrollY > 600); }, { passive: true });
+})();
+</script>
 </body>
 </html>

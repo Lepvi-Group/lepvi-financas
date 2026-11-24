@@ -27,7 +27,7 @@ const pluggyMock = require('node:http').createServer((req, res) => {
     return;
   }
   if (chave !== 'chave-pluggy') { res.statusCode = 403; return res.end('{}'); }
-  if (u.pathname === '/accounts') { if (u.searchParams.get('itemId') !== 'item-ok') { res.statusCode = 404; return res.end('{}'); } return res.end(JSON.stringify({ results: [{ id: 'conta-1', type: 'BANK', number: '12345', balance: 1234.56 }, { id: 'cartao-1', type: 'CREDIT', number: '**** 4321', balance: 900 }] })); }
+  if (u.pathname === '/accounts') { if (u.searchParams.get('itemId') !== 'item-ok') { res.statusCode = 404; return res.end('{}'); } return res.end(JSON.stringify({ results: [{ id: 'conta-1', type: 'BANK', number: '12345', balance: 1234.56 }, { id: 'cartao-1', type: 'CREDIT', name: 'Mercado Pago Cartão', number: '**** 4321', balance: 900, creditData: { creditLimit: 5000, balanceCloseDate: '2026-11-25T00:00:00.000Z', balanceDueDate: '2026-12-02T00:00:00.000Z' } }] })); }
   if (u.pathname === '/transactions') { res.statusCode = 410; return res.end('{}'); } // o Pluggy aposentou a rota antiga
   if (u.pathname === '/v2/transactions') return res.end(JSON.stringify({ results: !u.searchParams.get('dateFrom') ? [] : u.searchParams.get('accountId') === 'conta-1' ? TRANSACOES : u.searchParams.get('accountId') === 'cartao-1' ? [{ id: 'k1', description: 'LOJA NO CREDITO', amount: 59.9, type: 'DEBIT', date: '2026-11-20T12:00:00.000Z', status: 'POSTED' }] : [], next: null }));
   res.statusCode = 404; res.end('{}');
@@ -228,6 +228,8 @@ test('meu pluggy: confere as chaves, traz os últimos 30 dias sem a fatura nem o
   const mercado = caps.find((c) => c.desc === 'MERCADO SOL'); assert.deepStrictEqual([mercado.tipo, mercado.valor, mercado.data], ['despesa', 89.9, '2026-11-20']);
   assert.deepStrictEqual([caps.find((c) => c.desc.startsWith('Pix')).tipo], ['receita']);
   const credito = caps.find((c) => c.desc === 'LOJA NO CREDITO'); assert.deepStrictEqual([credito.cartao, credito.final, mercado.cartao], [true, '4321', false], 'compra no crédito vem marcada como cartão (fatura, não saldo)');
+  assert.deepStrictEqual(credito.cartao_info, { nome: 'Mercado Pago Cartão', limite: 5000, fechamento: 25, vencimento: 2 }, 'o cartão chega com nome, limite e dias da fatura vindos do banco');
+  assert.strictEqual(mercado.cartao_info, null, 'compra da conta corrente não leva dados de cartão');
   assert.ok(mercado.conexao, 'sabe de qual banco veio');
   assert.strictEqual((await chamar('pluggy_conectar', { instituicao: 'Nubank 2', item_id: 'item-ok' })).status, 422, 'mesmo banco duas vezes');
   const sync = await chamar('conexao_sincronizar', {}); assert.strictEqual(sync.status, 200); assert.strictEqual(sync.json.novas, 0, 'atualizar não duplica');

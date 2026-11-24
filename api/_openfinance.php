@@ -30,6 +30,12 @@ function of_para_captura(array $t, string $instituicao = ''): ?array
         'valor' => round(abs((float) $v), 2), 'desc' => mb_substr($desc, 0, 60), 'tipo' => $receita ? 'receita' : 'despesa',
         'final' => isset($t['final']) && preg_match('/^\d{4}$/', (string) $t['final']) ? (string) $t['final'] : null,
         'cartao' => !empty($t['cartao']), // veio da conta de cartão de crédito: é fatura, nunca sai do saldo da conta
+        'cartao_info' => (!empty($t['cartao']) && is_array($t['cartao_info'] ?? null)) ? [
+            'nome' => mb_substr(trim(strip_tags((string) ($t['cartao_info']['nome'] ?? ''))), 0, 40),
+            'limite' => max(0, round((float) ($t['cartao_info']['limite'] ?? 0), 2)),
+            'fechamento' => max(0, min(31, (int) ($t['cartao_info']['fechamento'] ?? 0))),
+            'vencimento' => max(0, min(31, (int) ($t['cartao_info']['vencimento'] ?? 0))),
+        ] : null,
         'conexao' => isset($t['conexao']) ? substr((string) $t['conexao'], 0, 64) : null,
         'data' => $data, 'texto' => mb_substr(trim($instituicao . ' ' . $desc), 0, 300), 'origem' => 'openfinance',
     ];
@@ -128,6 +134,9 @@ function pluggy_sincronizar_conexao(array $cx, string $chave): int
         if (($conta['type'] ?? '') === 'BANK' && isset($conta['balance']) && is_numeric($conta['balance'])) $saldo = ($saldo ?? 0) + (float) $conta['balance'];
         $credito = ($conta['type'] ?? '') === 'CREDIT';
         $final = isset($conta['number']) && $credito && preg_match('/(\d{4})$/', (string) $conta['number'], $m) ? $m[1] : null;
+        $cd = is_array($conta['creditData'] ?? null) ? $conta['creditData'] : [];
+        $dia = fn($d) => preg_match('/^\d{4}-\d{2}-(\d{2})/', (string) $d, $mm) ? (int) $mm[1] : 0;
+        $cinfo = $credito ? ['nome' => (string) ($conta['name'] ?? ''), 'limite' => $cd['creditLimit'] ?? 0, 'fechamento' => $dia($cd['balanceCloseDate'] ?? ''), 'vencimento' => $dia($cd['balanceDueDate'] ?? '')] : null;
         // O Pluggy aposentou o GET /transactions (responde 410): usa a versão v2, paginada por cursor ("next" já vem pronto para anexar).
         $url = '/v2/transactions?accountId=' . rawurlencode((string) $conta['id']) . '&dateFrom=' . $de;
         for ($pg = 1; $pg <= 6 && $url !== null; $pg++) {
@@ -135,7 +144,7 @@ function pluggy_sincronizar_conexao(array $cx, string $chave): int
             if ($st !== 200) throw new RuntimeException('Não consegui ler as movimentações (código ' . $st . ').');
             foreach (($j['results'] ?? []) as $t) {
                 if (!is_array($t) || ($t['status'] ?? 'POSTED') === 'PENDING' || pluggy_ignorar((string) ($t['description'] ?? ''))) continue;
-                $lista[] = ['id' => $t['id'] ?? '', 'descricao' => $t['description'] ?? '', 'valor' => $t['amount'] ?? 0, 'tipo' => $t['type'] ?? '', 'data' => $t['date'] ?? '', 'final' => $final, 'cartao' => $credito, 'conexao' => $cx['id']];
+                $lista[] = ['id' => $t['id'] ?? '', 'descricao' => $t['description'] ?? '', 'valor' => $t['amount'] ?? 0, 'tipo' => $t['type'] ?? '', 'data' => $t['date'] ?? '', 'final' => $final, 'cartao' => $credito, 'cartao_info' => $cinfo, 'conexao' => $cx['id']];
             }
             $url = !empty($j['next']) ? '/v2/transactions' . $j['next'] : null;
         }
