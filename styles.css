@@ -866,11 +866,13 @@ body.doc .texto b { font-weight: 600; }
 @media (max-height: 640px) { .tk { width: 64px; height: 64px; font-size: 24px; } .trava-teclas { grid-template-columns: repeat(3, 64px); gap: 10px; } }
 
 /* selo do banco (ícone com a cor e a sigla do banco) */
-.selo-banco { display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 11px; font-weight: 700; font-size: 14px; letter-spacing: -.02em; line-height: 1; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
-.selo-banco.longo { font-size: 11.5px; letter-spacing: -.04em; } .selo-banco.peq { width: 22px; height: 22px; border-radius: 7px; font-size: 10px; margin-right: 6px; vertical-align: -6px; } .selo-banco.peq.longo { font-size: 8px; }
-.selo-banco.med { width: 44px; height: 44px; border-radius: 13px; font-size: 16px; } .selo-banco.grande { width: 52px; height: 52px; border-radius: 15px; font-size: 18px; }
+.selo-banco { display: inline-grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 13px; overflow: hidden; font-weight: 700; font-size: 14px; letter-spacing: -.02em; line-height: 1; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.selo-banco.longo { font-size: 11.5px; letter-spacing: -.04em; } .selo-banco.peq { width: 28px; height: 28px; border-radius: 8px; font-size: 10px; margin-right: 6px; vertical-align: -6px; } .selo-banco.peq.longo { font-size: 8px; }
+.selo-banco.med { width: 56px; height: 56px; border-radius: 16px; font-size: 18px; } .selo-banco.grande { width: 68px; height: 68px; border-radius: 19px; font-size: 20px; }
+.selo-banco img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .banco-prev { display: flex; align-items: center; gap: 12px; min-height: 0; margin-top: 8px; font-size: 15px; color: var(--suave); } .banco-prev:empty { display: none; }
 .conta .selo-banco.peq { margin-right: 6px; }
+.conta .selo-banco.med { display: grid; margin: 0 0 8px; }
 
 /* extrato do banco e cartões dos bancos no Início */
 .banco-chips, .bancos-linha { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 8px; -webkit-overflow-scrolling: touch; }

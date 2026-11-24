@@ -599,7 +599,7 @@
     return `<p class="saudacao">${saud},<br><b>${esc(String((USER.info && USER.info.nome) || '').split(' ')[0])}</b> 👋</p><div class="hero"><small>Saldo geral</small><span class="grande num" data-v="${saldo}">${m(saldo)}</span>${(() => { const cxs = (V.of && V.of.conexoes) || []; const lig = cxs.filter((c) => c.saldo != null && contaDoBanco(c.id)); if (lig.length) { const t = Math.max(...lig.map((c) => c.saldo_em || 0)); return `<button class="link hero-corrigir" type="button" data-acao="ver-extrato" data-id="todos">🏦 Saldo real do banco${t ? ', ' + quandoFoi(t) : ''}</button>`; } if (cxs.length) return '<button class="link hero-corrigir" type="button" data-acao="openfinance">O banco ainda não informou o saldo: toque para atualizar</button>'; return ''; })()}${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
       <div class="duo"><button type="button" class="duo-b" data-acao="ver-tipo" data-v="receita" aria-label="Ver as receitas do mês, uma a uma"><small>Receitas do mês ›</small><b class="verde num">${m(r.receitas)}</b>${r.receitas > r.recebido ? `<small class="duo-sub">já recebido ${m(r.recebido)} · a receber ${m(F.arred(r.receitas - r.recebido))}</small>` : ''}</button><button type="button" class="duo-b" data-acao="ver-tipo" data-v="despesa" aria-label="Ver as despesas do mês, uma a uma"><small>Despesas do mês ›</small><b class="verm num">${m(r.despesas)}</b>${r.despesas > r.pago ? `<small class="duo-sub">já pago ${m(r.pago)} · a pagar ${m(F.arred(r.despesas - r.pago))}</small>` : ''}</button></div></div>
     <button type="button" class="pergunte" data-acao="assistente"><span aria-hidden="true">💬</span><span><b>Pergunte ao assistente</b><small>“Quanto gastei este mês?” “Quanto entrou de PIX?”</small></span><span aria-hidden="true">›</span></button>
-    <div class="contas" aria-label="Seus bancos e carteiras">${d.contas.map((c) => `<button class="conta" type="button" data-acao="editar-conta" data-id="${c.id}"><span class="mut">${seloBanco(c.nome, c.cor, 'peq')}${esc(c.nome)}</span><b class="num">${m(F.saldoConta(d.lancs, c))}</b></button>`).join('')}<button class="conta nova" type="button" data-acao="nova-conta">+ Banco ou carteira</button></div>
+    <div class="contas" aria-label="Seus bancos e carteiras">${d.contas.map((c) => `<button class="conta" type="button" data-acao="editar-conta" data-id="${c.id}">${seloBanco(c.nome, c.cor, 'med')}<span class="mut">${esc(c.nome)}</span><b class="num">${m(F.saldoConta(d.lancs, c))}</b></button>`).join('')}<button class="conta nova" type="button" data-acao="nova-conta">+ Banco ou carteira</button></div>
     <div class="rapidas" role="group" aria-label="Ações rápidas">${[['rap-despesa', '🔻', 'Despesa'], ['rap-receita', '🔺', 'Receita'], ['rap-transf', '🔁', 'Transferir'], ['rap-fatura', '💳', 'Pagar fatura']].map(([a, i, t]) => `<button type="button" class="rap" data-acao="${a}"><span aria-hidden="true">${i}</span><b>${t}</b></button>`).join('')}</div>
     ${(() => { const bs = bancosConectados(); if (!bs.length) return ''; return `<section data-bloco="bancos"><div class="sec-h"><h2 class="grupo">Meus bancos</h2><button class="link" type="button" data-acao="ver-extrato" data-id="todos">Ver extrato</button></div><div class="bancos-linha">${bs.map((b) => `<button type="button" class="banco-card" data-acao="ver-extrato" data-id="${esc(b.id)}">${seloBanco(b.nome, '', 'med')}<span><b>${esc(b.nome)}</b><small>Saldo</small><strong class="num">${b.cx.saldo != null ? m(b.cx.saldo) : '—'}</strong></span></button>`).join('')}</div></section>`; })()}
 
@@ -812,6 +812,7 @@
   function seloBanco(nome, cor, tam = '') {
     const b = F.bancoVisual(nome); const ini = iniciais(nome).slice(0, 2) || '?';
     const bg = b ? b.cor : (cor || '#2D4BFF'); const fg = b ? b.fg : '#FFFFFF'; const t = b ? b.sigla : ini;
+    if (b && b.id === 'mercadopago') return `<span class="selo-banco ${tam}" style="background:${bg}" aria-hidden="true"><img src="bancos/mercadopago.png" alt="" width="192" height="192"></span>`; /* logo oficial (aperto de mãos), sem emoji */
     return `<span class="selo-banco ${tam}${t.length > 2 ? ' longo' : ''}" style="background:${bg};color:${fg}" aria-hidden="true">${esc(t)}</span>`;
   }
   function telaMais() {
@@ -905,7 +906,7 @@
     abrir('Assistente Lepvi', `<p class="mut">Pergunte sobre o seu saldo, gastos, PIX, faturas e onde fica cada função. Respondo com os dados da sua conta.</p>
       <div class="chat" id="chat" role="log" aria-live="polite"></div>
       <div class="chat-sug" id="chat-sug">${sug.map((s) => `<button type="button" class="chip-s" data-q="${esc(s)}">${esc(s)}</button>`).join('')}</div>
-      <form class="chat-f" id="chat-f" autocomplete="off"><input name="q" maxlength="200" placeholder="Escreva sua pergunta…" aria-label="Sua pergunta" required><button class="btn" type="submit">Enviar</button></form>`, null, (f) => {
+      <div class="chat-f" id="chat-f"><input name="q" maxlength="200" autocomplete="off" placeholder="Escreva sua pergunta…" aria-label="Sua pergunta" required><button class="btn" type="submit">Enviar</button></div>`, null, (f) => {
       const log = $('#chat', f);
       const pinta = () => { log.innerHTML = V.chat.map((c) => `<div class="msg ${c.de}"><p>${esc(c.texto).replace(/\n/g, '<br>')}</p>${(c.acoes || []).length ? `<div class="msg-ac">${c.acoes.map((x, i) => `<button type="button" class="btn sec mini" data-ac="${V.chat.indexOf(c)}:${i}">${esc(x.rotulo)}</button>`).join('')}</div>` : ''}</div>`).join('') || '<div class="msg bot"><p>Olá! O que você quer saber sobre as suas finanças?</p></div>'; log.scrollTop = log.scrollHeight; };
       const perguntar = (q) => {
@@ -915,7 +916,7 @@
         V.chat.push({ de: 'bot', texto: r.texto, acoes: r.acoes }); V.chat = V.chat.slice(-30); pinta(); $('#chat-sug', f).hidden = true;
       };
       f.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', () => perguntar(b.dataset.q)));
-      $('#chat-f', f).addEventListener('submit', (ev) => { ev.preventDefault(); perguntar(f.elements.q.value); f.elements.q.value = ''; f.elements.q.focus(); });
+      f.addEventListener('submit', (ev) => { ev.preventDefault(); perguntar(f.elements.q.value); f.elements.q.value = ''; f.elements.q.focus(); });
       log.addEventListener('click', (ev) => { const b = ev.target.closest('[data-ac]'); if (!b) return; const [i, j] = b.dataset.ac.split(':').map(Number); const x = V.chat[i] && V.chat[i].acoes[j]; if (!x) return; dlg.close(); const el = document.createElement('div'); el.innerHTML = `<button ${x.attrs}></button>`; document.body.appendChild(el); el.firstChild.click(); el.remove(); });
       pinta(); if (V.chat.length) $('#chat-sug', f).hidden = true; $('#chat-f input', f).focus();
     });
