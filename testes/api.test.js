@@ -354,14 +354,15 @@ test('entrada pelo Google/Microsoft com dois passos: o ticket em cookie só abre
   if (off.status !== 200) { await chamar('entrar', { email: EMAIL, senha: SENHA_ATUAL }, { semCookie: true }); }
 });
 
-test('cadastro fechado por padrão: sem a chave de abrir, ninguém cria conta (e-mail nem Google/Microsoft) e a tela esconde o convite', async () => {
+test('cadastro aberto por padrão; o arquivo cadastro-fechado fecha: ninguém cria conta (e-mail nem Google/Microsoft) e a tela esconde o convite', async () => {
   const php = (env, cod) => execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_oauth.php"; ' + cod], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'fechado.sqlite'), LEPVI_FINANCAS_ESTADO: path.join(DEV, 'estado-fechado'), LEPVI_FINANCAS_CADASTRO: env } }).toString().trim();
-  assert.strictEqual(php('', 'echo json_encode(cadastro_aberto());'), 'false');
-  assert.strictEqual(php('aberto', 'echo json_encode(cadastro_aberto());'), 'true');
   fs.mkdirSync(path.join(DEV, 'estado-fechado'), { recursive: true });
-  fs.writeFileSync(path.join(DEV, 'estado-fechado', 'cadastro-aberto'), '');
-  assert.strictEqual(php('', 'echo json_encode(cadastro_aberto());'), 'true', 'o arquivo cadastro-aberto reabre sem subir versão');
-  fs.rmSync(path.join(DEV, 'estado-fechado', 'cadastro-aberto'));
+  fs.rmSync(path.join(DEV, 'estado-fechado', 'cadastro-fechado'), { force: true });
+  assert.strictEqual(php('', 'echo json_encode(cadastro_aberto());'), 'true', 'sem arquivo nem variável, qualquer pessoa pode criar conta');
+  assert.strictEqual(php('fechado', 'echo json_encode(cadastro_aberto());'), 'false');
+  fs.writeFileSync(path.join(DEV, 'estado-fechado', 'cadastro-fechado'), '');
+  assert.strictEqual(php('', 'echo json_encode(cadastro_aberto());'), 'false', 'o arquivo cadastro-fechado fecha sem subir versão');
+  assert.strictEqual(php('aberto', 'echo json_encode(cadastro_aberto());'), 'true');
   assert.strictEqual(php('', 'echo json_encode(oauth_resolver("google", ["sub" => "g-novo", "email" => "novo@example.com", "email_verified" => true]));'), '{"erro":"cadastro-fechado"}');
   const porta = 4191; const fechado = spawn('php', ['-S', `127.0.0.1:${porta}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'fechado.sqlite'), LEPVI_FINANCAS_ESTADO: path.join(DEV, 'estado-fechado') } });
   try {

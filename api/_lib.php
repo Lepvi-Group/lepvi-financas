@@ -45,10 +45,14 @@ function cfg(): array
     return $c;
 }
 
-/* Novas contas: fechado por padrão (só quem já tem conta entra). Para abrir de novo: criar o arquivo vazio financas-dados/cadastro-aberto (ou LEPVI_FINANCAS_CADASTRO=aberto). */
+/* Novas contas: aberto por padrão (qualquer pessoa cria conta, com confirmação por e-mail). Para fechar sem subir versão:
+   criar o arquivo vazio financas-dados/cadastro-fechado (ou LEPVI_FINANCAS_CADASTRO=fechado); apagar o arquivo reabre. */
 function cadastro_aberto(): bool
 {
-    return getenv('LEPVI_FINANCAS_CADASTRO') === 'aberto' || is_file(rtrim((string) cfg()['estado'], '/') . '/cadastro-aberto');
+    $env = getenv('LEPVI_FINANCAS_CADASTRO');
+    if ($env === 'aberto') return true;
+    if ($env === 'fechado') return false;
+    return !is_file(rtrim((string) cfg()['estado'], '/') . '/cadastro-fechado');
 }
 
 /* Chaves derivadas do segredo: uma para cada uso. */
