@@ -352,7 +352,7 @@
   }
   /* ---------- Open Finance pelo Meu Pluggy (grátis, uso pessoal) ---------- */
   async function carregarConexoes() {
-    try { V.of = await api('conexoes'); } catch (e) { V.of = V.of || { ativo: true, tem_credencial: false, conexoes: [] }; }
+    try { V.of = await api('conexoes'); } catch (e) { V.of = V.of || { ativo: false, tem_credencial: false, conexoes: [] }; }
     if (USER.logado && aplicarSaldoBanco() && !dlg.open) render();
     return V.of;
   }
@@ -369,8 +369,11 @@
     try { await api('conexao_sincronizar', {}); await carregarConexoes(); await carregarCapturas(); if (!dlg.open) render(); } catch (e) { /* tenta de novo na próxima abertura */ }
   }
   const contaDoBanco = (cxId) => D().contas.find((c) => cxId && c.ofConexao === cxId);
+  /* Open Finance (Meu Pluggy) só aparece quando o servidor libera: no app vendido o caminho é importar o extrato OFX/CSV. */
+  const ofLiberado = () => !!(V.of && V.of.ativo);
   async function formOpenFinance() {
     const of = V.of || await carregarConexoes();
+    if (!of.ativo) return formComoExportar();
     const quando = (t) => { if (!t) return 'ainda não sincronizou'; const min = Math.max(0, Math.round((Date.now() / 1000 - t) / 60)); return min < 1 ? 'atualizado agora há pouco' : min < 60 ? `atualizado há ${min} min` : min < 1440 ? `atualizado há ${Math.round(min / 60)} h` : `atualizado há ${Math.round(min / 1440)} dia(s)`; };
     const renova = of.conexoes.length ? new Date(Math.min(...of.conexoes.map((c) => c.criado_em)) * 1000 + 365 * 86400000).toLocaleDateString('pt-BR') : '';
     const lista = of.conexoes.map((c) => `<div class="of-cx"><span class="of-ic" aria-hidden="true">🏦</span><span class="of-t"><b>${esc(c.instituicao)}</b><small>${c.status === 'erro' ? '⚠️ precisa de atenção, toque em Atualizar agora' : esc(quando(c.ultima_sync))}</small>${c.saldo != null ? `<small>Saldo no banco: <b class="num">${F.brl(c.saldo)}</b></small><small>${contaDoBanco(c.id) ? `Vai sozinho para <b>${esc(contaDoBanco(c.id).nome)}</b>` : 'Ainda não ligado a uma conta do app'}</small><button class="link" type="button" data-of-saldo="${esc(c.id)}">${contaDoBanco(c.id) ? 'Trocar conta' : 'Escolher conta'}</button>` : ''}</span><button class="btn sec mini" type="button" data-of-sair="${esc(c.id)}" aria-label="Desconectar ${esc(c.instituicao)}">Desconectar</button></div>`).join('');
@@ -820,12 +823,15 @@
     return `<div class="tit"><h1>Mais opções</h1></div>
     <section><div class="card linhas">${linha({ icone: `<span class="mini-av">${avatarHtml('peq')}</span>`, titulo: esc(u.nome), desc: 'Meu perfil, foto e dados da conta', attrs: 'data-acao="perfil"' })}</div></section>
     <section><div class="sec-h"><h2 class="grupo">Bancos e carteiras</h2><button class="link" type="button" data-acao="nova-conta">+ Adicionar</button></div><div class="card linhas">${d.contas.map((c) => linha({ icone: seloBanco(c.nome, c.cor), cor: c.cor, titulo: esc(c.nome), desc: c.fora ? 'Fora do saldo geral' : 'Soma no saldo geral', fim: `<span class="num">${m(F.saldoConta(d.lancs, c))}</span>`, attrs: `data-acao="editar-conta" data-id="${c.id}"` })).join('')}</div></section>
+    ${grupo('Extrato do banco',
+      linha({ tag: 'label', icone: LI.subir, titulo: 'Importar extrato ou fatura', desc: 'Arquivo OFX ou CSV do seu banco (Nubank, Itaú, Inter…)', dentro: '<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden>' })
+      + linha({ icone: LI.texto, titulo: 'Como baixar o extrato do meu banco', desc: 'Passo a passo do Nubank, Itaú, Inter e outros', attrs: 'data-acao="como-exportar"' }))}
     ${grupo('Compras automáticas',
       linha({ icone: LI.bell, titulo: 'Para revisar', desc: (V.rev && V.rev.length) ? `${V.rev.length} aviso(s) do banco esperando você` : 'Avisos do banco que viram lançamento', attrs: 'data-acao="revisar"' })
       + linha({ icone: LI.chave, titulo: 'Conectar avisos do banco', desc: 'Chave e passo a passo, sem dar a senha do banco', attrs: 'data-acao="captura-config"' }))}
-    ${grupo('Open Finance',
+    ${ofLiberado() ? grupo('Open Finance',
       linha({ icone: LI.baixar, titulo: 'Extrato do banco', desc: 'Saldo, entradas, saídas e PIX de cada banco', attrs: 'data-acao="ver-extrato" data-id="todos"' })
-      + linha({ icone: LI.escudo, titulo: 'Bancos conectados', desc: V.of && V.of.conexoes.length ? `${V.of.conexoes.length} banco(s) conectado(s)` : 'Conecte o banco grátis pelo Meu Pluggy', attrs: 'data-acao="openfinance"' }))}
+      + linha({ icone: LI.escudo, titulo: 'Bancos conectados', desc: V.of && V.of.conexoes.length ? `${V.of.conexoes.length} banco(s) conectado(s)` : 'Conecte o banco grátis pelo Meu Pluggy', attrs: 'data-acao="openfinance"' })) : ''}
     ${grupo('Divisão de despesas',
       linha({ icone: LI.copia, titulo: 'Quem deve a sua parte', desc: (() => { const s = F.saldosDivisao(d.lancs); return s.length ? `${s.length} pessoa(s) a acertar · ${m(s.reduce((t, x) => t + x.total, 0))}` : 'Despesas divididas com casal ou sócios'; })(), attrs: 'data-acao="divisoes"' }))}
     ${grupo('Configurações',
@@ -846,8 +852,7 @@
       + linha({ icone: LI.copia, titulo: 'Desafio das 52 semanas', desc: 'Guarde um pouco mais a cada semana', attrs: 'data-acao="desafio"' })
       + linha({ icone: LI.chave, titulo: 'Bloqueio com PIN', desc: PIN.ativo() ? 'Ligado neste aparelho' : 'Peça um PIN ao abrir o app', attrs: 'data-acao="pin"' }))}
     ${grupo('Seus dados',
-      linha({ tag: 'label', icone: LI.subir, titulo: 'Importar extrato ou fatura', desc: 'Arquivo OFX ou CSV do seu banco', dentro: '<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden>' })
-      + linha({ icone: LI.copia, titulo: 'Cópia de segurança', desc: 'Baixar um PDF da Lepvi Finanças com todos os seus dados', attrs: 'data-acao="backup"' })
+      linha({ icone: LI.copia, titulo: 'Cópia de segurança', desc: 'Baixar um PDF da Lepvi Finanças com todos os seus dados', attrs: 'data-acao="backup"' })
       + linha({ tag: 'label', icone: LI.arquivo, titulo: 'Restaurar uma cópia', desc: 'Voltar os dados de um PDF da cópia de segurança', dentro: '<input id="rest" type="file" accept=".pdf,.json" hidden>' })
       + linha({ icone: LI.texto, titulo: 'Personalizar tela inicial', desc: 'Escolha o que aparece no Início', attrs: 'data-acao="personalizar"' })
       + linha({ icone: LI.mais, titulo: 'Categorias personalizadas', desc: 'Crie as suas, com ícone e cor', attrs: 'data-acao="categorias"' })
@@ -873,7 +878,9 @@
   function telaBanco() {
     const d = D(); const bancos = bancosConectados(); const sel = V.bsel && bancos.some((b) => b.id === V.bsel) ? V.bsel : 'todos'; const filtro = V.bf || 'tudo';
     const voltar = `<button class="link" type="button" data-tela="inicio">‹ Início</button>`;
-    if (!bancos.length) return `<div class="tit"><h1>Extrato do banco</h1></div><div class="card vazio"><span class="emoji">🏦</span><p>Conecte o seu banco pelo Open Finance e o saldo, as entradas, as saídas e os PIX aparecem aqui sozinhos.</p><button class="btn" type="button" data-acao="openfinance">Conectar um banco</button></div>${voltar}`;
+    if (!bancos.length) return ofLiberado()
+      ? `<div class="tit"><h1>Extrato do banco</h1></div><div class="card vazio"><span class="emoji">🏦</span><p>Conecte o seu banco pelo Open Finance e o saldo, as entradas, as saídas e os PIX aparecem aqui sozinhos.</p><button class="btn" type="button" data-acao="openfinance">Conectar um banco</button></div>${voltar}`
+      : `<div class="tit"><h1>Extrato do banco</h1></div><div class="card vazio"><span class="emoji">🏦</span><p>Baixe o extrato OFX ou CSV no app do seu banco (é grátis) e importe aqui. Você revisa e o app separa por categoria.</p><button class="btn" type="button" data-acao="como-exportar">Como importar o extrato</button></div>${voltar}`;
     const alvo = sel === 'todos' ? bancos : bancos.filter((b) => b.id === sel);
     const idsConta = new Set(alvo.map((b) => b.conta && b.conta.id).filter(Boolean)); const idsCartao = new Set(alvo.flatMap((b) => b.cartoes.map((c) => 'c:' + c.id)));
     const doMes = d.lancs.filter((l) => F.mesDe(l.data) === V.mes && !l.ignorar && l.tipo !== 'transf');
@@ -1371,7 +1378,7 @@
       ['Posso usar com outra pessoa?', 'Sim. Em Mais opções → Compartilhar, convide uma pessoa por link. Vocês dois veem e editam os mesmos dados, cada um com a própria senha.'],
       ['Como o app lê os avisos do banco?', 'Em Mais opções → Conectar avisos do banco você pega uma chave e segue o passo a passo no celular. As compras viram lançamentos "para revisar", sem você dar a senha do banco.'],
       ['Meus dados estão seguros?', 'Os dados ficam cifrados no servidor, a senha é guardada de forma irreversível e você pode baixar ou apagar tudo quando quiser, em Meu perfil. Dá para ligar um PIN neste aparelho.'],
-      ['Como importo o extrato do banco?', 'Em Mais opções → Importar extrato ou fatura, envie o arquivo OFX ou CSV do banco. Você revisa e escolhe o que entra.'],
+      ['Como importo o extrato do banco?', 'No app ou no site do seu banco, baixe o extrato (ou a fatura do cartão) em OFX ou CSV: é grátis em todos os grandes bancos. Depois, em Mais opções → Importar extrato ou fatura, escolha o arquivo. Você revisa, o app sugere a categoria e não repete o que já entrou.'],
     ];
     abrir('Central de ajuda', `${fq.map(([q, r]) => `<details class="mais-campos"><summary>${esc(q)}</summary><div class="mais-corpo"><p>${esc(r)}</p></div></details>`).join('')}
       <p class="mut">Não achou? Fale com a gente:</p><div class="botoes"><a class="btn sec" href="mailto:lepvi@lepvi.com.br?subject=${encodeURIComponent('Ajuda com o Lepvi Finanças')}&body=${encodeURIComponent(msgAjuda)}">Enviar e-mail</a><a class="btn sec" target="_blank" rel="noopener" href="https://wa.me/5535910024730?text=${encodeURIComponent(msgAjuda)}">Falar no WhatsApp</a></div>`, null);
@@ -1677,6 +1684,7 @@
     ['Inteligências', 'Extrato do banco', 'Saldo, entradas, saídas e PIX de cada banco conectado', 'data-acao="ver-extrato" data-id="todos"', 'extrato banco saldo entrou saiu pix open finance movimentacao'],
     ['Inteligências', 'Para revisar', 'Compras do banco viram lançamento depois do seu OK', 'data-acao="revisar"', 'compras automaticas aviso banco pix cartao revisar'],
     ['Inteligências', 'Bancos conectados (Open Finance)', 'Importa as movimentações do banco sozinho', 'data-acao="openfinance"', 'open finance pluggy banco conectar extrato automatico'],
+    ['Inteligências', 'Importar extrato do banco', 'Arquivo OFX ou CSV do Nubank, Itaú, Inter e outros', 'data-acao="como-exportar"', 'importar extrato ofx csv fatura banco nubank itau inter bradesco caixa santander'],
     ['Inteligências', 'Projeção de saldo', 'Como ficam os próximos 6 meses', 'data-acao="projecao"', 'previsao futuro saldo negativo meses'],
     ['Inteligências', 'Assinaturas', 'Cobranças que se repetem todo mês', 'data-acao="assinaturas"', 'recorrente mensal streaming'],
     ['Inteligências', 'Reserva de emergência', 'Quantos meses você aguenta sem renda', 'data-acao="reserva"', 'poupanca emergencia'],
@@ -1714,7 +1722,7 @@
       const caixa = $('#bq', f); const lista = $('#bl', f);
       const desenhar = () => {
         const q = semAcento(caixa.value).split(/\s+/).filter(Boolean);
-        const ach = ATALHOS.filter((x) => q.every((p) => semAcento(x[1] + ' ' + x[2] + ' ' + x[4]).includes(p)));
+        const ach = ATALHOS.filter((x) => ofLiberado() || !/openfinance|ver-extrato/.test(x[3])).filter((x) => q.every((p) => semAcento(x[1] + ' ' + x[2] + ' ' + x[4]).includes(p)));
         const grupos = ['Inteligências', 'Atalhos', 'Conta e segurança'].map((g) => [g, ach.filter((x) => x[0] === g)]).filter((x) => x[1].length);
         lista.innerHTML = grupos.length ? grupos.map(([g, it]) => grupoHtml(g, it.map((x) => linha({ icone: g === 'Inteligências' ? LI.brilho : g === 'Atalhos' ? LI.mais : LI.escudo, titulo: esc(x[1]), desc: esc(x[2]), attrs: x[3] })).join(''))).join('') : '<p class="mut" role="status">Nada encontrado. Tente outra palavra.</p>';
       };
@@ -1737,27 +1745,52 @@
     });
   }
 
+  /* Passo a passo para baixar o extrato grátis em cada banco (caminho padrão de quem assina, sem Open Finance pago). */
+  function formComoExportar() {
+    const bancos = [
+      ['Nubank', 'Conta: no app, toque no saldo da conta → ícone de exportar extrato, escolha o período e o formato (OFX ou CSV). O arquivo chega no seu e-mail. Cartão: em Faturas, abra a fatura e use exportar.'],
+      ['Itaú', 'No internet banking pelo computador: Conta corrente → Extrato → escolha o período → Salvar em OFX (Money). Cartão: Fatura → Salvar em OFX.'],
+      ['Inter', 'No app: Extrato → ícone de exportar (canto de cima) → escolha o período e o formato OFX ou CSV.'],
+      ['Bradesco', 'No internet banking: Saldos e extratos → Extrato → Exportar (OFX ou CSV).'],
+      ['Banco do Brasil', 'No internet banking: Conta corrente → Extrato → Salvar → formato OFX.'],
+      ['Caixa', 'No internet banking: Extrato → escolha o mês → Salvar em OFX.'],
+      ['Santander, C6 e outros', 'Procure Extrato → Exportar, Baixar ou Salvar e escolha OFX (às vezes aparece como "Money") ou CSV/Excel.'],
+    ];
+    abrir('Importar o extrato do banco', `<p class="rep-resumo"><b>Grátis em todos os grandes bancos.</b> Baixe o extrato da conta ou a fatura do cartão em <b>OFX</b> (melhor opção) ou <b>CSV</b> e envie aqui. Você revisa antes, o app sugere a categoria e <b>não repete</b> o que já entrou, mesmo importando o mesmo mês de novo.</p>
+      ${bancos.map(([b, p]) => `<details class="mais-campos"><summary>${esc(b)}</summary><div class="mais-corpo"><p>${esc(p)}</p></div></details>`).join('')}
+      <p class="mut">Dica: importe uma vez por semana ou por mês. O app nunca pede a senha do seu banco.</p>
+      <div class="botoes rodape-form"><button class="btn sec" type="button" data-fechar>Fechar</button><label class="btn">Escolher arquivo<input id="arq" type="file" accept=".ofx,.csv,.txt" hidden></label></div>`);
+  }
+
   function importar(texto, nome) {
-    const lista = (/\.csv$|\.txt$/i.test(nome) ? F.lerCSV(texto) : F.lerOFX(texto)).slice(0, 400);
-    if (!lista.length) { aviso('Não encontrei lançamentos nesse arquivo.'); return; }
+    const lido = /\.csv$|\.txt$/i.test(nome) || !/<STMTTRN>/i.test(texto) ? F.lerCSV(texto) : F.lerOFX(texto);
+    const lista = lido.slice(0, 400);
+    if (!lista.length) { aviso('Não encontrei lançamentos nesse arquivo. Confira se é o extrato em OFX ou CSV.'); return; }
     const d = D(); const contas = d.contas.map((c) => [c.id, c.nome]).concat(d.cartoes.map((c) => ['c:' + c.id, '💳 ' + c.nome]));
+    const inicial = lido.cartao && d.cartoes.length ? 'c:' + d.cartoes[0].id : contas[0][0];
     const opcCat = (tipo, sel) => catsDe(tipo).filter((c) => c.nome !== 'Cartão').map((c) => `<option value="${esc(c.nome)}" ${c.nome === sel ? 'selected' : ''}>${esc(c.icone)} ${esc(c.nome)}</option>`).join('');
     const linhas = lista.map((l, i) => { const sug = F.sugerirCategoria(l.desc, l.tipo, d.lancs); return `<div class="imp-lin"><label class="imp-sel"><input type="checkbox" name="sel-${i}" checked aria-label="Importar ${esc(l.desc)}"><span class="imp-d"><b>${esc(l.desc)}</b><small>${DATA_CURTA(l.data)} · <span class="num ${l.tipo === 'receita' ? 'pos' : 'neg'}">${l.tipo === 'receita' ? '+' : '−'} ${F.brl(l.valor)}</span></small></span></label><select name="cat-${i}" aria-label="Categoria de ${esc(l.desc)}">${opcCat(l.tipo, sug)}</select></div>`; }).join('');
     abrir(`Importar ${lista.length} lançamentos`, `<p class="mut">Revise antes de importar. Sugerimos a categoria pelo seu histórico e por palavras comuns (mercado, posto, farmácia…). Desmarque o que não quiser. Itens repetidos são ignorados.</p>
-      ${campo('Importar para', radios('conta', contas, contas[0][0]))}
+      ${lido.cartao ? '<p class="mut">Este arquivo é uma <b>fatura de cartão</b>: escolha o cartão abaixo.</p>' : ''}
+      ${campo('Importar para', radios('conta', contas, inicial))}
       ${troca('inverter', 'Neste arquivo as compras do cartão aparecem como valores positivos', false)}
       <div class="card linhas imp-lista">${linhas}</div>
       <div class="botoes rodape-form"><button class="btn sec" type="button" data-fechar>Cancelar</button><button class="btn" type="submit">Importar selecionados</button></div>`,
     (fd) => {
       const conta = fd.get('conta'); const cartao = F.ehCartao({ conta }); const inverter = !!fd.get('inverter');
-      const chave = (l) => `${l.data}|${l.valor}|${l.desc}|${l.conta}`; const ja = new Set(d.lancs.map(chave)); let n = 0; let ignorados = 0;
+      /* Repetido: mesmo código do banco (ref/FITID) na mesma conta; sem código, mesma data, valor, descrição e conta.
+         Com código, duas compras iguais no mesmo dia entram as duas. */
+      const chave = (l) => `${l.data}|${l.valor}|${l.desc}|${l.conta}`; const chRef = (l) => `${l.conta}|${l.ref}`;
+      const ja = new Set(d.lancs.filter((l) => !l.ref).map(chave)); const jaRef = new Set(d.lancs.filter((l) => l.ref).map(chRef)); let n = 0; let ignorados = 0;
+      const repetido = (x) => (x.ref ? jaRef.has(chRef(x)) || ja.has(chave(x)) : ja.has(chave(x)) || d.lancs.some((l) => l.ref && chave(l) === chave(x)));
+      const marcar = (x) => { if (x.ref) jaRef.add(chRef(x)); else ja.add(chave(x)); };
       lista.forEach((l, i) => {
         if (!fd.get('sel-' + i)) return;
         const tipo = inverter ? (l.tipo === 'receita' ? 'despesa' : 'receita') : l.tipo;
         if (cartao && tipo === 'receita') return;
         const x = { ...l, tipo, id: uid(), conta, boleto: false, pago: !cartao, categoria: fd.get('cat-' + i) || 'Outros' };
-        if (ja.has(chave(x))) { ignorados++; return; }
-        ja.add(chave(x)); d.lancs.push(x); n++;
+        if (repetido(x)) { ignorados++; return; }
+        marcar(x); d.lancs.push(x); n++;
       });
       salvar(); render(); aviso(`${n} lançamentos importados${ignorados ? ` (${ignorados} repetidos ignorados)` : ''}.`);
     });
@@ -1853,6 +1886,7 @@
       divisoes: () => formDivisoes(),
       'captura-config': () => formCaptura(),
       openfinance: () => formOpenFinance(),
+      'como-exportar': () => formComoExportar(),
       sair: () => sair(),
       'conta-menu': () => menuConta(),
       perfil: () => ir('perfil'),
@@ -1932,10 +1966,10 @@
     const el = ev.target; if (!el.files || !el.files[0]) return;
     const arq = el.files[0]; const r = new FileReader();
     r.onload = () => {
-      if (el.id === 'arq') importar(String(r.result), arq.name);
+      if (el.id === 'arq') importar(F.textoArquivo(r.result), arq.name);
       if (el.id === 'rest') { try { const n = String(arq.name).toLowerCase().endsWith('.pdf') ? LFPdf.lerDados(r.result) : JSON.parse(new TextDecoder().decode(r.result)); if (!n || typeof n !== 'object' || !n.dados || typeof n.dados !== 'object') throw 0; const ok = norm({ dados: n.dados, perfil: n.perfil }); S.dados = ok.dados; if (ok.perfil) S.perfil = ok.perfil; salvar(); render(); aviso('Cópia restaurada.'); } catch (e) { aviso('Arquivo de cópia inválido. Use o PDF (ou o arquivo antigo) da cópia de segurança.'); } }
     };
-    if (el.id === 'rest') r.readAsArrayBuffer(arq); else r.readAsText(arq);
+    if (el.id === 'rest' || el.id === 'arq') r.readAsArrayBuffer(arq); else r.readAsText(arq);
     el.value = '';
   });
 

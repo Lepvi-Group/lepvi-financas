@@ -3,8 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Lepvi Finanças | Suas contas, cartões e boletos em um só lugar</title>
-<meta name="description" content="Controle financeiro para pessoa física e jurídica: contas, vários cartões, boletos, orçamento e objetivos em um só app. Por Lepvi Group.">
+<title>Lepvi Finanças | Controle financeiro: contas, cartões e boletos em um só lugar</title>
+<meta name="description" content="App de controle financeiro para pessoa física, MEI e empresa: contas, faturas de vários cartões, boletos com aviso antes de vencer, orçamento e importação do extrato OFX ou CSV do Nubank, Itaú, Inter e outros bancos.">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://financas.lepvi.com.br/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="Lepvi Finanças">
+<meta property="og:title" content="Lepvi Finanças | Suas finanças, sem susto">
+<meta property="og:description" content="Contas, cartões e boletos em um só lugar, com aviso antes de vencer. Importe o extrato OFX ou CSV do seu banco.">
+<meta property="og:url" content="https://financas.lepvi.com.br/">
+<meta property="og:image" content="https://financas.lepvi.com.br/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Lepvi Finanças: suas finanças, sem susto">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lepvi Finanças | Suas finanças, sem susto">
+<meta name="twitter:description" content="Contas, cartões e boletos em um só lugar, com aviso antes de vencer.">
+<meta name="twitter:image" content="https://financas.lepvi.com.br/og.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[
+{"@type":"WebApplication","@id":"https://financas.lepvi.com.br/#app","name":"Lepvi Finanças","url":"https://financas.lepvi.com.br/","applicationCategory":"FinanceApplication","operatingSystem":"Web, Android, iOS (instala pelo navegador)","inLanguage":"pt-BR","image":"https://financas.lepvi.com.br/og.png","description":"Controle financeiro para pessoa física, MEI e empresa: contas, faturas de vários cartões, boletos com aviso por e-mail antes de vencer, orçamento por categoria, objetivos, projeção de saldo e importação do extrato OFX ou CSV dos bancos.","featureList":["Saldo de todas as contas e carteiras","Fatura de cada cartão de crédito, com limite livre e vencimento","Boletos e contas fixas com aviso por e-mail antes de vencer","Importação do extrato OFX ou CSV (Nubank, Itaú, Inter, Bradesco, Banco do Brasil, Caixa, Santander, C6)","Orçamento por categoria e objetivos","Projeção de saldo e reserva de emergência","Controle de MEI: limite anual e DAS","Compartilhar com cônjuge ou sócio","Verificação em dois passos e dados cifrados"],"publisher":{"@id":"https://lepvi.com.br/#org"}},
+{"@type":"Organization","@id":"https://lepvi.com.br/#org","name":"Lepvi Group","url":"https://lepvi.com.br/"},
+{"@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"O Lepvi Finanças pede a senha do meu banco?","acceptedAnswer":{"@type":"Answer","text":"Não. Você baixa o extrato OFX ou CSV no app ou no site do seu banco, de graça, e importa no Lepvi Finanças. O app nunca pede a senha do banco."}},
+{"@type":"Question","name":"Quais bancos funcionam com a importação de extrato?","acceptedAnswer":{"@type":"Answer","text":"Todos os que exportam OFX ou CSV, como Nubank, Itaú, Inter, Bradesco, Banco do Brasil, Caixa, Santander e C6. O app reconhece o formato, sugere a categoria e não repete o que já foi importado."}},
+{"@type":"Question","name":"Serve para MEI e empresa?","acceptedAnswer":{"@type":"Answer","text":"Sim. Dá para separar pessoa física e empresa, acompanhar o limite anual do MEI, lembrar do DAS e ver contas a receber de clientes."}},
+{"@type":"Question","name":"Meus dados ficam seguros?","acceptedAnswer":{"@type":"Answer","text":"Os dados ficam cifrados no servidor, a senha é guardada de forma irreversível, há verificação em dois passos e você pode baixar ou apagar tudo quando quiser, conforme a LGPD."}}
+]}]}</script>
 <meta name="theme-color" content="#F2F1EE">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icone.svg" type="image/svg+xml">
@@ -12,7 +37,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=73">
+<link rel="stylesheet" href="styles.css?v=74">
 </head>
 <body class="carregando">
 <div id="splash" aria-hidden="true"><div class="sp-glow"></div><svg class="sp-logo" viewBox="0 0 100 100"><defs><linearGradient id="spg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3A7BFF"/><stop offset=".45" stop-color="#2D4BFF"/><stop offset=".75" stop-color="#8A3DFF"/><stop offset="1" stop-color="#C04DFF"/></linearGradient></defs><path fill="url(#spg)" d="M10 24L34 0V64L46 76H90L66 100H10Z"/><path fill="url(#spg)" d="M60 26H84V50H60Z"/></svg><p class="sp-nome">Lepvi <b>Finanças</b></p><i class="sp-barra"></i></div>
@@ -33,16 +58,16 @@
 </header>
 
 <nav class="menu" id="menu" aria-label="Principal"></nav>
-<main id="tela" tabindex="-1"></main>
+<main id="tela" tabindex="-1"><noscript><h1>Lepvi Finanças: controle financeiro com contas, cartões e boletos em um só lugar</h1><p>App de controle financeiro para pessoa física, MEI e empresa. Mostra o saldo de todas as contas, a fatura de cada cartão de crédito, avisa por e-mail antes de cada boleto vencer, organiza o orçamento por categoria e importa o extrato OFX ou CSV do Nubank, Itaú, Inter, Bradesco, Banco do Brasil, Caixa, Santander e C6, sem pedir a senha do banco.</p><p>Para usar, ative o JavaScript do navegador. <a href="privacidade.html">Política de Privacidade</a> · <a href="termos.html">Termos de Uso</a></p></noscript></main>
 
 <dialog id="dlg"></dialog>
 <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
 
 <footer class="rodape">Desenvolvido por <a href="https://lepvi.com.br" target="_blank" rel="noopener">Lepvi Group</a></footer>
 
-<script src="lib.js?v=73"></script>
-<script src="qrcode.js?v=73"></script>
-<script src="pdf.js?v=73"></script>
-<script src="app.js?v=73"></script>
+<script src="lib.js?v=74"></script>
+<script src="qrcode.js?v=74"></script>
+<script src="pdf.js?v=74"></script>
+<script src="app.js?v=74"></script>
 </body>
 </html>

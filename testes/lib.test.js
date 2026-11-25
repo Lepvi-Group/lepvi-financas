@@ -315,3 +315,41 @@ test('saldo do banco conectado vira o saldo da conta sozinho; cartão e investim
   assert.strictEqual(F.saldoConta(dados.lancs, dados.contas[1]), 1650.75);
   assert.strictEqual(F.vincularSaldoBanco(dados, [{ id: 'x1', saldo: null }]), 0, 'banco sem saldo não mexe');
 });
+
+test('importa CSV da conta Nubank (Data,Valor,Identificador,Descrição) com vírgula dentro das aspas', () => {
+  const r = F.lerCSV('Data,Valor,Identificador,Descrição\n05/11/2026,-12.50,abc-1,"Compra no débito - Padaria, Centro"\n06/11/2026,2500.00,abc-2,Transferência recebida pelo Pix');
+  assert.strictEqual(r.length, 2);
+  assert.deepStrictEqual([r[0].tipo, r[0].valor, r[0].data, r[0].desc, r[0].ref], ['despesa', 12.5, '2026-11-05', 'Compra no débito - Padaria, Centro', 'abc-1']);
+  assert.strictEqual(r[1].tipo, 'receita');
+  assert.ok(!r.cartao);
+});
+test('importa CSV da fatura Nubank (date,title,amount): compra positiva vira despesa e marca como cartão', () => {
+  const r = F.lerCSV('date,title,amount\n2026-11-03,Uber *Trip,23.90\n2026-11-04,Pagamento recebido,-500.00');
+  assert.ok(r.cartao);
+  assert.deepStrictEqual([r[0].tipo, r[0].valor, r[0].desc], ['despesa', 23.9, 'Uber *Trip']);
+  assert.strictEqual(r[1].tipo, 'receita');
+});
+test('importa CSV do Inter com linhas de cabeçalho antes da tabela e pula as linhas de saldo', () => {
+  const csv = 'Extrato Conta Corrente\nConta ;12345\nPeríodo ;01/11/2026 a 30/11/2026\n\nData Lançamento;Histórico;Descrição;Valor;Saldo\n05/11/2026;Pix enviado;Fulano de Tal;-1.234,56;100,00\n05/11/2026;SALDO DO DIA;;;100,00\n06/11/2026;Pix recebido;Cliente;300,00;400,00';
+  const r = F.lerCSV(csv);
+  assert.strictEqual(r.length, 2);
+  assert.deepStrictEqual([r[0].tipo, r[0].valor, r[0].desc], ['despesa', 1234.56, 'Pix enviado - Fulano de Tal']);
+});
+test('importa CSV com colunas Crédito e Débito (Bradesco)', () => {
+  const r = F.lerCSV('Data;Histórico;Docto.;Crédito (R$);Débito (R$);Saldo (R$)\n05/11/26;Supermercado;123;;89,90;1.000,00\n06/11/26;Salário;124;3.000,00;;4.000,00');
+  assert.deepStrictEqual(r.map((x) => [x.tipo, x.valor, x.data]), [['despesa', 89.9, '2026-11-05'], ['receita', 3000, '2026-11-06']]);
+});
+test('OFX: guarda o FITID, junta NAME e MEMO, troca &amp; e reconhece fatura de cartão', () => {
+  const ofx = '<OFX><CREDITCARDMSGSRSV1><CCSTMTRS><STMTTRN><DTPOSTED>20261105<TRNAMT>-45,90<FITID>X9<NAME>PADARIA &amp; CIA<MEMO>COMPRA CARTAO</STMTTRN><STMTTRN><DTPOSTED>20261106<TRNAMT>0<FITID>X10<MEMO>ZERADO</STMTTRN></CCSTMTRS>';
+  const r = F.lerOFX(ofx);
+  assert.ok(r.cartao);
+  assert.strictEqual(r.length, 1);
+  assert.deepStrictEqual([r[0].valor, r[0].desc, r[0].ref], [45.9, 'PADARIA & CIA - COMPRA CARTAO', 'X9']);
+});
+test('arquivo em Windows-1252 (Itaú, BB) chega com acento certo', () => {
+  const bytes = Buffer.from('OFXHEADER:100\nCHARSET:1252\n<STMTTRN><DTPOSTED>20261105<TRNAMT>-10.00<MEMO>FARMÁCIA SÃO JOÃO</STMTTRN>', 'latin1');
+  assert.strictEqual(F.lerOFX(F.textoArquivo(bytes))[0].desc, 'FARMÁCIA SÃO JOÃO');
+  const semCabecalho = Buffer.from('data;descricao;valor\n05/11/2026;Padaria Céu;-5,00', 'latin1');
+  assert.strictEqual(F.lerCSV(F.textoArquivo(semCabecalho))[0].desc, 'Padaria Céu');
+  assert.strictEqual(F.textoArquivo(Buffer.from('﻿data;descricao;valor', 'utf8')), 'data;descricao;valor');
+});

@@ -98,6 +98,17 @@ function pluggy_cred_salvar(string $dono, string $id, string $segredo): void
     if ($s->fetchColumn()) db()->prepare('UPDATE of_pluggy SET conteudo = ? WHERE usuario_id = ?')->execute([$c, $dono]);
     else db()->prepare('INSERT INTO of_pluggy (usuario_id, conteudo, criado_em) VALUES (?,?,?)')->execute([$dono, $c, agora()]);
 }
+/* Open Finance pelo Meu Pluggy é grátis só para USO PESSOAL: no app vendido ele fica desligado. O padrão é importar o extrato OFX/CSV.
+   Continua para quem já conectou um banco. Para ligar para todos: arquivo vazio financas-dados/openfinance-ligado (ou LEPVI_FINANCAS_OPENFINANCE=ligado). */
+function openfinance_liberado(string $dono): bool
+{
+    $env = getenv('LEPVI_FINANCAS_OPENFINANCE');
+    if ($env === 'ligado') return true;
+    if ($env !== 'desligado' && is_file(rtrim((string) cfg()['estado'], '/') . '/openfinance-ligado')) return true;
+    if (pluggy_cred($dono) !== null) return true;
+    $s = db()->prepare('SELECT 1 FROM conexoes WHERE usuario_id = ? LIMIT 1'); $s->execute([$dono]);
+    return (bool) $s->fetchColumn();
+}
 function pluggy_cred(string $dono): ?array
 {
     $s = db()->prepare('SELECT conteudo FROM of_pluggy WHERE usuario_id = ?'); $s->execute([$dono]);

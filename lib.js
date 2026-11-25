@@ -174,37 +174,103 @@
     return Number(s);
   }
 
-  /* Extrato OFX (formato dos bancos brasileiros): devolve lançamentos prontos para revisar. */
-  function lerOFX(texto) {
-    const blocos = texto.split(/<STMTTRN>/i).slice(1);
-    return blocos.map((b) => {
-      const pega = (tag) => { const m = b.match(new RegExp(`<${tag}>([^<\\r\\n]+)`, 'i')); return m ? m[1].trim() : ''; };
-      const v = Number(pega('TRNAMT').replace(',', '.'));
-      const d = pega('DTPOSTED').slice(0, 8);
-      if (!d || Number.isNaN(v)) return null;
-      return {
-        tipo: v < 0 ? 'despesa' : 'receita',
-        valor: arred(Math.abs(v)),
-        data: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`,
-        desc: pega('MEMO') || pega('NAME') || 'Lançamento importado',
-        categoria: 'Outros',
-        pago: true,
-      };
-    }).filter(Boolean);
+  /* Arquivo do banco em bytes → texto. Itaú, BB e outros mandam OFX/CSV em Windows-1252 (acentos quebrariam em UTF-8). */
+  function textoArquivo(bytes) {
+    const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const w1252 = () => new TextDecoder('windows-1252').decode(b);
+    const inicio = new TextDecoder('windows-1252').decode(b.subarray(0, 600));
+    if (/CHARSET:\s*(1252|ISO-?8859-1|WINDOWS-1252)|encoding="(windows-1252|iso-8859-1)"/i.test(inicio)) return w1252();
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(b).replace(/^﻿/, ''); } catch (e) { return w1252(); }
   }
 
-  /* CSV simples: data;descrição;valor (negativo = despesa). Aceita vírgula ou ponto e vírgula. */
-  function lerCSV(texto) {
-    return texto.split(/\r?\n/).map((linha) => {
-      const col = linha.split(linha.includes(';') ? ';' : ',').map((c) => c.replace(/^"|"$/g, '').trim());
-      if (col.length < 3) return null;
-      let data = col[0];
-      const br = data.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-      if (br) data = `${br[3]}-${br[2]}-${br[1]}`;
-      const v = numeroBR(col[2]);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || Number.isNaN(v)) return null;
-      return { tipo: v < 0 ? 'despesa' : 'receita', valor: arred(Math.abs(v)), data, desc: col[1] || 'Lançamento importado', categoria: 'Outros', pago: true };
+  const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+  const semEntidades = (s) => s.replace(/&(amp|lt|gt|quot|apos);/gi, (_, e) => ENT[e.toLowerCase()]).replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+  /* Linha de extrato que é só saldo (Inter, Itaú, BB mostram "SALDO DO DIA", "SALDO ANTERIOR"): não é lançamento. */
+  const linhaDeSaldo = (desc) => /^\s*saldo\b/i.test(desc);
+
+  /* Extrato OFX (Nubank, Itaú, Inter, Bradesco, BB, Caixa, Santander, C6…): conta corrente ou fatura de cartão. ref = FITID do banco (não repete ao importar de novo). */
+  function lerOFX(texto) {
+    const cartao = /<CCSTMTRS>|<CREDITCARDMSGSRSV1>/i.test(texto);
+    const lista = texto.split(/<STMTTRN>/i).slice(1).map((b) => {
+      const pega = (tag) => { const m = b.match(new RegExp(`<${tag}>([^<\\r\\n]+)`, 'i')); return m ? semEntidades(m[1].trim()) : ''; };
+      const v = numeroBR(pega('TRNAMT'));
+      const d = pega('DTPOSTED').slice(0, 8);
+      if (!/^\d{8}$/.test(d) || Number.isNaN(v) || v === 0) return null;
+      const memo = pega('MEMO'); const nome = pega('NAME');
+      const juntar = memo && nome && !memo.toLowerCase().includes(nome.toLowerCase()) && !nome.toLowerCase().includes(memo.toLowerCase());
+      const desc = (juntar ? `${nome} - ${memo}` : memo || nome) || 'Lançamento importado';
+      if (linhaDeSaldo(desc)) return null;
+      const ref = pega('FITID');
+      return { tipo: v < 0 ? 'despesa' : 'receita', valor: arred(Math.abs(v)), data: `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`, desc: desc.slice(0, 140), categoria: 'Outros', pago: true, ...(ref ? { ref: ref.slice(0, 80) } : {}) };
     }).filter(Boolean);
+    lista.cartao = cartao;
+    return lista;
+  }
+
+  /* Separa uma linha de CSV respeitando aspas ("Pix, Fulano" fica numa coluna só). */
+  function colunasCSV(linha, sep) {
+    const out = []; let cur = ''; let q = false;
+    for (let i = 0; i < linha.length; i++) {
+      const ch = linha[i];
+      if (q) { if (ch === '"') { if (linha[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === sep) { out.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    out.push(cur.trim());
+    return out;
+  }
+  function dataCSV(s) {
+    const t = String(s || '').trim();
+    let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\b/);
+    if (m) return `${m[3].length === 2 ? '20' + m[3] : m[3]}-${pad(Number(m[2]))}-${pad(Number(m[1]))}`;
+    return null;
+  }
+  const semAc = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+  /* CSV de banco. Reconhece o cabeçalho (Nubank conta "Data,Valor,Identificador,Descrição"; Nubank fatura "date,title,amount";
+     Inter "Data Lançamento;Histórico;Descrição;Valor;Saldo"; colunas Crédito/Débito do Bradesco) e pula linhas de saldo e de resumo.
+     Sem cabeçalho conhecido: data;descrição;valor. Valor negativo = despesa (na fatura do Nubank, positivo é compra). */
+  function lerCSV(texto) {
+    const linhas = String(texto).replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
+    const amostra = linhas.slice(0, 15);
+    const sep = amostra.filter((l) => l.includes(';')).length >= Math.ceil(amostra.length / 2) ? ';' : amostra.some((l) => l.includes('\t')) && !amostra.some((l) => l.includes(',')) ? '\t' : ',';
+    let ini = -1; let idx = null; let inverter = false;
+    for (let i = 0; i < Math.min(linhas.length, 25) && ini < 0; i++) {
+      const cab = colunasCSV(linhas[i], sep).map(semAc);
+      const achar = (re, fora) => cab.findIndex((c) => re.test(c) && !(fora && fora.test(c)));
+      const data = achar(/^(data|date|dt)\b/);
+      const valor = achar(/^(valor|amount|value|quantia)\b/);
+      const cred = achar(/^(credito|entrada)/); const deb = achar(/^(debito|saida)/);
+      if (data < 0 || (valor < 0 && (cred < 0 || deb < 0))) continue;
+      const descs = cab.map((c, k) => (/descri|hist|^title$|^titulo|estabelec|^lancamento$|^memo|^nome|favorecido|^detalhe/.test(c) ? k : -1)).filter((k) => k >= 0 && k !== data && k !== valor);
+      const ref = achar(/^(identificador|id|fitid|documento)$/);
+      idx = { data, valor, cred, deb, descs, ref };
+      inverter = cab.includes('title') && cab.includes('amount'); /* fatura do Nubank: compra vem positiva */
+      ini = i + 1;
+    }
+    const lista = [];
+    (ini >= 0 ? linhas.slice(ini) : linhas).forEach((linha) => {
+      const col = colunasCSV(linha, sep);
+      let data; let v; let desc; let ref = '';
+      if (idx) {
+        data = dataCSV(col[idx.data]);
+        if (idx.valor >= 0) v = numeroBR(col[idx.valor] || '');
+        else { const c = numeroBR(col[idx.cred] || '0') || 0; const d = numeroBR(col[idx.deb] || '0') || 0; v = arred(Math.abs(c) - Math.abs(d)); }
+        desc = [...new Set(idx.descs.map((k) => col[k]).filter(Boolean))].join(' - ');
+        if (idx.ref >= 0) ref = col[idx.ref] || '';
+      } else {
+        if (col.length < 3) return;
+        data = dataCSV(col[0]); v = numeroBR(col[2]); desc = col[1];
+      }
+      if (!data || Number.isNaN(v) || !v || linhaDeSaldo(desc || '')) return;
+      if (inverter) v = -v;
+      lista.push({ tipo: v < 0 ? 'despesa' : 'receita', valor: arred(Math.abs(v)), data, desc: (desc || 'Lançamento importado').slice(0, 140), categoria: 'Outros', pago: true, ...(ref ? { ref: ref.slice(0, 80) } : {}) });
+    });
+    lista.cartao = inverter;
+    return lista;
   }
 
   /* Fluxo de caixa do mês (ideia do Organizze, refeita): saldo no começo do mês e saldo previsto dia a dia.
@@ -606,7 +672,7 @@
   /* Segurança de dados que viram HTML/estilo (vêm de cópia de segurança, que pode ser de terceiros) */
   function corSegura(cor, padrao) { return /^#[0-9a-fA-F]{6}$/.test(String(cor || '')) ? String(cor) : padrao; }
   function iconeSeguro(icone) { return String(icone == null ? '' : icone).replace(/[<>&"'`\\]/g, '').slice(0, 8); }
-  const api = { corSegura, iconeSeguro, responder, bancoVisual, BANCOS, vincularSaldoBanco, ritmoOrcamento, decimoTerceiro, ferias, desempenho, acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, numeroBR, ehCartao, idCartao };
+  const api = { corSegura, iconeSeguro, responder, bancoVisual, BANCOS, vincularSaldoBanco, ritmoOrcamento, decimoTerceiro, ferias, desempenho, acertarSaldoInicial, saldoAteDia, interpretarTexto, projecaoSaldo, gastosAnormais, reservaEmergencia, simularDividas, aReceber, dreMes, limiteMei, juntarDados, sobraPorDia, assinaturas, jurosCompostos, desafio52, contasDoMes, dividir, saldosDivisao, metaObjetivo, CATEGORIAS, catInfo, fluxoMes, sugerirCategoria, comparativo, maioresGastos, resumoPorTag, evolucao, orcamentoMes, arred, brl, mesDe, somaMes, hojeISO, faturaDe, resumoMes, faturas, aPagar, limiteUsado, saldoConta, lerOFX, lerCSV, textoArquivo, numeroBR, ehCartao, idCartao };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else raiz.Fin = api;
 })(typeof window !== 'undefined' ? window : globalThis);

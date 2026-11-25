@@ -28,7 +28,7 @@ try {
         $dono = espaco_dono($u['id']);
         if ($acao === 'eu') resp(['usuario' => usuario_publico($u)]);
         if ($acao === 'espaco') resp(espaco_info($u, $dono));
-        if ($acao === 'conexoes') resp(['ativo' => true, 'tem_credencial' => pluggy_cred($dono) !== null, 'conexoes' => of_conexoes($dono)]);
+        if ($acao === 'conexoes') resp(['ativo' => openfinance_liberado($dono), 'tem_credencial' => pluggy_cred($dono) !== null, 'conexoes' => of_conexoes($dono)]);
         if ($acao === 'capturas') {
             $k = db()->prepare('SELECT criado_em, ultimo_uso FROM chaves_captura WHERE usuario_id = ?');
             $k->execute([$u['id']]);
@@ -293,6 +293,7 @@ try {
             // Meu Pluggy (uso pessoal): guarda o Client ID/Secret cifrados, confere no Pluggy e já traz os últimos 30 dias para "Para revisar"
             $item = substr(trim((string) ($b['item_id'] ?? '')), 0, 120); $inst = mb_substr(trim(strip_tags((string) ($b['instituicao'] ?? ''))), 0, 80);
             $cid = substr(trim((string) ($b['client_id'] ?? '')), 0, 120); $seg = substr(trim((string) ($b['client_secret'] ?? '')), 0, 200);
+            if (!openfinance_liberado($dono)) erro('A conexão automática com o banco não está disponível. Importe o extrato OFX ou CSV em Mais opções.', 403);
             if ($item === '' || $inst === '') erro('Informe o nome do banco e o código do item.', 422);
             if (limite_estourou('ofcx:' . $u['id'], 10, 3600)) erro('Muitas tentativas. Tente de novo mais tarde.', 429);
             registrar_tentativa('ofcx:' . $u['id']);

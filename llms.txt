@@ -1,0 +1,21 @@
+# Lepvi Finanças
+
+> App de controle financeiro em português para pessoa física, MEI e pequenas empresas, feito pela Lepvi Group (lepvi.com.br). Funciona no navegador do celular e do computador e pode ser instalado na tela inicial.
+
+## O que o app faz
+
+- Saldo de todas as contas bancárias e carteiras em um só lugar.
+- Fatura de cada cartão de crédito: compras do mês, limite livre, fechamento e vencimento.
+- Boletos e contas fixas (água, luz, internet) com aviso por e-mail antes de vencer, no dia e se atrasar.
+- Importação do extrato OFX ou CSV baixado no app ou site do banco (Nubank, Itaú, Inter, Bradesco, Banco do Brasil, Caixa, Santander, C6 e outros). O app reconhece o formato, sugere a categoria e não repete lançamentos já importados. Não pede a senha do banco.
+- Orçamento por categoria, objetivos, projeção de saldo dos próximos meses e reserva de emergência.
+- MEI: limite anual de faturamento e lembrete do DAS; contas a receber de clientes.
+- Compartilhamento com cônjuge ou sócio, cada um com a própria senha.
+- Segurança: dados cifrados no servidor, verificação em dois passos, PIN no aparelho, exportação e exclusão dos dados (LGPD).
+
+## Links
+
+- App: https://financas.lepvi.com.br/
+- Política de Privacidade: https://financas.lepvi.com.br/privacidade.html
+- Termos de Uso: https://financas.lepvi.com.br/termos.html
+- Empresa responsável: https://lepvi.com.br/

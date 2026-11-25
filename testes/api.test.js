@@ -51,7 +51,7 @@ const ultimoToken = (param) => { const m = [...emails().matchAll(new RegExp(para
 test.before(async () => {
   await new Promise((r) => pluggyMock.listen(PORTA_PLUGGY, '127.0.0.1', r));
   fs.rmSync(DEV, { recursive: true, force: true });
-  servidor = spawn('php', ['-S', `127.0.0.1:${PORTA}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV, LEPVI_FINANCAS_CADASTRO: 'aberto', LEPVI_FINANCAS_OF_SEGREDO: 'segredo-de-teste-open-finance-1234', LEPVI_FINANCAS_PLUGGY_URL: `http://127.0.0.1:${PORTA_PLUGGY}` } });
+  servidor = spawn('php', ['-S', `127.0.0.1:${PORTA}`, '-t', RAIZ], { stdio: 'ignore', env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV, LEPVI_FINANCAS_CADASTRO: 'aberto', LEPVI_FINANCAS_OPENFINANCE: 'ligado', LEPVI_FINANCAS_OF_SEGREDO: 'segredo-de-teste-open-finance-1234', LEPVI_FINANCAS_PLUGGY_URL: `http://127.0.0.1:${PORTA_PLUGGY}` } });
   for (let i = 0; i < 40; i++) { try { await fetch(BASE + '?a=eu'); break; } catch (e) { await new Promise((r) => setTimeout(r, 150)); } }
 });
 test.after(() => { pluggyMock.close(); servidor.kill(); fs.rmSync(DEV, { recursive: true, force: true }); });
@@ -527,4 +527,15 @@ echo json_encode($r);`;
   // $u foi lido uma vez só: simula dois pedidos que leram a conta antes de qualquer um gravar
   const r = JSON.parse(execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_2fa.php"; ' + codigo], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite::memory:', LEPVI_FINANCAS_ESTADO: DEV } }).toString());
   assert.deepStrictEqual(r, [true, false, true, false, 'u1', null]);
+});
+
+test('Open Finance (Meu Pluggy) desligado para quem assina: só aparece para quem já conectou banco ou com o arquivo openfinance-ligado', () => {
+  const est = path.join(DEV, 'estado-of'); fs.mkdirSync(est, { recursive: true }); fs.rmSync(path.join(est, 'openfinance-ligado'), { force: true });
+  const php = (env, cod) => execFileSync('php', ['-r', 'require "' + RAIZ + '/api/_openfinance.php"; ' + cod], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'of-liberado.sqlite'), LEPVI_FINANCAS_ESTADO: est, LEPVI_FINANCAS_OPENFINANCE: env } }).toString().trim();
+  assert.strictEqual(php('', 'echo json_encode(openfinance_liberado("assinante-novo"));'), 'false', 'conta nova não vê o Pluggy');
+  assert.strictEqual(php('', 'db()->prepare("INSERT INTO conexoes (id, usuario_id, provedor, item_id, instituicao, status, criado_em) VALUES (?,?,?,?,?,?,?)")->execute(["cx-of", "dona-antiga", "meupluggy", "item", "Banco", "ativa", 1]); echo json_encode(openfinance_liberado("dona-antiga"));'), 'true', 'quem já tem banco conectado continua com o Pluggy');
+  assert.strictEqual(php('ligado', 'echo json_encode(openfinance_liberado("assinante-novo"));'), 'true');
+  fs.writeFileSync(path.join(est, 'openfinance-ligado'), '');
+  assert.strictEqual(php('', 'echo json_encode(openfinance_liberado("assinante-novo"));'), 'true', 'o arquivo liga para todos sem subir versão');
+  fs.rmSync(path.join(est, 'openfinance-ligado'));
 });
