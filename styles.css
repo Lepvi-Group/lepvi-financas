@@ -731,7 +731,7 @@ html[data-contraste="alto"] dialog.confirma { border: 3px solid #000; }
 @media (prefers-reduced-motion: reduce) { #splash { display: none; } }
 html[data-movimento="reduzido"] #splash { display: none; }
 
-.saudacao { font-size: 18px; color: var(--suave); line-height: 1.25; margin: 4px 2px 0; } .saudacao b { color: var(--tinta); font-size: 24px; font-weight: 600; }
+.saudacao { margin: 6px 2px 0; line-height: 1.2; } .saudacao b { color: var(--tinta); font-size: 30px; font-weight: 600; letter-spacing: -.01em; }
 .vazio { display: grid; justify-items: center; text-align: center; gap: 10px; padding: 24px 20px; }
 .vazio .btn { margin-top: 6px; }
 .vazio-ic { width: 68px; height: 68px; border-radius: 50%; background: var(--sup); display: grid; place-items: center; font-size: 30px; }
@@ -913,3 +913,5 @@ body.doc .texto b { font-weight: 600; }
 .rep-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; } .rep-3 > div { background: var(--sup2, #F7F6F3); border-radius: 14px; padding: 12px 8px; text-align: center; display: grid; gap: 4px; } .rep-3 small { color: var(--suave); font-size: 14px; } .rep-3 b { font-size: clamp(16px, 4.6vw, 20px); overflow-wrap: anywhere; }
 .rep-frase { margin: 0; font-size: 16px; line-height: 1.5; font-weight: 500; }
 .leg-v, .leg-r { white-space: nowrap; font-weight: 600; } .leg-v i, .leg-r i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; } .leg-v i { background: var(--verde); } .leg-r i { background: var(--vermelho); }
+
+.banco-cab { position: relative; } .banco-edit { margin-left: auto; flex: none; min-height: 44px; padding: 8px 16px; border-radius: 999px; border: 1.5px solid rgba(255,255,255,.4); background: rgba(255,255,255,.12); color: #fff; font: inherit; font-weight: 600; cursor: pointer; } .banco-edit:hover { background: rgba(255,255,255,.22); } .banco-edit:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
