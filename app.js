@@ -1592,7 +1592,7 @@
     document.body.appendChild(t);
     let pin = ''; const MAX = 8;
     const pontos = $('#trava-pontos', t); const ok = $('[data-ok]', t); const er = $('#trava-e', t);
-    const desenha = () => { pontos.innerHTML = Array.from({ length: Math.max(4, pin.length) }, (_, i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join(''); pontos.setAttribute('aria-label', `${pin.length} números digitados`); ok.disabled = pin.length < 4; };
+    const desenha = () => { pontos.innerHTML = Array.from({ length: Math.max(6, pin.length) }, (_, i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join(''); pontos.setAttribute('aria-label', `${pin.length} números digitados`); ok.disabled = pin.length < 4; };
     const digitar = (d) => { if (pin.length >= MAX) return; pin += d; er.textContent = ''; desenha(); };
     const apagar = () => { pin = pin.slice(0, -1); er.textContent = ''; desenha(); };
     const tenta = async () => {
