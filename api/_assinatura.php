@@ -42,7 +42,31 @@ function assinatura_tabelas(): void
     }
     // Conserta isenção dada por engano (a regra antiga isentava quem existia no 1º acesso, mesmo conta criada depois).
     try { $pdo->prepare('UPDATE assinaturas SET isento = 0 WHERE isento = 1 AND usuario_id IN (SELECT id FROM usuarios WHERE criado_em >= ?)')->execute([assinatura_inicio()]); } catch (Throwable $e) { /* sem efeito */ }
+    assinatura_limpar_lancs_indevidos();
     $ok = true;
+}
+
+/* Autorizado pela Larissa (25/11/2026), roda uma vez só (marca no estado): apaga os lançamentos gravados por contas criadas depois do início da
+   assinatura que nunca pagaram (gravados enquanto a isenção estava errada). Contas, cartões e o resto ficam; só a lista "lancs" de cada perfil é esvaziada. */
+function assinatura_limpar_lancs_indevidos(): void
+{
+    $marca = rtrim((string) cfg()['estado'], '/') . '/limpeza-lancs-sem-assinatura-1';
+    if (is_file($marca) || getenv('LEPVI_FINANCAS_ASAAS_CHAVE')) return; // nos testes não roda
+    $pdo = db();
+    try {
+        $s = $pdo->prepare('SELECT d.usuario_id, d.conteudo FROM dados d JOIN usuarios u ON u.id = d.usuario_id JOIN assinaturas a ON a.usuario_id = d.usuario_id WHERE u.criado_em >= ? AND a.isento = 0 AND a.acesso_ate = 0');
+        $s->execute([assinatura_inicio()]);
+        foreach ($s->fetchAll() as $r) {
+            $S = json_decode((string) decifrar((string) $r['conteudo']), true);
+            if (!is_array($S)) continue;
+            $n = 0;
+            foreach (['pessoal', 'empresa'] as $p) if (!empty($S['dados'][$p]['lancs'])) { $n += count($S['dados'][$p]['lancs']); $S['dados'][$p]['lancs'] = []; }
+            if ($n === 0) continue;
+            $pdo->prepare('UPDATE dados SET conteudo = ?, versao = versao + 1, atualizado_em = ? WHERE usuario_id = ?')->execute([cifrar((string) json_encode($S, JSON_UNESCAPED_UNICODE)), agora(), $r['usuario_id']]);
+            error_log('[lepvi-financas] limpeza: ' . $n . ' lançamento(s) de conta sem assinatura removido(s)');
+        }
+        @file_put_contents($marca, (string) agora());
+    } catch (Throwable $e) { error_log('[lepvi-financas] limpeza falhou: ' . $e->getMessage()); }
 }
 
 function assinatura_linha(string $dono): array
