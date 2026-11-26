@@ -921,3 +921,4 @@ body.doc .texto b { font-weight: 600; }
 .assin-aviso { display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left; border: 1px solid rgba(45,75,255,.25); background: rgba(45,75,255,.07); color: var(--tinta); padding: 14px 16px; margin-bottom: 14px; cursor: pointer; font: inherit; }
 .assin-aviso b { font-size: 15px; } .assin-aviso span { font-size: 14px; color: var(--suave, #4A4944); }
 .assin-aviso.vencida { border-color: rgba(180,35,24,.3); background: rgba(180,35,24,.07); }
+.aceite-txt { font-size: .88rem; line-height: 1.45; margin: 4px 0 0; text-align: center; }

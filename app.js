@@ -141,13 +141,13 @@
     else if (modo === 'oauth-aceite') {
       const pd = V.pend || {};
       titulo = 'Quase lá';
-      corpo = `<p>Você entrou com <b>${esc(pd.provedor || '')}</b> como <b>${esc(pd.email || '')}</b>. Para criar sua conta, aceite a Política de Privacidade e os Termos de Uso.</p><form id="auth" class="auth-f" novalidate>
-        <label class="troca"><span>Li e aceito a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> e os <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a></span><input type="checkbox" role="switch" name="aceite" required></label>${erro}
+      corpo = `<p>Você entrou com <b>${esc(pd.provedor || '')}</b> como <b>${esc(pd.email || '')}</b>. Falta só confirmar a criação da sua conta.</p><form id="auth" class="auth-f" novalidate>
+        <p class="mut aceite-txt">Ao clicar em <b>Criar minha conta</b>, você aceita a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> e os <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a>.</p>${erro}
         <button class="btn bloco" type="submit">Criar minha conta</button></form><p class="mut">${link('auth-entrar', 'Cancelar')}</p>`;
     } else if (modo === 'cadastro') {
       titulo = 'Criar sua conta';
       corpo = `${social('Cadastrar')}<form id="auth" class="auth-f" novalidate>${campo('Seu nome', '<input name="nome" required maxlength="120" autocomplete="name">')}${campo('E-mail', '<input name="email" type="email" required autocomplete="username" inputmode="email">')}${campoSenha('Senha (mínimo 10 caracteres)', 'name="senha" type="password" required minlength="10" autocomplete="new-password"')}${mostrar}
-        <label class="troca"><span>Li e aceito a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> e os <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a></span><input type="checkbox" role="switch" name="aceite" required></label>${erro}
+        <p class="mut aceite-txt">Ao clicar em <b>Criar conta</b>, você aceita a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a> e os <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a>.</p>${erro}
         <button class="btn bloco" type="submit">Criar conta</button></form><p class="mut">Já tem conta? ${link('auth-entrar', 'Entrar')}</p>`;
     } else if (modo === 'dois-passos') {
       titulo = 'Código de verificação';
@@ -190,14 +190,14 @@
   }
   async function enviarAuth(f) {
     const btn = f.querySelector('button[type=submit]'); const er = $('#auth-erro'); er.hidden = true;
-    if (!f.checkValidity()) { er.textContent = 'Preencha todos os campos corretamente' + (f.aceite && !f.aceite.checked ? ' e aceite a Política de Privacidade e os Termos.' : '.'); er.hidden = false; er.focus(); return; }
+    if (!f.checkValidity()) { er.textContent = 'Preencha todos os campos corretamente.'; er.hidden = false; er.focus(); return; }
     if (V.ts && ['entrar', 'cadastro', 'esqueci'].includes(V.auth) && !V.tsTok) { er.textContent = 'Confirme que você não é um robô (marque a caixa acima do botão).'; er.hidden = false; er.focus(); return; }
     const v = Object.fromEntries(new FormData(f)); const rotulo = btn.textContent; btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = V.auth === 'entrar' ? 'Entrando…' : 'Enviando…';
     try {
       if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha, turnstile: V.tsTok }); if (r.passo2) { V.auth = 'dois-passos'; V.ticket = r.ticket; V.msg = ''; render(); return; } USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
       else if (V.auth === 'dois-passos') { const r = await api('entrar_2fa', { ticket: V.ticket, codigo: v.codigo }); V.ticket = ''; USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.auth = 'entrar'; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
-      else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: !!v.aceite, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
-      else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: !!v.aceite }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
+      else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: true, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
+      else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: true }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
       else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'redefinir') { await api('redefinir', { token: V.token, senha: v.senha }); V.auth = 'entrar'; V.token = ''; V.msg = 'Senha alterada. Entre com a nova senha.'; render(); }
     } catch (e) { er.textContent = e.message + (V.auth === 'entrar' && /incorretos/.test(e.message) ? ' O navegador pode ter preenchido uma senha antiga: apague o campo, marque "Mostrar senha" e digite de novo.' : ''); er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; if (window.turnstile && tsId !== null) { window.turnstile.reset(tsId); V.tsTok = ''; } }
