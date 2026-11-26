@@ -194,10 +194,10 @@
     if (V.ts && ['entrar', 'cadastro', 'esqueci'].includes(V.auth) && !V.tsTok) { er.textContent = 'Confirme que você não é um robô (marque a caixa acima do botão).'; er.hidden = false; er.focus(); return; }
     const v = Object.fromEntries(new FormData(f)); const rotulo = btn.textContent; btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = V.auth === 'entrar' ? 'Entrando…' : 'Enviando…';
     try {
-      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha, turnstile: V.tsTok }); if (r.passo2) { V.auth = 'dois-passos'; V.ticket = r.ticket; V.msg = ''; render(); return; } USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
-      else if (V.auth === 'dois-passos') { const r = await api('entrar_2fa', { ticket: V.ticket, codigo: v.codigo }); V.ticket = ''; USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.auth = 'entrar'; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
+      if (V.auth === 'entrar') { const r = await api('entrar', { email: v.email, senha: v.senha, turnstile: V.tsTok }); if (r.passo2) { V.auth = 'dois-passos'; V.ticket = r.ticket; V.msg = ''; render(); return; } USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); verAssinatura(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
+      else if (V.auth === 'dois-passos') { const r = await api('entrar_2fa', { ticket: V.ticket, codigo: v.codigo }); V.ticket = ''; USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); verAssinatura(); V.msg = ''; V.auth = 'entrar'; V.tela = 'inicio'; render(); window.scrollTo(0, 0); }
       else if (V.auth === 'cadastro') { const r = await api('cadastro', { nome: v.nome, email: v.email, senha: v.senha, aceite: true, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
-      else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: true }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
+      else if (V.auth === 'oauth-aceite') { const r = await api('oauth_concluir', { aceite: true }); if (r.usuario) { USER.logado = true; USER.info = r.usuario; aba.marcar(); await carregarDados(); carregarEspaco(); aceitarConvite(); verAssinatura(); V.msg = ''; V.tela = 'inicio'; render(); window.scrollTo(0, 0); } else { V.auth = 'enviado'; V.msg = r.mensagem; render(); } }
       else if (V.auth === 'esqueci') { const r = await api('esqueci', { email: v.email, turnstile: V.tsTok }); V.auth = 'enviado'; V.msg = r.mensagem; render(); }
       else if (V.auth === 'redefinir') { await api('redefinir', { token: V.token, senha: v.senha }); V.auth = 'entrar'; V.token = ''; V.msg = 'Senha alterada. Entre com a nova senha.'; render(); }
     } catch (e) { er.textContent = e.message + (V.auth === 'entrar' && /incorretos/.test(e.message) ? ' O navegador pode ter preenchido uma senha antiga: apague o campo, marque "Mostrar senha" e digite de novo.' : ''); er.hidden = false; er.focus(); btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = rotulo; if (window.turnstile && tsId !== null) { window.turnstile.reset(tsId); V.tsTok = ''; } }
@@ -246,16 +246,23 @@
     else { try { await api('sair', {}); } catch (e) { /* já estava fora */ } } // abriu o app de novo: encerra a sessão guardada e pede login
     if (!USER.logado) await carregarTurnstile();
     render();
-    if (USER.logado) { carregarConexoes().then(async () => { await carregarCapturas(); await atualizarBancoSeAntigo(); }); carregarEspaco(); travar(); aceitarConvite(); carregarAssinatura().then(() => { if (new URLSearchParams(location.search).get('assinar')) { history.replaceState(null, '', location.pathname); formAssinar(); } else if (!dlg.open) render(); }); }
+    if (USER.logado) { carregarConexoes().then(async () => { await carregarCapturas(); await atualizarBancoSeAntigo(); }); carregarEspaco(); travar(); aceitarConvite(); verAssinatura(!!new URLSearchParams(location.search).get('assinar')); }
   }
 
   /* ---------- assinatura (R$ 9,99/mês pelo Asaas) ---------- */
   async function carregarAssinatura() { try { V.ass = await api('assinatura'); } catch (e) { V.ass = V.ass || null; } return V.ass; }
+  /* Depois de entrar: carrega a assinatura e, se a conta nunca pagou (ou ?assinar=1), já abre a tela de pagamento. */
+  async function verAssinatura(pediu = false) {
+    const a = await carregarAssinatura();
+    if (pediu) history.replaceState(null, '', location.pathname);
+    if (pediu || (a && a.cobranca && !a.ativa && !a.acesso_ate && a.dono)) formAssinar(); else if (!dlg.open) render();
+  }
   /* Só leitura: a cobrança está ligada e o acesso pago acabou. Dá para ver e exportar; gravar abre a tela de assinar. */
   const leitura = () => !!(V.ass && V.ass.cobranca && !V.ass.ativa);
   const diasAcesso = () => (V.ass && V.ass.acesso_ate ? Math.ceil((V.ass.acesso_ate * 1000 - Date.now()) / 86400000) : null);
   function avisoAssinatura() {
     const a = V.ass; if (!a || !a.cobranca || a.isento) return '';
+    if (!a.ativa && !a.acesso_ate) return `<button type="button" class="card assin-aviso vencida" data-acao="assinar"><b>✨ Assine para começar a usar</b><span>R$ 9,99/mês com Pix, boleto ou cartão. O primeiro pagamento libera 37 dias (o mês + 7 de bônus). Toque para pagar.</span></button>`;
     if (!a.ativa) return `<button type="button" class="card assin-aviso vencida" data-acao="assinar"><b>🔒 Assinatura vencida: o app está só para consulta</b><span>Seus dados estão guardados. Assine por R$ 9,99/mês para voltar a lançar e importar.</span></button>`;
     const d = diasAcesso();
     if (d !== null && d <= 3) return `<button type="button" class="card assin-aviso" data-acao="assinar"><b>🔔 Sua assinatura vence ${d <= 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`}</b><span>${a.assinou && !a.cancelada ? 'A cobrança do mês já está aberta: toque para pagar.' : 'Toque para renovar por R$ 9,99/mês.'}</span></button>`;

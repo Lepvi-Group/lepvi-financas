@@ -556,7 +556,7 @@ test('assinatura R$ 9,99 (Asaas): conta antiga isenta, conta nova só leitura, 1
     });
   });
   await new Promise((r) => mock.listen(PA, '127.0.0.1', r));
-  const env = { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(est, 'f.sqlite'), LEPVI_FINANCAS_ESTADO: est, LEPVI_FINANCAS_CADASTRO: 'aberto', LEPVI_FINANCAS_ASAAS_CHAVE: 'chave-teste', LEPVI_FINANCAS_ASAAS_WEBHOOK: 'tok-teste', LEPVI_FINANCAS_ASAAS_URL: `http://127.0.0.1:${PA}` };
+  const env = { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(est, 'f.sqlite'), LEPVI_FINANCAS_ESTADO: est, LEPVI_FINANCAS_CADASTRO: 'aberto', LEPVI_FINANCAS_ASAAS_CHAVE: 'chave-teste', LEPVI_FINANCAS_ASAAS_WEBHOOK: 'tok-teste', LEPVI_FINANCAS_ASAAS_URL: `http://127.0.0.1:${PA}`, LEPVI_FINANCAS_ASSINATURA_INICIO: String(Math.floor(Date.now() / 1000) - 5) };
   const srv = spawn('php', ['-S', `127.0.0.1:${PS}`, '-t', RAIZ], { stdio: 'ignore', env });
   const B = `http://127.0.0.1:${PS}/api/`;
   let ck = '';
@@ -565,8 +565,9 @@ test('assinatura R$ 9,99 (Asaas): conta antiga isenta, conta nova só leitura, 1
     const sc = r.headers.getSetCookie().find((c) => c.startsWith('lf_sessao=')); if (sc) ck = sc.split(';')[0];
     return { status: r.status, json: await r.json().catch(() => ({})) };
   };
-  const conta = async (email) => {
+  const conta = async (email, jaExiste = false) => {
     ck = '';
+    if (jaExiste) { assert.strictEqual((await ir('entrar', { email, senha: 'uma-senha-bem-forte-9' })).status, 200); return; }
     assert.strictEqual((await ir('cadastro', { nome: 'Pessoa Teste', email, senha: 'uma-senha-bem-forte-9', aceite: true })).status, 200);
     const log = fs.readFileSync(path.join(est, 'emails.log'), 'utf8'); const m = [...log.matchAll(/verificar=([A-Za-z0-9_-]+)/g)];
     assert.strictEqual((await ir('verificar', { token: m[m.length - 1][1] })).status, 200);
@@ -576,8 +577,14 @@ test('assinatura R$ 9,99 (Asaas): conta antiga isenta, conta nova só leitura, 1
   try {
     for (let i = 0; i < 40; i++) { try { await fetch(B + '?a=config'); break; } catch (e) { await new Promise((r) => setTimeout(r, 150)); } }
     await conta('antiga@example.com');
+    require('node:child_process').execFileSync('php', ['-r', `$p = new PDO('sqlite:${path.join(est, 'f.sqlite')}'); $p->exec("UPDATE usuarios SET criado_em = 1 WHERE email = 'antiga@example.com'");`]);
+    await conta('pedro@example.com');
+    await conta('antiga@example.com', true);
     const antiga = (await ir('assinatura', null, 'GET')).json;
     assert.deepStrictEqual([antiga.cobranca, antiga.isento, antiga.ativa], [true, true, true], 'quem já tinha conta quando a assinatura nasceu não paga');
+    await conta('pedro@example.com', true);
+    const pedro = (await ir('assinatura', null, 'GET')).json;
+    assert.deepStrictEqual([pedro.isento, pedro.ativa], [false, false], 'conta criada depois do início paga, mesmo existindo antes do 1º acesso à assinatura');
     await conta('nova@example.com');
     let s = (await ir('assinatura', null, 'GET')).json;
     assert.deepStrictEqual([s.isento, s.ativa], [false, false], 'conta nova começa sem acesso pago');

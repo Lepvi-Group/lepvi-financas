@@ -11,6 +11,8 @@ require_once __DIR__ . '/_lib.php';
 const ASSINATURA_VALOR = 9.99;
 const ASSINATURA_DIAS = 30;
 const ASSINATURA_BONUS_DIAS = 7;
+/* Só não paga quem criou a conta antes da assinatura existir (25/11/2026 00:00, horário de Brasília). */
+function assinatura_inicio(): int { return (int) (getenv('LEPVI_FINANCAS_ASSINATURA_INICIO') ?: 1795575600); }
 
 function asaas_config(): ?array
 {
@@ -35,9 +37,11 @@ function assinatura_tabelas(): void
                   'CREATE TABLE IF NOT EXISTS assinatura_pagamentos (pagamento_id VARCHAR(60) NOT NULL PRIMARY KEY, usuario_id VARCHAR(32) NOT NULL, valor DOUBLE NOT NULL, pago_em INTEGER NOT NULL)'] as $sql) {
             try { $pdo->exec($sql); } catch (Throwable $e2) { /* já existe */ }
         }
-        // Quem já tinha conta antes da assinatura existir continua sem pagar.
-        try { $pdo->prepare('INSERT INTO assinaturas (usuario_id, isento, atualizado_em) SELECT id, 1, ? FROM usuarios WHERE id NOT IN (SELECT usuario_id FROM assinaturas)')->execute([agora()]); } catch (Throwable $e2) { /* outra chamada fez ao mesmo tempo */ }
+        // Quem já tinha conta antes da assinatura existir continua sem pagar (pela data de criação da conta).
+        try { $pdo->prepare('INSERT INTO assinaturas (usuario_id, isento, atualizado_em) SELECT id, 1, ? FROM usuarios WHERE criado_em < ? AND id NOT IN (SELECT usuario_id FROM assinaturas)')->execute([agora(), assinatura_inicio()]); } catch (Throwable $e2) { /* outra chamada fez ao mesmo tempo */ }
     }
+    // Conserta isenção dada por engano (a regra antiga isentava quem existia no 1º acesso, mesmo conta criada depois).
+    try { $pdo->prepare('UPDATE assinaturas SET isento = 0 WHERE isento = 1 AND usuario_id IN (SELECT id FROM usuarios WHERE criado_em >= ?)')->execute([assinatura_inicio()]); } catch (Throwable $e) { /* sem efeito */ }
     $ok = true;
 }
 
