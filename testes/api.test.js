@@ -100,14 +100,15 @@ test('dados: gravam cifrados, versão evita sobrescrever e conflito devolve 409'
   const banco = fs.readFileSync(path.join(DEV, 'financas.sqlite')).toString('latin1');
   assert.ok(!banco.includes('Nubank') && !banco.includes('"Luz"'), 'dados financeiros precisam estar cifrados no banco');
 });
-test('avisos por e-mail: em breve, hoje e atrasado, sem repetir', async () => {
+test('avisos por e-mail: 1 dia antes, no dia e atrasado, sem repetir', async () => {
   const rodar = (hoje) => execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), `--hoje=${hoje}`], { env: { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(DEV, 'financas.sqlite'), LEPVI_FINANCAS_ESTADO: DEV } }).toString();
-  assert.match(rodar('2026-11-21'), /enviados: 1/);
-  assert.match(rodar('2026-11-21'), /enviados: 0/);
+  assert.match(rodar('2026-11-21'), /enviados: 0/, 'dois dias antes ainda não avisa');
+  assert.match(rodar('2026-11-22'), /enviados: 1/, 'avisa 1 dia antes');
+  assert.match(rodar('2026-11-22'), /enviados: 0/);
   assert.match(rodar('2026-11-23'), /enviados: 1/);
   assert.match(rodar('2026-11-24'), /enviados: 1/);
   assert.match(rodar('2026-11-25'), /enviados: 0/);
-  assert.ok(emails().includes('Vencem hoje') && emails().includes('Já venceram') && emails().includes('Vencem em breve'));
+  assert.ok(emails().includes('Vencem hoje') && emails().includes('Já venceram') && emails().includes('Vencem amanhã'));
 });
 test('desligar os avisos para de enviar', async () => {
   assert.strictEqual((await chamar('preferencias', { avisos: false })).json.usuario.avisos, false);
@@ -538,4 +539,80 @@ test('Open Finance (Meu Pluggy) desligado para quem assina: só aparece para que
   fs.writeFileSync(path.join(est, 'openfinance-ligado'), '');
   assert.strictEqual(php('', 'echo json_encode(openfinance_liberado("assinante-novo"));'), 'true', 'o arquivo liga para todos sem subir versão');
   fs.rmSync(path.join(est, 'openfinance-ligado'));
+});
+
+test('assinatura R$ 9,99 (Asaas): conta antiga isenta, conta nova só leitura, 1º pagamento libera 37 dias, aviso não repete e e-mail de vencimento vai para o e-mail cadastrado', async () => {
+  const PA = 4192; const PS = 4193; const est = path.join(DEV, 'estado-assin'); fs.rmSync(est, { recursive: true, force: true }); fs.mkdirSync(est, { recursive: true });
+  const pedidos = [];
+  const mock = require('node:http').createServer((req, res) => {
+    let corpo = ''; req.on('data', (c) => { corpo += c; }); req.on('end', () => {
+      pedidos.push({ m: req.method, u: req.url, token: req.headers.access_token, corpo: corpo ? JSON.parse(corpo) : null });
+      res.setHeader('Content-Type', 'application/json');
+      if (req.method === 'POST' && req.url === '/customers') return res.end('{"id":"cus_1"}');
+      if (req.method === 'POST' && req.url === '/subscriptions') return res.end('{"id":"sub_1"}');
+      if (req.method === 'GET' && req.url === '/subscriptions/sub_1/payments') return res.end('{"data":[{"id":"pay_1","status":"PENDING","invoiceUrl":"https://www.asaas.com/i/pay_1"}]}');
+      if (req.method === 'DELETE' && req.url === '/subscriptions/sub_1') return res.end('{"deleted":true}');
+      res.statusCode = 404; res.end('{}');
+    });
+  });
+  await new Promise((r) => mock.listen(PA, '127.0.0.1', r));
+  const env = { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(est, 'f.sqlite'), LEPVI_FINANCAS_ESTADO: est, LEPVI_FINANCAS_CADASTRO: 'aberto', LEPVI_FINANCAS_ASAAS_CHAVE: 'chave-teste', LEPVI_FINANCAS_ASAAS_WEBHOOK: 'tok-teste', LEPVI_FINANCAS_ASAAS_URL: `http://127.0.0.1:${PA}` };
+  const srv = spawn('php', ['-S', `127.0.0.1:${PS}`, '-t', RAIZ], { stdio: 'ignore', env });
+  const B = `http://127.0.0.1:${PS}/api/`;
+  let ck = '';
+  const ir = async (acao, corpo, metodo = 'POST') => {
+    const r = await fetch(B + '?a=' + acao, { method: metodo, headers: { 'Content-Type': 'application/json', 'X-Lepvi': 'financas', ...(ck ? { Cookie: ck } : {}) }, body: metodo === 'POST' ? JSON.stringify(corpo || {}) : undefined });
+    const sc = r.headers.getSetCookie().find((c) => c.startsWith('lf_sessao=')); if (sc) ck = sc.split(';')[0];
+    return { status: r.status, json: await r.json().catch(() => ({})) };
+  };
+  const conta = async (email) => {
+    ck = '';
+    assert.strictEqual((await ir('cadastro', { nome: 'Pessoa Teste', email, senha: 'uma-senha-bem-forte-9', aceite: true })).status, 200);
+    const log = fs.readFileSync(path.join(est, 'emails.log'), 'utf8'); const m = [...log.matchAll(/verificar=([A-Za-z0-9_-]+)/g)];
+    assert.strictEqual((await ir('verificar', { token: m[m.length - 1][1] })).status, 200);
+    assert.strictEqual((await ir('entrar', { email, senha: 'uma-senha-bem-forte-9' })).status, 200);
+  };
+  const hook = (token, corpo) => fetch(`http://127.0.0.1:${PS}/api/asaas.php`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'asaas-access-token': token }, body: JSON.stringify(corpo) }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => ({})) }));
+  try {
+    for (let i = 0; i < 40; i++) { try { await fetch(B + '?a=config'); break; } catch (e) { await new Promise((r) => setTimeout(r, 150)); } }
+    await conta('antiga@example.com');
+    const antiga = (await ir('assinatura', null, 'GET')).json;
+    assert.deepStrictEqual([antiga.cobranca, antiga.isento, antiga.ativa], [true, true, true], 'quem já tinha conta quando a assinatura nasceu não paga');
+    await conta('nova@example.com');
+    let s = (await ir('assinatura', null, 'GET')).json;
+    assert.deepStrictEqual([s.isento, s.ativa], [false, false], 'conta nova começa sem acesso pago');
+    const gravar = await ir('dados', { versao: 0, conteudo: { dados: {} } });
+    assert.strictEqual(gravar.status, 402, 'sem assinatura não grava (só leitura)');
+    assert.strictEqual((await ir('dados', null, 'GET')).status, 200, 'mas continua lendo');
+    assert.strictEqual((await ir('assinar', { cpf: '111.111.111-11' })).status, 422);
+    const a = await ir('assinar', { cpf: '529.982.247-25' });
+    assert.strictEqual(a.json.url, 'https://www.asaas.com/i/pay_1');
+    const sub = pedidos.find((p) => p.u === '/subscriptions');
+    assert.deepStrictEqual([sub.corpo.value, sub.corpo.cycle, sub.corpo.billingType, sub.token], [9.99, 'MONTHLY', 'UNDEFINED', 'chave-teste']);
+    assert.strictEqual(pedidos.find((p) => p.u === '/customers').corpo.email, 'nova@example.com');
+    assert.strictEqual((await hook('errado', { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_1', subscription: 'sub_1', value: 9.99 } })).status, 401);
+    const antes = Math.floor(Date.now() / 1000);
+    assert.strictEqual((await hook('tok-teste', { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_1', subscription: 'sub_1', value: 9.99 } })).json.liberou, true);
+    assert.strictEqual((await hook('tok-teste', { event: 'PAYMENT_RECEIVED', payment: { id: 'pay_1', subscription: 'sub_1', value: 9.99 } })).json.liberou, false, 'o mesmo pagamento não conta duas vezes');
+    s = (await ir('assinatura', null, 'GET')).json;
+    assert.strictEqual(s.ativa, true);
+    const dias = Math.round((s.acesso_ate - antes) / 86400);
+    assert.strictEqual(dias, 37, '1º pagamento: 30 dias + 7 de bônus');
+    assert.strictEqual((await ir('dados', { versao: 0, conteudo: { dados: {} } })).status, 200, 'pagou: volta a gravar');
+    await hook('tok-teste', { event: 'PAYMENT_CONFIRMED', payment: { id: 'pay_2', subscription: 'sub_1', value: 9.99 } });
+    const s2 = (await ir('assinatura', null, 'GET')).json;
+    assert.strictEqual(Math.round((s2.acesso_ate - s.acesso_ate) / 86400), 30, 'cada mês seguinte soma 30 dias');
+    const fim = new Date(s2.acesso_ate * 1000); const d = (x) => new Date(x.getTime() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+    const vespera = d(new Date(fim.getTime() - 86400000));
+    const rodar = (hoje) => execFileSync('php', [path.join(RAIZ, 'api/cron-avisos.php'), `--hoje=${hoje}`], { env }).toString();
+    assert.match(rodar(vespera), /assinatura: 1/);
+    assert.match(rodar(vespera), /assinatura: 0/, 'o aviso não repete');
+    assert.match(rodar(d(fim)), /assinatura: 1/);
+    const log = fs.readFileSync(path.join(est, 'emails.log'), 'utf8');
+    assert.match(log, /PARA: nova@example\.com \| 🔔 Sua assinatura vence amanhã/);
+    assert.match(log, /PARA: nova@example\.com \| ⏰ Sua assinatura vence hoje/);
+    assert.ok(!/PARA: antiga@example\.com \| .*assinatura/.test(log), 'conta isenta não recebe aviso de assinatura');
+    assert.strictEqual((await ir('assinatura_cancelar', {})).json.cancelada, true);
+    assert.ok(pedidos.some((p) => p.m === 'DELETE' && p.u === '/subscriptions/sub_1'));
+  } finally { srv.kill(); mock.close(); }
 });

@@ -4,6 +4,7 @@ declare(strict_types=1);
    Uso: php cron-avisos.php [--hoje=AAAA-MM-DD] */
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require __DIR__ . '/_openfinance.php';
+require __DIR__ . '/_assinatura.php';
 date_default_timezone_set('America/Sao_Paulo');
 
 $hoje = date('Y-m-d');
@@ -151,7 +152,7 @@ foreach ($usuarios as $u) {
             $dias = (int) round((strtotime($i['venc']) - strtotime($hoje)) / 86400);
             $tipo = null; $chave = null;
             if ($dias === 0) { $tipo = 'hoje'; $chave = "$perfil|{$i['id']}|hoje"; }
-            elseif ($dias > 0 && $dias <= 3) { $tipo = 'breve'; $chave = "$perfil|{$i['id']}|breve"; }
+            elseif ($dias === 1) { $tipo = 'breve'; $chave = "$perfil|{$i['id']}|vespera"; } // regra da Larissa: avisa 1 dia antes e no dia, sempre no e-mail cadastrado
             elseif ($dias < 0 && in_array(-$dias, [1, 3, 7], true)) { $tipo = 'atrasado'; $chave = "$perfil|{$i['id']}|atraso" . (-$dias); }
             if (!$tipo) continue;
             $j = db()->prepare('SELECT 1 FROM avisos WHERE usuario_id = ? AND chave = ?');
@@ -184,15 +185,16 @@ foreach ($usuarios as $u) {
     $corpo = '<p>Olá, ' . htmlspecialchars($nome) . '! Estes são os seus vencimentos que precisam de atenção:</p>'
         . $bloco('Vencem hoje', '#B54708', $secoes['hoje'])
         . $bloco('Já venceram', '#B42318', $secoes['atrasado'])
-        . $bloco('Vencem em breve', '#2D4BFF', $secoes['breve'])
+        . $bloco('Vencem amanhã', '#2D4BFF', $secoes['breve'])
         . $blocoOrc($secoes['orc'])
         . '<p style="font-size:14px;color:#4A4944;margin-top:22px">Depois de pagar, marque como pago no app para o aviso parar. Para desligar estes e-mails: Mais opções → Minha conta.</p>';
-    $assunto = ($secoes['hoje'] ? '⏰ Vence hoje' : ($secoes['atrasado'] ? '⚠️ Vencimento atrasado' : ($secoes['breve'] ? '🔔 Vence em breve' : '📊 Orçamento do mês'))) . ' · ' . $total . ($total === 1 ? ' item' : ' itens') . ' no Lepvi Finanças';
+    $assunto = ($secoes['hoje'] ? '⏰ Vence hoje' : ($secoes['atrasado'] ? '⚠️ Vencimento atrasado' : ($secoes['breve'] ? '🔔 Vence amanhã' : '📊 Orçamento do mês'))) . ' · ' . $total . ($total === 1 ? ' item' : ' itens') . ' no Lepvi Finanças';
     if (enviar_email($u['email'], $assunto, email_html('Seus vencimentos', $corpo, 'Abrir o Lepvi Finanças', rtrim(cfg()['site_url'], '/') . '/'))) {
         foreach ($marcar as $ch) db()->prepare('INSERT INTO avisos (usuario_id, chave, enviado_em) VALUES (?,?,?)')->execute([$u['id'], $ch, agora()]);
         $enviados++;
     }
 }
 $lembretes = lembrete_lancar_rodar($hoje);
+$assin = assinatura_avisos_rodar($hoje);
 try { $bancos = pluggy_sincronizar_todos(); } catch (Throwable $e) { $bancos = 0; error_log('[lepvi-financas pluggy] ' . $e->getMessage()); }
-echo date('c') . " avisos enviados: $enviados, lembretes: $lembretes, movimentações do banco: $bancos\n";
+echo date('c') . " avisos enviados: $enviados, lembretes: $lembretes, assinatura: $assin, movimentações do banco: $bancos\n";

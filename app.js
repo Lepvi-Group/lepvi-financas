@@ -67,8 +67,11 @@
   function salvar() {
     try { localStorage.setItem(PREFS, JSON.stringify({ texto: S.texto, escala: S.escala, tema: S.tema, semMovimento: S.semMovimento, destacar: S.destacar, contraste: S.contraste, oculto: S.oculto, ordem: S.ordem, saldoDiario: S.saldoDiario, sugestoes: S.sugestoes, dispensados: (S.dispensados || []).slice(-200) })); } catch (e) { /* sem armazenamento */ }
     if (!USER.logado) return;
+    if (leitura()) { desfazerSemAssinatura(); return; }
     precisaEnviar = true; status('salvando'); clearTimeout(tmr); tmr = setTimeout(enviarDados, 600);
   }
+  /* Assinatura vencida: o que mudou na tela volta a ser o que está no servidor e abre a tela de assinar. */
+  async function desfazerSemAssinatura() { precisaEnviar = false; try { await carregarDados(); } catch (e) { /* mostra o que tinha */ } if (dlg.open) dlg.close(); render(); formAssinar(); }
   const clonar = (x) => JSON.parse(JSON.stringify(x));
   let baseDados = null; // o último estado que o servidor confirmou (base para juntar edições)
   async function enviarDados() {
@@ -83,6 +86,7 @@
           try { const antes = clonar(S.dados); const r = await api('dados'); if (r.conteudo && r.conteudo.dados) { versaoServidor = r.versao; S.dados = norm({ perfil: S.perfil, dados: F.juntarDados(baseDados, antes, r.conteudo.dados) }).dados; baseDados = clonar(r.conteudo.dados); precisaEnviar = true; if (!dlg.open) render(); aviso('Outra pessoa também mexeu ao mesmo tempo. Juntamos as duas alterações.'); continue; } } catch (e2) { /* cai na recarga abaixo */ }
         }
         if (e.conflito) { await carregarDados(); render(); status('conflito'); aviso('Seus dados foram alterados em outra janela ou aparelho. Mostramos a versão mais recente: confira se o seu último lançamento está aí.'); break; }
+        if (e.status === 402) { await carregarAssinatura(); enviando = false; desfazerSemAssinatura(); return; }
         if (e.rede) { precisaEnviar = true; status('erro'); aviso('Sem conexão. Vamos tentar salvar de novo.'); await new Promise((ok) => setTimeout(ok, 5000)); continue; }
         status('erro'); aviso('Não consegui salvar: ' + e.message); break;
       }
@@ -242,7 +246,39 @@
     else { try { await api('sair', {}); } catch (e) { /* já estava fora */ } } // abriu o app de novo: encerra a sessão guardada e pede login
     if (!USER.logado) await carregarTurnstile();
     render();
-    if (USER.logado) { carregarConexoes().then(async () => { await carregarCapturas(); await atualizarBancoSeAntigo(); }); carregarEspaco(); travar(); aceitarConvite(); }
+    if (USER.logado) { carregarConexoes().then(async () => { await carregarCapturas(); await atualizarBancoSeAntigo(); }); carregarEspaco(); travar(); aceitarConvite(); carregarAssinatura().then(() => { if (new URLSearchParams(location.search).get('assinar')) { history.replaceState(null, '', location.pathname); formAssinar(); } else if (!dlg.open) render(); }); }
+  }
+
+  /* ---------- assinatura (R$ 9,99/mês pelo Asaas) ---------- */
+  async function carregarAssinatura() { try { V.ass = await api('assinatura'); } catch (e) { V.ass = V.ass || null; } return V.ass; }
+  /* Só leitura: a cobrança está ligada e o acesso pago acabou. Dá para ver e exportar; gravar abre a tela de assinar. */
+  const leitura = () => !!(V.ass && V.ass.cobranca && !V.ass.ativa);
+  const diasAcesso = () => (V.ass && V.ass.acesso_ate ? Math.ceil((V.ass.acesso_ate * 1000 - Date.now()) / 86400000) : null);
+  function avisoAssinatura() {
+    const a = V.ass; if (!a || !a.cobranca || a.isento) return '';
+    if (!a.ativa) return `<button type="button" class="card assin-aviso vencida" data-acao="assinar"><b>🔒 Assinatura vencida: o app está só para consulta</b><span>Seus dados estão guardados. Assine por R$ 9,99/mês para voltar a lançar e importar.</span></button>`;
+    const d = diasAcesso();
+    if (d !== null && d <= 3) return `<button type="button" class="card assin-aviso" data-acao="assinar"><b>🔔 Sua assinatura vence ${d <= 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`}</b><span>${a.assinou && !a.cancelada ? 'A cobrança do mês já está aberta: toque para pagar.' : 'Toque para renovar por R$ 9,99/mês.'}</span></button>`;
+    return '';
+  }
+  async function formAssinar() {
+    const a = V.ass || await carregarAssinatura();
+    if (!a || !a.cobranca || a.isento) { aviso('Sua conta está liberada: não precisa assinar.'); return; }
+    if (!a.dono) { abrir('Assinatura', '<p class="rep-resumo">Você usa o espaço compartilhado de outra pessoa. Quem paga a assinatura é quem criou o espaço.</p>'); return; }
+    const ate = a.acesso_ate ? new Date(a.acesso_ate * 1000).toLocaleDateString('pt-BR') : '';
+    const situacao = a.ativa && ate ? `<p class="rep-resumo"><b>Sua assinatura está em dia</b> até <b>${ate}</b>.${a.cancelada ? ' Você cancelou: não haverá novas cobranças.' : ''}</p>` : '';
+    abrir('Minha assinatura', `${situacao}<p class="rep-resumo"><b>R$ 9,99 por mês</b>, com Pix, boleto ou cartão. <b>O primeiro pagamento libera 37 dias</b> (o mês + 7 dias de bônus) e cada mês seguinte soma mais 30 dias.${a.ativa ? '' : ' <b>Sem a assinatura em dia, o app fica só para consulta:</b> você vê e exporta tudo, mas não lança nem importa. Nada é apagado.'}</p>
+      ${campo('CPF ou CNPJ de quem paga', '<input name="cpf" inputmode="numeric" autocomplete="off" required maxlength="18" placeholder="000.000.000-00">')}
+      <p class="mut">O CPF ou CNPJ é exigido para emitir a cobrança. O pagamento é feito no ambiente seguro do Asaas; o app não vê os dados do seu cartão.</p>
+      <div class="botoes rodape-form">${a.assinou && !a.cancelada ? '<button class="btn sec" type="button" id="assin-cancelar">Cancelar assinatura</button>' : '<button class="btn sec" type="button" data-fechar>Agora não</button>'}<button class="btn" type="submit">${a.assinou && !a.cancelada ? 'Pagar o mês em aberto' : 'Pagar e assinar'}</button></div>`,
+    async (fd) => {
+      const janela = window.open('', '_blank');
+      try { const r = await api('assinar', { cpf: String(fd.get('cpf') || '') }); if (janela) janela.location = r.url; else location.href = r.url; aviso('Abrimos a página de pagamento. Depois de pagar, a liberação é automática em alguns minutos.', 6000); await carregarAssinatura(); }
+      catch (e) { if (janela) janela.close(); aviso(e.message); }
+    }, (f) => {
+      const c = f.querySelector('#assin-cancelar');
+      if (c) c.onclick = async () => { if (!(await confirmar('Cancelar a assinatura?', `Não haverá novas cobranças. Você continua usando normalmente${ate ? ' até ' + ate : ''}; depois, o app fica só para consulta.`, 'Cancelar assinatura'))) return; try { V.ass = await api('assinatura_cancelar', {}); dlg.close(); render(); aviso('Assinatura cancelada.'); } catch (e) { aviso(e.message); } };
+    });
   }
 
   /* ---------- compras automáticas (avisos do banco) ---------- */
@@ -599,7 +635,7 @@
     const hora = new Date().getHours(); const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
     const vazio = (ic, tit, txt, acao, bt, bloco) => `<section class="card vazio"${bloco ? ` data-bloco="${bloco}"` : ''}><span class="vazio-ic" aria-hidden="true">${ic}</span><h2 class="secao">${tit}</h2><p class="mut">${txt}</p><button class="btn sec" type="button" data-acao="${acao}">${bt}</button></section>`;
     const contasVazio = d.contas.length === 1 && d.contas[0].saldoInicial === 0 && !d.lancs.length;
-    return `<p class="saudacao"><b>${saud}, ${esc(String((USER.info && USER.info.nome) || '').split(' ')[0])}!</b></p><div class="hero"><small>Saldo geral</small><span class="grande num" data-v="${saldo}">${m(saldo)}</span>${(() => { const cxs = (V.of && V.of.conexoes) || []; const lig = cxs.filter((c) => c.saldo != null && contaDoBanco(c.id)); if (lig.length) { const t = Math.max(...lig.map((c) => c.saldo_em || 0)); return `<button class="link hero-corrigir" type="button" data-acao="ver-extrato" data-id="todos">🏦 Saldo real do banco${t ? ', ' + quandoFoi(t) : ''}</button>`; } if (cxs.length) return '<button class="link hero-corrigir" type="button" data-acao="openfinance">O banco ainda não informou o saldo: toque para atualizar</button>'; return ''; })()}${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
+    return `${avisoAssinatura()}<p class="saudacao"><b>${saud}, ${esc(String((USER.info && USER.info.nome) || '').split(' ')[0])}!</b></p><div class="hero"><small>Saldo geral</small><span class="grande num" data-v="${saldo}">${m(saldo)}</span>${(() => { const cxs = (V.of && V.of.conexoes) || []; const lig = cxs.filter((c) => c.saldo != null && contaDoBanco(c.id)); if (lig.length) { const t = Math.max(...lig.map((c) => c.saldo_em || 0)); return `<button class="link hero-corrigir" type="button" data-acao="ver-extrato" data-id="todos">🏦 Saldo real do banco${t ? ', ' + quandoFoi(t) : ''}</button>`; } if (cxs.length) return '<button class="link hero-corrigir" type="button" data-acao="openfinance">O banco ainda não informou o saldo: toque para atualizar</button>'; return ''; })()}${investido ? `<small class="hero-inv">Investido <b class="num">${m(investido)}</b> · Patrimônio total <b class="num">${m(F.arred(saldo + investido))}</b></small>` : ''}
       <div class="duo"><button type="button" class="duo-b" data-acao="ver-tipo" data-v="receita" aria-label="Ver as receitas do mês, uma a uma"><small>Receitas do mês ›</small><b class="verde num">${m(r.receitas)}</b>${r.receitas > r.recebido ? `<small class="duo-sub">já recebido ${m(r.recebido)} · a receber ${m(F.arred(r.receitas - r.recebido))}</small>` : ''}</button><button type="button" class="duo-b" data-acao="ver-tipo" data-v="despesa" aria-label="Ver as despesas do mês, uma a uma"><small>Despesas do mês ›</small><b class="verm num">${m(r.despesas)}</b>${r.despesas > r.pago ? `<small class="duo-sub">já pago ${m(r.pago)} · a pagar ${m(F.arred(r.despesas - r.pago))}</small>` : ''}</button></div></div>
     <button type="button" class="pergunte" data-acao="assistente"><span aria-hidden="true">💬</span><span><b>Pergunte ao assistente</b><small>“Quanto gastei este mês?” “Quanto entrou de PIX?”</small></span><span aria-hidden="true">›</span></button>
     <div class="contas" aria-label="Seus bancos e carteiras">${d.contas.map((c) => `<button class="conta" type="button" data-acao="editar-conta" data-id="${c.id}">${seloBanco(c.nome, c.cor, 'med')}<span class="mut">${esc(c.nome)}</span><b class="num">${m(F.saldoConta(d.lancs, c))}</b></button>`).join('')}<button class="conta nova" type="button" data-acao="nova-conta">+ Banco ou carteira</button></div>
@@ -955,6 +991,7 @@
       + linha({ icone: LI.texto, titulo: 'Tamanho do texto e contraste', desc: 'Facilita a leitura', attrs: 'data-acao="acess"' }))}
     ${grupo('Segurança e privacidade',
       linha({ icone: LI.chave, titulo: 'Alterar senha', attrs: 'data-acao="senha"' })
+      + (V.ass && V.ass.cobranca && !V.ass.isento ? linha({ icone: LI.chave, titulo: 'Minha assinatura', desc: !V.ass.ativa ? 'Vencida: o app está só para consulta' : V.ass.acesso_ate ? `Em dia até ${new Date(V.ass.acesso_ate * 1000).toLocaleDateString('pt-BR')}` : 'R$ 9,99 por mês', attrs: 'data-acao="assinar"' }) : '')
       + linha({ icone: LI.escudo, titulo: 'Verificação em dois passos', desc: u.dois_passos ? 'Ativada: pede um código do celular ao entrar' : 'Recomendado: pede um código do celular ao entrar', fim: u.dois_passos ? '<span class="selo ok">Ativa</span>' : '›', attrs: 'data-acao="dois-passos"' })
       + linha({ tag: 'a', icone: LI.baixar, titulo: 'Baixar meus dados', desc: 'Arquivo completo da sua conta (LGPD)', attrs: 'href="api/?a=exportar" download' })
       + linha({ tag: 'a', icone: LI.escudo, titulo: 'Política de Privacidade', attrs: 'href="privacidade.html" target="_blank" rel="noopener"' }))}
@@ -1763,6 +1800,7 @@
   }
 
   function importar(texto, nome) {
+    if (leitura()) { formAssinar(); return; }
     const lido = /\.csv$|\.txt$/i.test(nome) || !/<STMTTRN>/i.test(texto) ? F.lerCSV(texto) : F.lerOFX(texto);
     const lista = lido.slice(0, 400);
     if (!lista.length) { aviso('Não encontrei lançamentos nesse arquivo. Confira se é o extrato em OFX ou CSV.'); return; }
@@ -1887,6 +1925,7 @@
       'captura-config': () => formCaptura(),
       openfinance: () => formOpenFinance(),
       'como-exportar': () => formComoExportar(),
+      assinar: () => formAssinar(),
       sair: () => sair(),
       'conta-menu': () => menuConta(),
       perfil: () => ir('perfil'),

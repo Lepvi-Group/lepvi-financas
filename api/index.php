@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/_oauth.php';
 require __DIR__ . '/_openfinance.php';
 require __DIR__ . '/_2fa.php';
+require __DIR__ . '/_assinatura.php';
 
 $acao = (string) ($_GET['a'] ?? '');
 $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -23,11 +24,12 @@ try {
         resp(['provedor' => oauth_provedores()[$pend['p']]['nome'] ?? '', 'email' => $pend['email'], 'nome' => $pend['nome']]);
     }
     // Leitura sem efeito colateral (exportar baixa um arquivo).
-    if ($metodo === 'GET' && in_array($acao, ['eu', 'dados', 'exportar', 'capturas', 'anexos', 'anexo', 'espaco', 'conexoes'], true)) {
+    if ($metodo === 'GET' && in_array($acao, ['eu', 'dados', 'exportar', 'capturas', 'anexos', 'anexo', 'espaco', 'conexoes', 'assinatura'], true)) {
         $u = exigir_usuario();
         $dono = espaco_dono($u['id']);
         if ($acao === 'eu') resp(['usuario' => usuario_publico($u)]);
         if ($acao === 'espaco') resp(espaco_info($u, $dono));
+        if ($acao === 'assinatura') resp(assinatura_situacao($dono) + ['dono' => $dono === $u['id']]);
         if ($acao === 'conexoes') resp(['ativo' => openfinance_liberado($dono), 'tem_credencial' => pluggy_cred($dono) !== null, 'conexoes' => of_conexoes($dono)]);
         if ($acao === 'capturas') {
             $k = db()->prepare('SELECT criado_em, ultimo_uso FROM chaves_captura WHERE usuario_id = ?');
@@ -205,6 +207,7 @@ try {
     $dono = espaco_dono($u['id']);
     switch ($acao) {
         case 'dados': {
+            exigir_assinatura($dono);
             $esperada = (int) ($b['versao'] ?? -1);
             $conteudo = $b['conteudo'] ?? null;
             if (!is_array($conteudo)) erro('Dados inválidos.', 422);
@@ -241,6 +244,7 @@ try {
             resp(['captura' => ['id' => captura_guardar($dono, $c)] + $c]);
         }
         case 'capturas_resolver': {
+            exigir_assinatura($dono);
             $ids = isset($b['ids']) && is_array($b['ids']) ? array_slice(array_map('strval', $b['ids']), 0, 200) : [];
             foreach ($ids as $id) db()->prepare('DELETE FROM capturas WHERE usuario_id = ? AND id = ?')->execute([$dono, substr($id, 0, 32)]);
             resp(['ok' => true]);
@@ -328,6 +332,7 @@ try {
             resp(['ok' => true]);
         }
         case 'anexo_enviar': {
+            exigir_assinatura($dono);
             $lanc = substr((string) ($b['lanc'] ?? ''), 0, 64); $d = (string) ($b['dataUrl'] ?? '');
             if ($lanc === '') erro('Lançamento inválido.', 422);
             if (!preg_match('#^data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$#', $d, $m) || strlen($d) > 900000) erro('Imagem inválida ou grande demais.', 422);
@@ -425,12 +430,33 @@ try {
             db()->prepare('DELETE FROM membros WHERE usuario_id = ? AND dono_id = ?')->execute([$id, $u['id']]);
             resp(['ok' => true]);
         }
+        case 'assinar': {
+            // Paga primeiro: abre a cobrança do Asaas (Pix, boleto ou cartão). O 1º pagamento libera 37 dias.
+            if ($dono !== $u['id']) erro('Quem paga a assinatura é a pessoa que criou este espaço compartilhado.', 403);
+            if (asaas_config() === null) erro('A assinatura ainda não está disponível. Seu acesso continua liberado.', 409);
+            if (assinatura_situacao($dono)['isento']) erro('Sua conta já é liberada: não precisa assinar.', 409);
+            $cpf = (string) ($b['cpf'] ?? '');
+            if (!cpf_cnpj_valido($cpf)) erro('Confira o CPF ou CNPJ: ele é exigido para emitir a cobrança.', 422);
+            if (limite_estourou('assin:' . $u['id'], 10, 3600)) erro('Muitas tentativas. Tente de novo mais tarde.', 429);
+            registrar_tentativa('assin:' . $u['id']);
+            try { $url = assinatura_assinar($dono, (string) $u['nome'], (string) $u['email'], $cpf); } catch (RuntimeException $e) { erro($e->getMessage(), 422); }
+            resp(['url' => $url]);
+        }
+        case 'assinatura_cancelar': {
+            // Cancela as próximas cobranças; o acesso já pago continua até o fim.
+            if ($dono !== $u['id']) erro('Quem cancela a assinatura é a pessoa que criou este espaço compartilhado.', 403);
+            try { assinatura_cancelar($dono); } catch (RuntimeException $e) { erro($e->getMessage(), 422); }
+            resp(assinatura_situacao($dono) + ['dono' => true]);
+        }
         case 'excluir': {
             $k = 'excl:' . $u['id'];
             if (limite_estourou($k, 5, 900)) erro('Muitas tentativas. Espere 15 minutos.', 429);
             if (!senha_confere($u, (string) ($b['senha'] ?? ''))) { registrar_tentativa($k); erro('Senha incorreta.', 401); }
+            // Excluir a conta também para a cobrança: nada é cobrado depois.
+            if (asaas_config() !== null) { try { assinatura_cancelar($u['id']); } catch (Throwable $e) { error_log('[lepvi-financas assinatura] ' . $e->getMessage()); } }
+            assinatura_tabelas();
             $pdo = db(); $pdo->beginTransaction();
-            foreach (['sessoes', 'tokens', 'dados', 'avisos', 'consentimentos', 'identidades', 'chaves_captura', 'capturas', 'anexos', 'conexoes', 'of_vistos', 'of_pluggy'] as $t) $pdo->prepare("DELETE FROM $t WHERE usuario_id = ?")->execute([$u['id']]);
+            foreach (['assinaturas', 'sessoes', 'tokens', 'dados', 'avisos', 'consentimentos', 'identidades', 'chaves_captura', 'capturas', 'anexos', 'conexoes', 'of_vistos', 'of_pluggy'] as $t) $pdo->prepare("DELETE FROM $t WHERE usuario_id = ?")->execute([$u['id']]);
             $pdo->prepare('DELETE FROM membros WHERE usuario_id = ? OR dono_id = ?')->execute([$u['id'], $u['id']]);
             $pdo->prepare('DELETE FROM usuarios WHERE id = ?')->execute([$u['id']]);
             $pdo->commit();

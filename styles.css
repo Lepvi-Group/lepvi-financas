@@ -816,7 +816,9 @@ html[data-contraste="alto"] .menu-fim .mf-mais { border: 2px solid #000; backgro
 .hero-corrigir:hover, .hero-corrigir:focus-visible { color: #fff; }
 
 /* ferramentas em destaque no Início: uma fileira que rola de lado, em vez de uma lista longa */
-.ferr-linha { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 8px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.ferr-linha { display: flex; gap: 10px; overflow-x: auto; padding: 6px 6px 10px; margin: -6px -6px 0; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+/* A fileira rola de lado e corta o que passa da borda: o anel de foco fica DENTRO do cartão, inteiro e com cantos redondos. */
+.ferr-linha .ferr:focus-visible { outline: 3px solid var(--azul); outline-offset: -3px; }
 .ferr { flex: none; scroll-snap-align: start; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 132px; min-height: 92px; padding: 12px; background: var(--sup, #fff); border: 0; border-radius: 16px; text-align: left; color: var(--tinta); cursor: pointer; box-shadow: 0 1px 2px rgba(13,13,15,.06); }
 .ferr:hover { box-shadow: 0 4px 14px rgba(13,13,15,.1); } .ferr:focus-visible { outline: 3px solid var(--azul); outline-offset: 2px; }
 .ferr-ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: rgba(45,75,255,.1); color: var(--azul); }
@@ -915,3 +917,7 @@ body.doc .texto b { font-weight: 600; }
 .leg-v, .leg-r { white-space: nowrap; font-weight: 600; } .leg-v i, .leg-r i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; } .leg-v i { background: var(--verde); } .leg-r i { background: var(--vermelho); }
 
 .banco-cab { position: relative; } .banco-edit { margin-left: auto; flex: none; min-height: 44px; padding: 8px 16px; border-radius: 999px; border: 1.5px solid rgba(255,255,255,.4); background: rgba(255,255,255,.12); color: #fff; font: inherit; font-weight: 600; cursor: pointer; } .banco-edit:hover { background: rgba(255,255,255,.22); } .banco-edit:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+/* aviso da assinatura no Início (vence em breve / vencida) */
+.assin-aviso { display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left; border: 1px solid rgba(45,75,255,.25); background: rgba(45,75,255,.07); color: var(--tinta); padding: 14px 16px; margin-bottom: 14px; cursor: pointer; font: inherit; }
+.assin-aviso b { font-size: 15px; } .assin-aviso span { font-size: 14px; color: var(--suave, #4A4944); }
+.assin-aviso.vencida { border-color: rgba(180,35,24,.3); background: rgba(180,35,24,.07); }
