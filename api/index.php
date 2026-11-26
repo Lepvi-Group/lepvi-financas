@@ -16,7 +16,7 @@ function enviar_link_redefinir(string $email, string $token, callable $link): vo
 }
 
 try {
-    if ($metodo === 'GET' && $acao === 'config') resp(['turnstile' => turnstile_config()['site_key'] ?? null, 'cadastro' => cadastro_aberto()]);
+    if ($metodo === 'GET' && $acao === 'config') resp(['turnstile' => turnstile_config()['site_key'] ?? null, 'cadastro' => cadastro_aberto(), 'entrar_com' => array_values(array_filter(array_keys(oauth_provedores()), fn($p) => oauth_provedor($p) !== null))]);
     // Entrada com Google/Microsoft: dados da pessoa que ainda precisa aceitar a Política e os Termos
     if ($metodo === 'GET' && $acao === 'oauth_pendente') {
         $pend = ler_assinado((string) ($_COOKIE['lf_novo'] ?? ''));

@@ -118,7 +118,7 @@
   function voltouDoOauth() { try { const v = sessionStorage.getItem(IDA_OAUTH); sessionStorage.removeItem(IDA_OAUTH); return v === '1'; } catch (e) { return false; } }
   let tsId = null;
   async function carregarTurnstile() {
-    try { const cf = await api('config'); V.ts = cf.turnstile || null; V.cadastro = cf.cadastro !== false; } catch (e) { V.ts = null; }
+    try { const cf = await api('config'); V.ts = cf.turnstile || null; V.cadastro = cf.cadastro !== false; V.provs = Array.isArray(cf.entrar_com) ? cf.entrar_com : ['google', 'microsoft']; } catch (e) { V.ts = null; }
     if (V.ts && !window.turnstile && !document.getElementById('ts-script')) {
       const sc = document.createElement('script'); sc.id = 'ts-script'; sc.async = true; sc.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'; sc.onload = montarTurnstile; document.head.appendChild(sc);
     }
@@ -135,7 +135,9 @@
     const link = (a, t) => `<button class="link" type="button" data-acao="${a}">${t}</button>`;
     const gIc = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#4285F4" d="M22.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.9a5 5 0 0 1-2.2 3.3v2.7h3.5c2.1-1.9 3.4-4.7 3.4-7.9z"/><path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.6l-3.5-2.7c-1 .6-2.2 1-3.7 1-2.8 0-5.2-1.9-6-4.5H2.4v2.8A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M6 14.2a6.6 6.6 0 0 1 0-4.4V7H2.4a11 11 0 0 0 0 10z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1A11 11 0 0 0 2.4 7L6 9.8c.8-2.6 3.2-4.4 6-4.4z"/></svg>';
     const mIc = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#F25022" d="M2 2h9.5v9.5H2z"/><path fill="#7FBA00" d="M12.5 2H22v9.5h-9.5z"/><path fill="#00A4EF" d="M2 12.5h9.5V22H2z"/><path fill="#FFB900" d="M12.5 12.5H22V22h-9.5z"/></svg>';
-    const social = (rotulo) => `<div class="sociais"><button class="btn-social" type="button" data-acao="oauth" data-p="google">${gIc}<span>${rotulo} com Google</span></button><button class="btn-social" type="button" data-acao="oauth" data-p="microsoft">${mIc}<span>${rotulo} com Microsoft</span></button></div><p class="ou"><span>ou use seu e-mail</span></p>`;
+    /* Só mostra os botões dos provedores com chaves no servidor (Google aparece sozinho quando for configurado). */
+    const provs = V.provs || ['google', 'microsoft'];
+    const social = (rotulo) => { const bt = [['google', gIc, 'Google'], ['microsoft', mIc, 'Microsoft']].filter(([p]) => provs.includes(p)).map(([p, ic, n]) => `<button class="btn-social" type="button" data-acao="oauth" data-p="${p}">${ic}<span>${rotulo} com ${n}</span></button>`).join(''); return bt ? `<div class="sociais">${bt}</div><p class="ou"><span>ou use seu e-mail</span></p>` : ''; };
     let titulo; let corpo;
     if (modo === 'enviado') { titulo = 'Confira seu e-mail'; corpo = `${msg}<button class="btn" type="button" data-acao="auth-entrar">Voltar para entrar</button>`; }
     else if (modo === 'oauth-aceite') {
