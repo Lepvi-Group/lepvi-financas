@@ -255,17 +255,22 @@
   async function verAssinatura(pediu = false) {
     const a = await carregarAssinatura();
     if (pediu) history.replaceState(null, '', location.pathname);
-    if (pediu || (a && a.cobranca && !a.ativa && !a.acesso_ate && a.dono)) formAssinar(); else if (!dlg.open) render();
+    if (!dlg.open) render(); // o aviso da assinatura aparece na tela inicial
+    if (pediu || (a && a.cobranca && !a.ativa && !a.acesso_ate && a.dono)) formAssinar();
   }
   /* Só leitura: a cobrança está ligada e o acesso pago acabou. Dá para ver e exportar; gravar abre a tela de assinar. */
   const leitura = () => !!(V.ass && V.ass.cobranca && !V.ass.ativa);
   const diasAcesso = () => (V.ass && V.ass.acesso_ate ? Math.ceil((V.ass.acesso_ate * 1000 - Date.now()) / 86400000) : null);
+  const svgA = (d, t = 20) => `<svg viewBox="0 0 24 24" aria-hidden="true" width="${t}" height="${t}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const IC_CADEADO = '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>';
+  const IC_CHECK = '<path d="M5 12.5l4.5 4.5L19 7.5"/>';
   function avisoAssinatura() {
     const a = V.ass; if (!a || !a.cobranca || a.isento) return '';
-    if (!a.ativa && !a.acesso_ate) return `<button type="button" class="card assin-aviso vencida" data-acao="assinar"><b>✨ Assine para começar a usar</b><span>R$ 9,99/mês com Pix, boleto ou cartão. O primeiro pagamento libera 37 dias (o mês + 7 de bônus). Toque para pagar.</span></button>`;
-    if (!a.ativa) return `<button type="button" class="card assin-aviso vencida" data-acao="assinar"><b>🔒 Assinatura vencida: o app está só para consulta</b><span>Seus dados estão guardados. Assine por R$ 9,99/mês para voltar a lançar e importar.</span></button>`;
+    const card = (cls, icone, tit, txt, cta) => `<button type="button" class="card assin-aviso ${cls}" data-acao="assinar"><span class="assin-ic">${svgA(icone)}</span><span class="assin-tx"><b>${tit}</b><span>${txt}</span></span><span class="assin-cta">${cta}</span></button>`;
+    if (!a.ativa && !a.acesso_ate) return card('nova', IC_CADEADO, 'Ative sua assinatura', 'Por enquanto o app está só para consulta. R$ 9,99/mês com Pix, boleto ou cartão; o primeiro pagamento libera 37 dias.', 'Assinar');
+    if (!a.ativa) return card('vencida', IC_CADEADO, 'Assinatura vencida', 'Seus dados estão guardados, mas o app está só para consulta. Renove por R$ 9,99/mês para voltar a lançar.', 'Renovar');
     const d = diasAcesso();
-    if (d !== null && d <= 3) return `<button type="button" class="card assin-aviso" data-acao="assinar"><b>🔔 Sua assinatura vence ${d <= 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`}</b><span>${a.assinou && !a.cancelada ? 'A cobrança do mês já está aberta: toque para pagar.' : 'Toque para renovar por R$ 9,99/mês.'}</span></button>`;
+    if (d !== null && d <= 3) return card('', LI.bell, `Sua assinatura vence ${d <= 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`}`, a.assinou && !a.cancelada ? 'A cobrança do mês já está aberta.' : 'Renove por R$ 9,99/mês para não perder o acesso.', 'Pagar');
     return '';
   }
   async function formAssinar() {
@@ -273,16 +278,34 @@
     if (!a || !a.cobranca || a.isento) { aviso('Sua conta está liberada: não precisa assinar.'); return; }
     if (!a.dono) { abrir('Assinatura', '<p class="rep-resumo">Você usa o espaço compartilhado de outra pessoa. Quem paga a assinatura é quem criou o espaço.</p>'); return; }
     const ate = a.acesso_ate ? new Date(a.acesso_ate * 1000).toLocaleDateString('pt-BR') : '';
-    const situacao = a.ativa && ate ? `<p class="rep-resumo"><b>Sua assinatura está em dia</b> até <b>${ate}</b>.${a.cancelada ? ' Você cancelou: não haverá novas cobranças.' : ''}</p>` : '';
-    abrir('Minha assinatura', `${situacao}<p class="rep-resumo"><b>R$ 9,99 por mês</b>, com Pix, boleto ou cartão. <b>O primeiro pagamento libera 37 dias</b> (o mês + 7 dias de bônus) e cada mês seguinte soma mais 30 dias.${a.ativa ? '' : ' <b>Sem a assinatura em dia, o app fica só para consulta:</b> você vê e exporta tudo, mas não lança nem importa. Nada é apagado.'}</p>
-      ${campo('CPF ou CNPJ de quem paga', '<input name="cpf" inputmode="numeric" autocomplete="off" required maxlength="18" placeholder="000.000.000-00">')}
-      <p class="mut">O CPF ou CNPJ é exigido para emitir a cobrança. O pagamento é feito no ambiente seguro do Asaas; o app não vê os dados do seu cartão.</p>
-      <div class="botoes rodape-form">${a.assinou && !a.cancelada ? '<button class="btn sec" type="button" id="assin-cancelar">Cancelar assinatura</button>' : '<button class="btn sec" type="button" data-fechar>Agora não</button>'}<button class="btn" type="submit">${a.assinou && !a.cancelada ? 'Pagar o mês em aberto' : 'Pagar e assinar'}</button></div>`,
+    const pagou = !!a.acesso_ate; // já pagou ao menos uma vez
+    const emDia = a.ativa && pagou;
+    const podeCancelar = a.assinou && !a.cancelada && pagou;
+    const selo = emDia ? `<span class="pl-selo ok">Em dia até ${ate}${a.cancelada ? ' · cancelada' : ''}</span>` : pagou ? '<span class="pl-selo venc">Vencida</span>' : '<span class="pl-selo">1º pagamento: 37 dias</span>';
+    const itens = ['Lançamentos, contas e cartões sem limite', 'Importar extrato OFX e CSV do seu banco', 'Aviso por e-mail antes de cada vencimento', 'Orçamento por categoria e objetivos', 'Pessoal e empresa no mesmo app'];
+    const passos = pagou ? '' : `<ol class="pl-passos">
+        <li><b>Hoje</b><span>Você paga R$ 9,99</span></li>
+        <li><b>37 dias</b><span>de acesso completo (o mês + 7 de bônus)</span></li>
+        <li><b>Depois</b><span>R$ 9,99 por mês. Cancele quando quiser</span></li></ol>`;
+    abrir('Minha assinatura', `<div class="plano">
+      <div class="pl-topo">${selo}<p class="pl-nome">Lepvi Finanças Completo</p>
+        <p class="pl-preco"><span class="pl-rs">R$</span><span class="pl-valor num">9,99</span><span class="pl-mes">/mês</span></p>
+        <p class="pl-sub">Pix, boleto ou cartão</p></div>
+      <ul class="pl-lista">${itens.map((t, i) => `<li style="--i:${i}"><span class="pl-ok">${svgA(IC_CHECK, 16)}</span>${t}</li>`).join('')}</ul>
+      ${passos}
+      ${emDia ? '' : '<p class="pl-nota">Sem a assinatura em dia, o app fica só para consulta: você vê e exporta tudo, mas não lança nem importa. Nada é apagado.</p>'}
+    </div>
+    ${campo('CPF ou CNPJ de quem paga', '<input name="cpf" inputmode="numeric" autocomplete="off" required maxlength="18" placeholder="000.000.000-00">')}
+    <p class="pl-seg">${svgA(LI.escudo, 18)}<span>Pagamento no ambiente seguro do Asaas. O app não vê os dados do seu cartão; o CPF ou CNPJ é exigido para emitir a cobrança.</span></p>
+    <div class="botoes rodape-form">${podeCancelar ? '<button class="btn sec" type="button" id="assin-cancelar">Cancelar assinatura</button>' : '<button class="btn sec" type="button" data-fechar>Agora não</button>'}<button class="btn pl-btn" type="submit">${emDia ? (a.cancelada ? 'Reativar assinatura' : 'Pagar o próximo mês') : pagou ? 'Renovar por R$ 9,99' : 'Assinar por R$ 9,99'}</button></div>`,
     async (fd) => {
       const janela = window.open('', '_blank');
       try { const r = await api('assinar', { cpf: String(fd.get('cpf') || '') }); if (janela) janela.location = r.url; else location.href = r.url; aviso('Abrimos a página de pagamento. Depois de pagar, a liberação é automática em alguns minutos.', 6000); await carregarAssinatura(); }
       catch (e) { if (janela) janela.close(); aviso(e.message); }
     }, (f) => {
+      dlg.classList.add('dlg-plano'); dlg.addEventListener('close', () => dlg.classList.remove('dlg-plano'), { once: true });
+      const cpf = f.querySelector('input[name=cpf]');
+      if (cpf) cpf.addEventListener('input', () => { const d = cpf.value.replace(/\D/g, '').slice(0, 14); cpf.value = d.length <= 11 ? d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2') : d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2'); });
       const c = f.querySelector('#assin-cancelar');
       if (c) c.onclick = async () => { if (!(await confirmar('Cancelar a assinatura?', `Não haverá novas cobranças. Você continua usando normalmente${ate ? ' até ' + ate : ''}; depois, o app fica só para consulta.`, 'Cancelar assinatura'))) return; try { V.ass = await api('assinatura_cancelar', {}); dlg.close(); render(); aviso('Assinatura cancelada.'); } catch (e) { aviso(e.message); } };
     });
