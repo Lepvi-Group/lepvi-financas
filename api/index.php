@@ -434,6 +434,14 @@ try {
             db()->prepare('DELETE FROM membros WHERE usuario_id = ? AND dono_id = ?')->execute([$id, $u['id']]);
             resp(['ok' => true]);
         }
+        case 'aceitar_termos': {
+            // Novo aceite depois que os Termos ou a Política mudaram (fica registrado com versão e data).
+            if (($b['aceite'] ?? false) !== true) erro('É preciso aceitar a Política de Privacidade e os Termos de Uso.', 422);
+            db()->prepare('UPDATE usuarios SET aceite_versao = ?, aceite_em = ? WHERE id = ?')->execute([VERSAO_TERMOS, agora(), $u['id']]);
+            foreach (['politica_privacidade', 'termos_de_uso'] as $tipo) db()->prepare('INSERT INTO consentimentos (id, usuario_id, tipo, versao, quando) VALUES (?,?,?,?,?)')->execute([novo_id(), $u['id'], $tipo, VERSAO_TERMOS, agora()]);
+            $u['aceite_versao'] = VERSAO_TERMOS;
+            resp(['usuario' => usuario_publico($u)]);
+        }
         case 'assinar': {
             // Paga primeiro: abre a cobrança do Asaas (Pix, boleto ou cartão). O 1º pagamento libera 37 dias.
             if ($dono !== $u['id']) erro('Quem paga a assinatura é a pessoa que criou este espaço compartilhado.', 403);

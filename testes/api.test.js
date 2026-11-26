@@ -582,9 +582,14 @@ test('assinatura R$ 9,99 (Asaas): conta antiga isenta, conta nova só leitura, 1
     await conta('antiga@example.com', true);
     const antiga = (await ir('assinatura', null, 'GET')).json;
     assert.deepStrictEqual([antiga.cobranca, antiga.isento, antiga.ativa], [true, true, true], 'quem já tinha conta quando a assinatura nasceu não paga');
+    require('node:child_process').execFileSync('php', ['-r', `$p = new PDO('sqlite:${path.join(est, 'f.sqlite')}'); $p->exec("UPDATE usuarios SET aceite_versao = '2026-11-21' WHERE email = 'antiga@example.com'");`]);
+    assert.strictEqual((await ir('eu', null, 'GET')).json.usuario.aceite_pendente, true, 'termos mudaram: conta antiga precisa aceitar de novo');
+    assert.strictEqual((await ir('aceitar_termos', { aceite: false })).status, 422);
+    assert.strictEqual((await ir('aceitar_termos', { aceite: true })).json.usuario.aceite_pendente, false, 'novo aceite registrado');
     await conta('pedro@example.com', true);
     const pedro = (await ir('assinatura', null, 'GET')).json;
     assert.deepStrictEqual([pedro.isento, pedro.ativa], [false, false], 'conta criada depois do início paga, mesmo existindo antes do 1º acesso à assinatura');
+    assert.strictEqual((await ir('eu', null, 'GET')).json.usuario.aceite_pendente, false, 'conta nova já nasce com a versão atual dos termos');
     await conta('nova@example.com');
     let s = (await ir('assinatura', null, 'GET')).json;
     assert.deepStrictEqual([s.isento, s.ativa], [false, false], 'conta nova começa sem acesso pago');

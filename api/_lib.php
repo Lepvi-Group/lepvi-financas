@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /* Lepvi Finanças: peças compartilhadas da API (banco, segurança, e-mail). Produto separado do site e do Hub. */
 
-const VERSAO_TERMOS = '2026-11-21';
+const VERSAO_TERMOS = '2026-11-25'; // ao mudar, quem já tem conta vê o aviso e aceita de novo (aceitar_termos)
 const SESSAO_DIAS = 14;
 
 function cfg(): array
@@ -210,7 +210,7 @@ function validar_foto(string $d): string
 function exigir_usuario(): array { return usuario_atual() ?? erro('Entre para continuar.', 401); }
 function usuario_publico(array $u): array
 {
-    return ['email' => $u['email'], 'nome' => $u['nome'], 'foto' => $u['foto'] ?? null, 'avisos' => (bool) $u['avisos'], 'resumo' => (bool) ($u['resumo'] ?? 1), 'lembrete' => (bool) ($u['lembrete'] ?? 0), 'dois_passos' => !empty($u['totp_ativo']), 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao'], 'criado_em' => (int) $u['criado_em']];
+    return ['email' => $u['email'], 'nome' => $u['nome'], 'foto' => $u['foto'] ?? null, 'avisos' => (bool) $u['avisos'], 'resumo' => (bool) ($u['resumo'] ?? 1), 'lembrete' => (bool) ($u['lembrete'] ?? 0), 'dois_passos' => !empty($u['totp_ativo']), 'email_verificado' => (bool) $u['email_verificado'], 'aceite_versao' => $u['aceite_versao'], 'aceite_pendente' => (string) ($u['aceite_versao'] ?? '') !== VERSAO_TERMOS, 'criado_em' => (int) $u['criado_em']];
 }
 /* Espaço compartilhado: quem entrou no espaço de outra pessoa lê e grava os dados dela (a conta de quem convidou é a "dona" dos dados). */
 function espaco_dono(string $uid): string

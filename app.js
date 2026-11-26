@@ -252,7 +252,18 @@
   /* ---------- assinatura (R$ 9,99/mês pelo Asaas) ---------- */
   async function carregarAssinatura() { try { V.ass = await api('assinatura'); } catch (e) { V.ass = V.ass || null; } return V.ass; }
   /* Depois de entrar: carrega a assinatura e, se a conta nunca pagou (ou ?assinar=1), já abre a tela de pagamento. */
+  /* Termos ou Política mudaram: pede o novo aceite antes de seguir (volta a aparecer a cada abertura até aceitar). */
+  function pedirNovoAceite() {
+    return new Promise((ok) => {
+      abrir('Atualizamos os nossos termos', `<p class="rep-resumo">Para continuar, leia e aceite a nova versão dos <a href="termos.html" target="_blank" rel="noopener">Termos de Uso</a> e da <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>.</p>
+        <p class="mut">O que mudou: as regras da assinatura (R$ 9,99 por mês, cancelamento e arrependimento em 7 dias), o Asaas como plataforma de pagamento e quanto tempo guardamos os registros de pagamento.</p>
+        <div class="botoes rodape-form"><button class="btn sec" type="button" data-fechar>Agora não</button><button class="btn" type="submit">Li e concordo</button></div>`,
+      async () => { try { const r = await api('aceitar_termos', { aceite: true }); USER.info = r.usuario; aviso('Obrigado! Aceite registrado.'); } catch (e) { aviso(e.message); } });
+      dlg.addEventListener('close', () => ok(), { once: true });
+    });
+  }
   async function verAssinatura(pediu = false) {
+    if (USER.info && USER.info.aceite_pendente) await pedirNovoAceite();
     const a = await carregarAssinatura();
     if (pediu) history.replaceState(null, '', location.pathname);
     if (!dlg.open) render(); // o aviso da assinatura aparece na tela inicial
