@@ -556,7 +556,7 @@ test('assinatura R$ 9,99 (Asaas): conta antiga isenta, conta nova só leitura, 1
     });
   });
   await new Promise((r) => mock.listen(PA, '127.0.0.1', r));
-  const env = { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(est, 'f.sqlite'), LEPVI_FINANCAS_ESTADO: est, LEPVI_FINANCAS_CADASTRO: 'aberto', LEPVI_FINANCAS_ASAAS_CHAVE: 'chave-teste', LEPVI_FINANCAS_ASAAS_WEBHOOK: 'tok-teste', LEPVI_FINANCAS_ASAAS_URL: `http://127.0.0.1:${PA}`, LEPVI_FINANCAS_ASSINATURA_INICIO: String(Math.floor(Date.now() / 1000) - 5) };
+  const env = { ...process.env, LEPVI_FINANCAS_DSN: 'sqlite:' + path.join(est, 'f.sqlite'), LEPVI_FINANCAS_ESTADO: est, LEPVI_FINANCAS_CADASTRO: 'aberto', LEPVI_FINANCAS_ASAAS_CHAVE: 'chave-teste', LEPVI_FINANCAS_ASAAS_WEBHOOK: 'tok-teste', LEPVI_FINANCAS_ASAAS_URL: `http://127.0.0.1:${PA}`, LEPVI_FINANCAS_ASSINATURA_INICIO: String(Math.floor(Date.now() / 1000) - 5), LEPVI_FINANCAS_OF_SEGREDO: 'segredo-de-teste-com-mais-de-24-letras' };
   const srv = spawn('php', ['-S', `127.0.0.1:${PS}`, '-t', RAIZ], { stdio: 'ignore', env });
   const B = `http://127.0.0.1:${PS}/api/`;
   let ck = '';
@@ -588,6 +588,8 @@ test('assinatura R$ 9,99 (Asaas): conta antiga isenta, conta nova só leitura, 1
     await conta('nova@example.com');
     let s = (await ir('assinatura', null, 'GET')).json;
     assert.deepStrictEqual([s.isento, s.ativa], [false, false], 'conta nova começa sem acesso pago');
+    assert.strictEqual((await ir('conexao_registrar', { item_id: 'falso', instituicao: 'Banco' })).status, 403, 'conta sem Pluggy liberado não registra conexão falsa (que liberaria o Pluggy)');
+    assert.strictEqual((await ir('conexoes', null, 'GET')).json.ativo, false, 'e o Pluggy continua escondido');
     const gravar = await ir('dados', { versao: 0, conteudo: { dados: {} } });
     assert.strictEqual(gravar.status, 402, 'sem assinatura não grava (só leitura)');
     assert.strictEqual((await ir('dados', null, 'GET')).status, 200, 'mas continua lendo');

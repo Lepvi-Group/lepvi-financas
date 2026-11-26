@@ -252,6 +252,9 @@ try {
         case 'conexao_registrar': {
             // chamado depois que a pessoa conclui a conexão no widget do agregador
             if (!of_config()) erro('Open Finance ainda não está ativado.', 503);
+            // Sem isto, qualquer conta registrava uma conexão falsa e openfinance_liberado() passava a liberar o Pluggy para ela.
+            if (!openfinance_liberado($dono)) erro('A conexão automática com o banco não está disponível. Importe o extrato OFX ou CSV em Mais opções.', 403);
+            exigir_assinatura($dono);
             $item = substr(trim((string) ($b['item_id'] ?? '')), 0, 120); $inst = mb_substr(trim(strip_tags((string) ($b['instituicao'] ?? ''))), 0, 80);
             if ($item === '' || $inst === '') erro('Dados da conexão incompletos.', 422);
             $n = db()->prepare('SELECT COUNT(*) FROM conexoes WHERE usuario_id = ?'); $n->execute([$dono]);
@@ -298,6 +301,7 @@ try {
             $item = substr(trim((string) ($b['item_id'] ?? '')), 0, 120); $inst = mb_substr(trim(strip_tags((string) ($b['instituicao'] ?? ''))), 0, 80);
             $cid = substr(trim((string) ($b['client_id'] ?? '')), 0, 120); $seg = substr(trim((string) ($b['client_secret'] ?? '')), 0, 200);
             if (!openfinance_liberado($dono)) erro('A conexão automática com o banco não está disponível. Importe o extrato OFX ou CSV em Mais opções.', 403);
+            exigir_assinatura($dono);
             if ($item === '' || $inst === '') erro('Informe o nome do banco e o código do item.', 422);
             if (limite_estourou('ofcx:' . $u['id'], 10, 3600)) erro('Muitas tentativas. Tente de novo mais tarde.', 429);
             registrar_tentativa('ofcx:' . $u['id']);
