@@ -7,8 +7,10 @@ require __DIR__ . '/_assinatura.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
+// Não-POST responde 405 (não 404): o Asaas testa a URL ao cadastrar o webhook e recusa endereço que dá 404.
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') { http_response_code(405); header('Allow: POST'); echo '{}'; exit; }
 $c = asaas_config();
-if ($c === null || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') { http_response_code(404); echo '{}'; exit; }
+if ($c === null) { http_response_code(404); echo '{}'; exit; }
 $token = (string) ($_SERVER['HTTP_ASAAS_ACCESS_TOKEN'] ?? '');
 if ($token === '' || !hash_equals((string) $c['webhook_token'], $token)) { http_response_code(401); echo '{}'; exit; }
 $ev = json_decode((string) file_get_contents('php://input', false, null, 0, 200000), true);
