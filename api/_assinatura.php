@@ -11,6 +11,8 @@ require_once __DIR__ . '/_lib.php';
 const ASSINATURA_VALOR = 9.99;
 const ASSINATURA_DIAS = 30;
 const ASSINATURA_BONUS_DIAS = 7;
+/* Estorno ou contestação do cartão: tira os dias que aquele pagamento tinha liberado. */
+const ASSINATURA_EVENTOS_ESTORNO = ['PAYMENT_REFUNDED', 'PAYMENT_PARTIALLY_REFUNDED', 'PAYMENT_CHARGEBACK_REQUESTED', 'PAYMENT_CHARGEBACK_DISPUTE'];
 /* Só não paga quem criou a conta antes da assinatura existir (25/11/2026 00:00, horário de Brasília). */
 function assinatura_inicio(): int { return (int) (getenv('LEPVI_FINANCAS_ASSINATURA_INICIO') ?: 1795575600); }
 
@@ -43,6 +45,12 @@ function assinatura_tabelas(): void
     // Conserta isenção dada por engano (a regra antiga isentava quem existia no 1º acesso, mesmo conta criada depois).
     try { $pdo->prepare('UPDATE assinaturas SET isento = 0 WHERE isento = 1 AND usuario_id IN (SELECT id FROM usuarios WHERE criado_em >= ?)')->execute([assinatura_inicio()]); } catch (Throwable $e) { /* sem efeito */ }
     assinatura_limpar_lancs_indevidos();
+    // Estorno: cada pagamento guarda quantos dias liberou, para tirar exatamente esses dias se for estornado.
+    try { $pdo->query('SELECT dias, estornado FROM assinatura_pagamentos LIMIT 1'); }
+    catch (Throwable $e) {
+        try { $pdo->exec('ALTER TABLE assinatura_pagamentos ADD COLUMN dias INTEGER NOT NULL DEFAULT 0'); } catch (Throwable $e2) { /* já existe */ }
+        try { $pdo->exec('ALTER TABLE assinatura_pagamentos ADD COLUMN estornado INTEGER NOT NULL DEFAULT 0'); } catch (Throwable $e2) { /* já existe */ }
+    }
     $ok = true;
 }
 
@@ -83,7 +91,7 @@ function assinatura_situacao(string $dono): array
     $cobranca = asaas_config() !== null;
     $isento = (bool) $a['isento'];
     $ate = (int) $a['acesso_ate'];
-    return ['cobranca' => $cobranca, 'ativa' => !$cobranca || $isento || $ate >= agora(), 'isento' => $isento, 'acesso_ate' => $ate ?: null,
+    return ['cobranca' => $cobranca, 'ativa' => !$cobranca || $isento || $ate > agora(), 'isento' => $isento, 'acesso_ate' => $ate ?: null,
         'assinou' => !empty($a['assinatura_id']) && !$a['cancelada'], 'cancelada' => (bool) $a['cancelada'], 'valor' => ASSINATURA_VALOR, 'bonus_dias' => ASSINATURA_BONUS_DIAS];
 }
 
@@ -180,12 +188,32 @@ function assinatura_avisos_rodar(string $hoje): int
 
 /* Aviso do Asaas (webhook). Pagamento confirmado: 1º pagamento = 37 dias, os seguintes = 30 dias, contados a partir do fim do acesso atual.
    Cada pagamento conta uma vez só (o Asaas reenvia avisos). Devolve true se liberou dias. */
+/* Uma vez só por pagamento: volta o acesso_ate pelos dias que ele liberou. Se o acesso acabar, o app fica só para consulta na hora. */
+function assinatura_estornar(string $pid): bool
+{
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $s = $pdo->prepare('SELECT usuario_id, dias FROM assinatura_pagamentos WHERE pagamento_id = ? AND estornado = 0'); $s->execute([$pid]);
+        $pg = $s->fetch();
+        $marcou = $pg ? $pdo->prepare('UPDATE assinatura_pagamentos SET estornado = 1 WHERE pagamento_id = ? AND estornado = 0') : null;
+        if (!$pg || !$marcou->execute([$pid]) || $marcou->rowCount() !== 1) { $pdo->rollBack(); return false; }
+        $dias = (int) $pg['dias'] ?: ASSINATURA_DIAS;
+        $pdo->prepare('UPDATE assinaturas SET acesso_ate = MAX(0, acesso_ate - ?), atualizado_em = ? WHERE usuario_id = ?')->execute([$dias * 86400, agora(), $pg['usuario_id']]);
+        $pdo->commit();
+        error_log('[lepvi-financas assinatura] estorno ' . $pid . ': -' . $dias . ' dias');
+        return true;
+    } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
+}
+
 function assinatura_webhook(array $ev): bool
 {
     assinatura_tabelas();
-    if (!in_array($ev['event'] ?? '', ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'], true)) return false;
+    $evento = (string) ($ev['event'] ?? '');
     $p = is_array($ev['payment'] ?? null) ? $ev['payment'] : [];
     $pid = (string) ($p['id'] ?? ''); $sub = (string) ($p['subscription'] ?? '');
+    if (in_array($evento, ASSINATURA_EVENTOS_ESTORNO, true)) { if ($pid !== '') assinatura_estornar($pid); return false; }
+    if (!in_array($evento, ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'], true)) return false;
     if ($pid === '' || $sub === '') return false;
     $s = db()->prepare('SELECT usuario_id FROM assinaturas WHERE assinatura_id = ?'); $s->execute([$sub]);
     $uid = $s->fetchColumn();
@@ -198,6 +226,7 @@ function assinatura_webhook(array $ev): bool
         if ($ins->rowCount() !== 1) { $pdo->rollBack(); return false; }
         $n = $pdo->prepare('SELECT COUNT(*) FROM assinatura_pagamentos WHERE usuario_id = ?'); $n->execute([$uid]);
         $dias = ASSINATURA_DIAS + ((int) $n->fetchColumn() === 1 ? ASSINATURA_BONUS_DIAS : 0);
+        $pdo->prepare('UPDATE assinatura_pagamentos SET dias = ? WHERE pagamento_id = ?')->execute([$dias, $pid]);
         $atual = $pdo->prepare('SELECT acesso_ate FROM assinaturas WHERE usuario_id = ?'); $atual->execute([$uid]);
         $base = max(agora(), (int) $atual->fetchColumn());
         $pdo->prepare('UPDATE assinaturas SET acesso_ate = ?, atualizado_em = ? WHERE usuario_id = ?')->execute([$base + $dias * 86400, agora(), $uid]);

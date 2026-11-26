@@ -623,5 +623,15 @@ test('assinatura R$ 9,99 (Asaas): conta antiga isenta, conta nova só leitura, 1
     assert.ok(!/PARA: antiga@example\.com \| .*assinatura/.test(log), 'conta isenta não recebe aviso de assinatura');
     assert.strictEqual((await ir('assinatura_cancelar', {})).json.cancelada, true);
     assert.ok(pedidos.some((p) => p.m === 'DELETE' && p.u === '/subscriptions/sub_1'));
+    // Estorno/contestação: tira exatamente os dias daquele pagamento, uma vez só
+    const s3 = (await ir('assinatura', null, 'GET')).json;
+    await hook('tok-teste', { event: 'PAYMENT_REFUNDED', payment: { id: 'pay_2', subscription: 'sub_1', value: 9.99 } });
+    await hook('tok-teste', { event: 'PAYMENT_REFUNDED', payment: { id: 'pay_2', subscription: 'sub_1', value: 9.99 } });
+    const s4 = (await ir('assinatura', null, 'GET')).json;
+    assert.strictEqual(Math.round((s3.acesso_ate - s4.acesso_ate) / 86400), 30, 'estorno do 2º pagamento tira 30 dias, e só uma vez');
+    await hook('tok-teste', { event: 'PAYMENT_CHARGEBACK_REQUESTED', payment: { id: 'pay_1', subscription: 'sub_1', value: 9.99 } });
+    const s5 = (await ir('assinatura', null, 'GET')).json;
+    assert.strictEqual(s5.ativa, false, 'contestação do 1º pagamento (37 dias) deixa o app só para consulta');
+    assert.strictEqual((await ir('dados', { versao: 1, conteudo: { dados: {} } })).status, 402);
   } finally { srv.kill(); mock.close(); }
 });
